@@ -1,0 +1,106 @@
+#include "core/config.h"
+
+#include <fstream>
+#include <stdexcept>
+
+#include "utils/logger.h"
+#include "utils/yaml_utils.h"
+
+namespace fs = std::filesystem;
+
+namespace ir {
+
+YAML::Node Config::load(const fs::path& path) {
+    if (!fs::exists(path)) {
+        throw std::runtime_error("Config::load - file not found: " + path.string());
+    }
+    try {
+        return YAML::LoadFile(path.string());
+    } catch (const YAML::Exception& e) {
+        throw std::runtime_error("Config::load - YAML parse error in " +
+                                 path.string() + ": " + e.what());
+    }
+}
+
+fs::path Config::resolvePath(const fs::path& base_dir,
+                             const std::string& relative_or_absolute) {
+    if (relative_or_absolute.empty()) return {};
+
+    fs::path p(relative_or_absolute);
+    if (p.is_absolute() && fs::exists(p)) return p;
+
+    // 候选 1：相对于 pipeline 文件所在目录。
+    if (!base_dir.empty()) {
+        fs::path c1 = base_dir / p;
+        if (fs::exists(c1)) return fs::weakly_canonical(c1);
+    }
+
+    // 候选 2：相对于当前工作目录。
+    fs::path c2 = fs::current_path() / p;
+    if (fs::exists(c2)) return fs::weakly_canonical(c2);
+
+    // 候选 3：从 base_dir 向上查找，适配从 build/bin 启动的情况。
+    fs::path walk = base_dir;
+    for (int i = 0; i < 4 && !walk.empty(); ++i) {
+        fs::path c3 = walk / p;
+        if (fs::exists(c3)) return fs::weakly_canonical(c3);
+        if (walk.has_parent_path()) walk = walk.parent_path();
+        else break;
+    }
+
+    // 最后返回基于 base_dir 的路径；输出目录等路径可能尚未存在。
+    if (!base_dir.empty()) return fs::weakly_canonical(base_dir / p);
+    return fs::weakly_canonical(c2);
+}
+
+PipelineConfig Config::loadPipeline(const fs::path& path) {
+    YAML::Node node = load(path);
+    const fs::path base = path.parent_path();
+
+    PipelineConfig cfg;
+    cfg.name = yaml_utils::getString(node, "name", path.stem().string());
+
+    // 子模块 YAML。
+    cfg.feature_path  = resolvePath(base, yaml_utils::getString(node, "feature"));
+    cfg.matcher_path  = resolvePath(base, yaml_utils::getString(node, "matcher"));
+    cfg.geometry_path = resolvePath(base, yaml_utils::getString(node, "geometry"));
+
+    cfg.filter_paths.clear();
+    if (node["filters"] && node["filters"].IsSequence()) {
+        for (const auto& f : node["filters"]) {
+            cfg.filter_paths.push_back(resolvePath(base, f.as<std::string>()));
+        }
+    }
+
+    // 输入输出路径。
+    if (node["io"] && node["io"].IsMap()) {
+        const auto& io = node["io"];
+        cfg.image1_path = resolvePath(base, yaml_utils::getString(io, "image1"));
+        cfg.image2_path = resolvePath(base, yaml_utils::getString(io, "image2"));
+        cfg.output_dir  = resolvePath(base, yaml_utils::getString(io, "output_dir", "outputs"));
+    }
+
+    // 可视化选项。
+    if (node["visualization"] && node["visualization"].IsMap()) {
+        const auto& vis = node["visualization"];
+        cfg.draw_matches      = yaml_utils::getBool  (vis, "draw_matches",       true);
+        cfg.draw_inliers_only = yaml_utils::getBool  (vis, "draw_inliers_only",  true);
+        cfg.max_matches_drawn = yaml_utils::getInt   (vis, "max_matches_drawn",  100);
+        cfg.warp              = yaml_utils::getBool  (vis, "warp",               true);
+    }
+
+    IR_LOG_INFO("Pipeline '", cfg.name, "' loaded from ", path.string());
+    IR_LOG_INFO("  feature  : ", cfg.feature_path.string());
+    IR_LOG_INFO("  matcher  : ", cfg.matcher_path.string());
+    for (const auto& f : cfg.filter_paths) {
+        IR_LOG_INFO("  filter   : ", f.string());
+    }
+    IR_LOG_INFO("  geometry : ", cfg.geometry_path.string());
+    IR_LOG_INFO("  image1   : ", cfg.image1_path.string());
+    IR_LOG_INFO("  image2   : ", cfg.image2_path.string());
+    IR_LOG_INFO("  output   : ", cfg.output_dir.string());
+
+    return cfg;
+}
+
+} // namespace ir

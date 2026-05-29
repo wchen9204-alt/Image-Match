@@ -1,0 +1,38 @@
+# ---------------------------------------------------------------------------
+# 指标目录：声明 Evaluator 需要计算的评价指标。
+# ---------------------------------------------------------------------------
+metrics:
+  # ----- 特征层指标 -----
+  - name: REPEATABILITY
+    enabled: true
+    params:
+      # 真值变换下判断关键点重复的像素距离阈值。
+      pixel_threshold: 3.0
+
+  # ----- 几何层指标 -----
+  - name: INLIER_RATIO
+    enabled: true
+    params: {}
+
+  - name: REPROJECTION_ERROR
+    enabled: true
+    params:
+      # 是否计算对称重投影误差。
+      symmetric: true
+
+  # ----- 图像层指标 -----
+  # 这些指标需要成功生成变换后图像。
+  - name: PSNR
+    enabled: true
+    params:
+      max_value: 255.0
+
+  - name: SSIM
+    enabled: true
+    params:
+      window: 11
+      sigma:  1.5
+
+  - name: RMSE
+    enabled: true
+    params: {}

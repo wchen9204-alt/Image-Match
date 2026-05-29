@@ -1,0 +1,22 @@
+# ---------------------------------------------------------------------------
+# KAZE 特征提取器配置
+# 参数对应 cv::KAZE::create(...)
+# ---------------------------------------------------------------------------
+type: KAZE
+
+params:
+  # 是否提取扩展描述子。
+  extended: false
+  # 是否使用 upright 描述子，不具备旋转不变性。
+  upright: false
+  # 关键点响应阈值。
+  threshold: 0.001
+  # 最大 octave 演化层数。
+  nOctaves: 4
+  # 每个尺度层的子层数。
+  nOctaveLayers: 4
+  # 扩散类型：
+  #   DIFF_PM_G1 = 0, DIFF_PM_G2 = 1, DIFF_WEICKERT = 2, DIFF_CHARBONNIER = 3
+  diffusivity: 1
+
+descriptor_norm: L2

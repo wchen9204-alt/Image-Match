@@ -1,0 +1,16 @@
+# ---------------------------------------------------------------------------
+# 暴力匹配器配置
+# 参数对应 cv::BFMatcher
+# ---------------------------------------------------------------------------
+type: BF
+
+params:
+  # 距离度量，可选 "L2"、"L1"、"HAMMING"、"HAMMING2"、"AUTO"。
+  # "AUTO" 会使用 FeatureData::norm_type。
+  norm_type: AUTO
+
+  # 是否启用 OpenCV 内置 crossCheck；当前流程使用独立 CrossCheckFilter。
+  crossCheck: false
+
+  # knnMatch 的 k；设为 2 可支持后续 RatioTest。
+  knn_k: 2

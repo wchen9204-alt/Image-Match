@@ -1,0 +1,29 @@
+# ---------------------------------------------------------------------------
+# 配准流程配置：SIFT + BF + RatioTest + CrossCheck + Homography
+# 该文件描述一次实验运行所需的组件和路径。
+# ---------------------------------------------------------------------------
+name: sift_bf_homography
+
+# 子组件配置文件路径，可写相对路径或绝对路径。
+feature:  configs/feature/sift.yaml
+matcher:  configs/matcher/bf.yaml
+
+# 过滤器按列表顺序依次执行。
+filters:
+  - configs/filter/ratio_test.yaml
+  - configs/filter/cross_check.yaml
+
+geometry: configs/geometry/homography.yaml
+
+# 输入输出
+io:
+  image1: datasets/test1/source.png
+  image2: datasets/test1/target.png
+  output_dir: outputs
+
+# 可视化与图像变换
+visualization:
+  draw_matches: true
+  draw_inliers_only: true
+  max_matches_drawn: 100
+  warp: true

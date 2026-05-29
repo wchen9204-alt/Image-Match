@@ -1,0 +1,32 @@
+# ---------------------------------------------------------------------------
+# Benchmark 配置：批量运行 pipeline 并输出明细和汇总报告。
+# ---------------------------------------------------------------------------
+name: feature_full_sweep
+
+# 数据集根目录；DatasetLoader 会扫描符合命名规则的子目录。
+dataset:
+  root:           datasets
+  pattern_source: source
+  pattern_target: target
+  # 可选子目录列表；为空时自动扫描 root 下所有子目录。
+  include: []
+
+# 待评测的 pipeline YAML 列表。
+pipelines:
+  - configs/pipeline/sift_pipeline.yaml
+  - configs/pipeline/surf_pipeline.yaml
+  - configs/pipeline/orb_pipeline.yaml
+  - configs/pipeline/brisk_pipeline.yaml
+  - configs/pipeline/kaze_pipeline.yaml
+  - configs/pipeline/akaze_pipeline.yaml
+
+# 每次运行需要计算的指标。
+metrics: configs/evaluator/metrics.yaml
+
+# 相对于 outputs/ 的输出位置。
+output:
+  csv_dir:        csv
+  reports_dir:    reports
+  benchmark_dir:  benchmark
+  # 除 CSV 外，是否保存每次运行的匹配和变换可视化结果。
+  save_visuals:   true

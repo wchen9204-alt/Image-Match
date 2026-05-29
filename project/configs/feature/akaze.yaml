@@ -1,0 +1,26 @@
+# ---------------------------------------------------------------------------
+# AKAZE 特征提取器配置
+# 参数对应 cv::AKAZE::create(...)
+# ---------------------------------------------------------------------------
+type: AKAZE
+
+params:
+  # 描述子类型：
+  #   DESCRIPTOR_KAZE_UPRIGHT = 2, DESCRIPTOR_KAZE = 3,
+  #   DESCRIPTOR_MLDB_UPRIGHT = 4, DESCRIPTOR_MLDB = 5
+  descriptor_type: 5
+  # 描述子位数；0 表示完整长度。
+  descriptor_size: 0
+  # 描述子通道数。
+  descriptor_channels: 3
+  # 关键点响应阈值。
+  threshold: 0.001
+  # 最大 octave 演化层数。
+  nOctaves: 4
+  # 每个尺度层的默认子层数。
+  nOctaveLayers: 4
+  # 扩散类型，参考 KAZE。
+  diffusivity: 1
+
+# AKAZE 默认 MLDB 描述子为二进制，因此使用 HAMMING。
+descriptor_norm: HAMMING

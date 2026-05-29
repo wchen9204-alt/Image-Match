@@ -1,0 +1,28 @@
+# ---------------------------------------------------------------------------
+# FLANN 匹配器配置
+# 根据距离类型使用 KDTree (L2) 或 LSH (HAMMING)。
+# ---------------------------------------------------------------------------
+type: FLANN
+
+params:
+  # "AUTO" 使用当前特征提取器的 NormType；也可显式指定 "L2" 或 "HAMMING"。
+  norm_type: AUTO
+
+  # knnMatch 的 k；设为 2 可支持后续 RatioTest。
+  knn_k: 2
+
+  # KDTree (L2) 参数。
+  kdtree:
+    trees: 5
+
+  # LSH (HAMMING) 参数。
+  lsh:
+    table_number:    12
+    key_size:        20
+    multi_probe_level: 2
+
+  # 搜索参数。
+  search:
+    checks:    50
+    eps:       0.0
+    sorted:    true

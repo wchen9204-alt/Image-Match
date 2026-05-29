@@ -1,0 +1,15 @@
+# ---------------------------------------------------------------------------
+# BRISK 特征提取器配置
+# 参数对应 cv::BRISK::create(thresh, octaves, patternScale)
+# ---------------------------------------------------------------------------
+type: BRISK
+
+params:
+  # AGAST 检测阈值。
+  thresh: 30
+  # 检测 octave 数量；0 表示单尺度。
+  octaves: 3
+  # 关键点邻域采样模板的缩放比例。
+  patternScale: 1.0
+
+descriptor_norm: HAMMING

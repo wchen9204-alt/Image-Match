@@ -1,0 +1,27 @@
+# ---------------------------------------------------------------------------
+# ORB 特征提取器配置
+# 参数对应 cv::ORB::create(...)
+# ---------------------------------------------------------------------------
+type: ORB
+
+params:
+  # 最多保留的特征数量。
+  nfeatures: 2000
+  # 金字塔缩放比例，需大于 1。
+  scaleFactor: 1.2
+  # 金字塔层数。
+  nlevels: 8
+  # 不检测特征的图像边界宽度。
+  edgeThreshold: 31
+  # 金字塔起始层。
+  firstLevel: 0
+  # 生成 BRIEF 描述子每个元素所用的点数。
+  WTA_K: 2
+  # 评分方式：ORB::HARRIS_SCORE = 0，ORB::FAST_SCORE = 1。
+  scoreType: 0
+  # BRIEF 描述子使用的 patch 大小。
+  patchSize: 31
+  # FAST 关键点阈值。
+  fastThreshold: 20
+
+descriptor_norm: HAMMING
