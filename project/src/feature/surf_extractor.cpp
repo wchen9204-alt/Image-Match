@@ -1,4 +1,4 @@
-#include "feature/surf_extractor.h"
+﻿#include "feature/surf_extractor.h"
 
 #include <opencv2/imgproc.hpp>
 
@@ -10,28 +10,28 @@ namespace ir {
 SurfExtractor::SurfExtractor(const YAML::Node& cfg) {
     const auto params = cfg["params"];
 
-    hessianThreshold_ = yaml_utils::getDouble(params, "hessianThreshold", 400.0);
-    nOctaves_         = yaml_utils::getInt   (params, "nOctaves",         4);
-    nOctaveLayers_    = yaml_utils::getInt   (params, "nOctaveLayers",    3);
-    extended_         = yaml_utils::getBool  (params, "extended",         false);
-    upright_          = yaml_utils::getBool  (params, "upright",          false);
+    _hessianThreshold = yaml_utils::getDouble(params, "hessianThreshold", 400.0);
+    _nOctaves         = yaml_utils::getInt   (params, "nOctaves",         4);
+    _nOctaveLayers    = yaml_utils::getInt   (params, "nOctaveLayers",    3);
+    _extended         = yaml_utils::getBool  (params, "extended",         false);
+    _upright          = yaml_utils::getBool  (params, "upright",          false);
 
-    impl_ = cv::xfeatures2d::SURF::create(
-        hessianThreshold_,
-        nOctaves_,
-        nOctaveLayers_,
-        extended_,
-        upright_);
+    _impl = cv::xfeatures2d::SURF::create(
+        _hessianThreshold,
+        _nOctaves,
+        _nOctaveLayers,
+        _extended,
+        _upright);
 
-    IR_LOG_INFO("SURF created: hessian=", hessianThreshold_,
-                ", nOctaves=",            nOctaves_,
-                ", nOctaveLayers=",       nOctaveLayers_,
-                ", extended=",            extended_,
-                ", upright=",             upright_);
+    IR_LOG_INFO("SURF created: hessian=", _hessianThreshold,
+                ", nOctaves=",            _nOctaves,
+                ", nOctaveLayers=",       _nOctaveLayers,
+                ", extended=",            _extended,
+                ", upright=",             _upright);
 }
 
 bool SurfExtractor::extract(RegistrationContext& ctx) {
-    if (!impl_) {
+    if (!_impl) {
         IR_LOG_ERROR("SURF extractor not constructed.");
         return false;
     }
@@ -51,9 +51,9 @@ bool SurfExtractor::extract(RegistrationContext& ctx) {
         cv::cvtColor(fd.second.image, fd.second.gray, cv::COLOR_BGR2GRAY);
     }
 
-    impl_->detectAndCompute(fd.first.gray,  cv::noArray(),
+    _impl->detectAndCompute(fd.first.gray,  cv::noArray(),
                             fd.first.keypoints,  fd.first.descriptors);
-    impl_->detectAndCompute(fd.second.gray, cv::noArray(),
+    _impl->detectAndCompute(fd.second.gray, cv::noArray(),
                             fd.second.keypoints, fd.second.descriptors);
 
     IR_LOG_INFO("SURF extracted ", fd.first.keypoints.size(),
@@ -62,3 +62,4 @@ bool SurfExtractor::extract(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

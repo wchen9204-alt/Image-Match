@@ -6,16 +6,16 @@
 
 namespace ir {
 
-// ---------------------------------------------------------------------------
-// DrawDiff：生成变换后源图与目标图的差异图。
-// ---------------------------------------------------------------------------
+/// 显示变换后图像与目标图之间的差异。
 class DrawDiff {
 public:
+    /// 绘制选项。
     struct Options {
-        bool   heatmap   = true;
-        double scale     = 1.0;   // 上色前的缩放系数。
+        bool   heatmap = true;
+        double scale   = 1.0;
     };
 
+    /// 渲染差异图。
     static cv::Mat render(const RegistrationContext& ctx, const Options& opt);
 };
 

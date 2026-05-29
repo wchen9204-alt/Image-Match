@@ -83,8 +83,8 @@ std::string toString(GeometryType t) {
     switch (t) {
         case GeometryType::HOMOGRAPHY:  return "HOMOGRAPHY";
         case GeometryType::AFFINE:      return "AFFINE";
-        case GeometryType::FUNDAMENTAL: return "FUNDAMENTAL";
-        case GeometryType::ESSENTIAL:   return "ESSENTIAL";
+        case GeometryType::RIGID:       return "RIGID";
+        case GeometryType::SIMILARITY:  return "SIMILARITY";
         case GeometryType::UNKNOWN:
         default:                        return "UNKNOWN";
     }
@@ -94,8 +94,8 @@ GeometryType geometryTypeFromString(const std::string& s) {
     const std::string u = toUpper(s);
     if (u == "HOMOGRAPHY")  return GeometryType::HOMOGRAPHY;
     if (u == "AFFINE")      return GeometryType::AFFINE;
-    if (u == "FUNDAMENTAL") return GeometryType::FUNDAMENTAL;
-    if (u == "ESSENTIAL")   return GeometryType::ESSENTIAL;
+    if (u == "RIGID" || u == "EUCLIDEAN") return GeometryType::RIGID;
+    if (u == "SIMILARITY")  return GeometryType::SIMILARITY;
     return GeometryType::UNKNOWN;
 }
 

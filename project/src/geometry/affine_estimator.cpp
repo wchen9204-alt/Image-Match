@@ -1,6 +1,7 @@
-#include "geometry/affine_estimator.h"
+﻿#include "geometry/affine_estimator.h"
 
 #include <opencv2/calib3d.hpp>
+#include <string>
 
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
@@ -43,21 +44,21 @@ AffineEstimator::AffineEstimator(const YAML::Node& cfg) {
     const std::string method_str =
         yaml_utils::getString(params, "method", "RANSAC");
     int m = robustMethodFromString(method_str);
-    method_ = (m < 0) ? cv::RANSAC : m;
+    _method = (m < 0) ? cv::RANSAC : m;
 
-    ransacReprojThreshold_ =
+    _ransacReprojThreshold =
         yaml_utils::getDouble(params, "ransacReprojThreshold", 3.0);
-    maxIters_   = yaml_utils::getInt   (params, "maxIters",    2000);
-    confidence_ = yaml_utils::getDouble(params, "confidence",  0.99);
-    refineIters_= yaml_utils::getInt   (params, "refineIters", 10);
-    minInliers_ = yaml_utils::getInt   (params, "minInliers",  6);
+    _maxIters   = yaml_utils::getInt   (params, "maxIters",    2000);
+    _confidence = yaml_utils::getDouble(params, "confidence",  0.99);
+    _refineIters= yaml_utils::getInt   (params, "refineIters", 10);
+    _minInliers = yaml_utils::getInt   (params, "minInliers",  6);
 
     IR_LOG_INFO("AffineEstimator: method=", method_str,
-                ", thr=",         ransacReprojThreshold_,
-                ", maxIters=",    maxIters_,
-                ", confidence=",  confidence_,
-                ", refineIters=", refineIters_,
-                ", minInliers=",  minInliers_);
+                ", thr=",         _ransacReprojThreshold,
+                ", maxIters=",    _maxIters,
+                ", confidence=",  _confidence,
+                ", refineIters=", _refineIters,
+                ", minInliers=",  _minInliers);
 }
 
 bool AffineEstimator::estimate(RegistrationContext& ctx) {
@@ -67,6 +68,8 @@ bool AffineEstimator::estimate(RegistrationContext& ctx) {
     gd.type = GeometryType::AFFINE;
 
     if (md.filtered.size() < 3) {
+        gd.message = "need at least 3 matches, got " +
+                     std::to_string(md.filtered.size());
         IR_LOG_ERROR("AffineEstimator: need at least 3 matches, got ",
                      md.filtered.size());
         return false;
@@ -79,13 +82,14 @@ bool AffineEstimator::estimate(RegistrationContext& ctx) {
     cv::Mat A = cv::estimateAffine2D(pts1,
                                      pts2,
                                      mask,
-                                     method_,
-                                     ransacReprojThreshold_,
-                                     static_cast<size_t>(maxIters_),
-                                     confidence_,
-                                     static_cast<size_t>(refineIters_));
+                                     _method,
+                                     _ransacReprojThreshold,
+                                     static_cast<size_t>(_maxIters),
+                                     _confidence,
+                                     static_cast<size_t>(_refineIters));
 
     if (A.empty()) {
+        gd.message = "estimateAffine2D returned an empty matrix";
         IR_LOG_ERROR("estimateAffine2D returned an empty matrix.");
         return false;
     }
@@ -98,7 +102,13 @@ bool AffineEstimator::estimate(RegistrationContext& ctx) {
     gd.inlier_ratio = md.filtered.empty()
                           ? 0.0
                           : static_cast<double>(inliers) / md.filtered.size();
-    gd.valid        = inliers >= minInliers_;
+    gd.valid        = inliers >= _minInliers;
+    if (!gd.valid) {
+        gd.message = "estimated affine with " + std::to_string(inliers) +
+                     " inliers, below minInliers=" +
+                     std::to_string(_minInliers);
+        IR_LOG_WARN("AffineEstimator rejected model: ", gd.message);
+    }
 
     IR_LOG_INFO("Affine2D inliers=", inliers, " / ", md.filtered.size(),
                 " (ratio=", gd.inlier_ratio, ")");
@@ -106,3 +116,4 @@ bool AffineEstimator::estimate(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

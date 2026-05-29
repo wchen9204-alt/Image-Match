@@ -1,7 +1,9 @@
 # ---------------------------------------------------------------------------
-# 配准流程配置：ORB + BF (Hamming) + RatioTest + CrossCheck + Homography
+# ORB 配准流程配置
+# 当前文件用于组织一条完整的特征配准流程，可按需手动调整
+# feature / matcher / filters / geometry 等子配置
 # ---------------------------------------------------------------------------
-name: orb_bf_homography
+name: orb_pipeline
 
 feature:  configs/feature/orb.yaml
 matcher:  configs/matcher/bf.yaml
@@ -10,7 +12,7 @@ filters:
   - configs/filter/ratio_test.yaml
   - configs/filter/cross_check.yaml
 
-geometry: configs/geometry/homography.yaml
+geometry: configs/geometry/rigid.yaml
 
 io:
   image1: datasets/test1/source.png

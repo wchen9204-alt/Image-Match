@@ -1,26 +1,26 @@
 #pragma once
 
-#include <memory>
 #include <string>
 
 #include "core/config.h"
 #include "core/context.h"
-#include "interfaces/i_pipeline.h"
 
 namespace ir {
 
-// ---------------------------------------------------------------------------
-// IRegistration：封装已配置 pipeline 的高层配准接口。
-// ---------------------------------------------------------------------------
+/// 配准任务的顶层接口。
+///
+/// 该接口通常由 `Registration` 实现，用于向外暴露配置和执行入口。
 class IRegistration {
 public:
     virtual ~IRegistration() = default;
 
+    /// 返回注册实例名称。
     virtual std::string name() const = 0;
 
-    // 配置一次，可多次运行。
+    /// 应用 pipeline 配置。
     virtual bool configure(const PipelineConfig& cfg) = 0;
 
+    /// 执行一次完整的配准流程。
     virtual bool run(RegistrationContext& ctx) = 0;
 };
 

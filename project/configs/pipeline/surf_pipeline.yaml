@@ -1,7 +1,9 @@
 # ---------------------------------------------------------------------------
-# 配准流程配置：SURF + BF (L2) + RatioTest + CrossCheck + Homography
+# SURF 配准流程配置
+# 当前文件用于组织一条完整的特征配准流程，可按需手动调整
+# feature / matcher / filters / geometry 等子配置
 # ---------------------------------------------------------------------------
-name: surf_bf_homography
+name: surf_pipeline
 
 feature:  configs/feature/surf.yaml
 matcher:  configs/matcher/bf.yaml

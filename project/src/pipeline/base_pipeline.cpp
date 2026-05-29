@@ -1,6 +1,8 @@
-#include "pipeline/base_pipeline.h"
+﻿#include "pipeline/base_pipeline.h"
 
 #include <filesystem>
+#include <opencv2/features2d.hpp>
+#include <opencv2/highgui.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
@@ -17,33 +19,33 @@ namespace ir {
 
 bool BasePipeline::configure(const PipelineConfig& cfg) {
     // 1. 保存配置，并清空上一次可能残留的组件。
-    config_ = cfg;
-    extractor_.reset();
-    matcher_.reset();
-    filters_.clear();
-    geometry_.reset();
-    warper_.reset();
+    _config = cfg;
+    _extractor.reset();
+    _matcher.reset();
+    _filters.clear();
+    _geometry.reset();
+    _warper.reset();
 
     try {
         // 2. 根据各子 YAML 创建特征、匹配、过滤和几何估计组件。
-        extractor_ = Factory::createFeatureExtractor(Config::load(cfg.feature_path));
-        matcher_   = Factory::createMatcher        (Config::load(cfg.matcher_path));
+        _extractor = Factory::createFeatureExtractor(Config::load(cfg.feature_path));
+        _matcher   = Factory::createMatcher        (Config::load(cfg.matcher_path));
         for (const auto& fp : cfg.filter_paths) {
-            filters_.push_back(Factory::createFilter(Config::load(fp)));
+            _filters.push_back(Factory::createFilter(Config::load(fp)));
         }
-        geometry_  = Factory::createGeometryEstimator(Config::load(cfg.geometry_path));
+        _geometry  = Factory::createGeometryEstimator(Config::load(cfg.geometry_path));
     } catch (const std::exception& e) {
         IR_LOG_ERROR("BasePipeline::configure failed: ", e.what());
         return false;
     }
 
     // 3. 创建图像变换器，用于在几何估计成功后生成配准图像。
-    warper_ = std::make_shared<PerspectiveWarper>();
+    _warper = std::make_shared<PerspectiveWarper>();
 
-    IR_LOG_INFO("BasePipeline configured: extractor=", extractor_->name(),
-                ", matcher=",  matcher_->name(),
-                ", filters=",  static_cast<int>(filters_.size()),
-                ", geometry=", geometry_->name());
+    IR_LOG_INFO("BasePipeline configured: extractor=", _extractor->name(),
+                ", matcher=",  _matcher->name(),
+                ", filters=",  static_cast<int>(_filters.size()),
+                ", geometry=", _geometry->name());
     return true;
 }
 
@@ -82,11 +84,11 @@ bool BasePipeline::loadImages(RegistrationContext& ctx) {
 
 bool BasePipeline::runExtract(RegistrationContext& ctx) {
     ScopedTimer st(ctx.result.t_extract_ms);
-    if (!extractor_) {
+    if (!_extractor) {
         IR_LOG_ERROR("runExtract: no extractor configured.");
         return false;
     }
-    const bool ok = extractor_->extract(ctx);
+    const bool ok = _extractor->extract(ctx);
     ctx.result.num_keypoints_first  = static_cast<int>(ctx.feature_data.first.keypoints.size());
     ctx.result.num_keypoints_second = static_cast<int>(ctx.feature_data.second.keypoints.size());
     return ok;
@@ -94,36 +96,51 @@ bool BasePipeline::runExtract(RegistrationContext& ctx) {
 
 bool BasePipeline::runMatch(RegistrationContext& ctx) {
     ScopedTimer st(ctx.result.t_match_ms);
-    if (!matcher_) {
+    if (!_matcher) {
         IR_LOG_ERROR("runMatch: no matcher configured.");
         return false;
     }
-    const bool ok = matcher_->match(ctx);
+    const bool ok = _matcher->match(ctx);
     ctx.result.num_raw_matches = static_cast<int>(ctx.match_data.raw_knn.size());
     return ok;
 }
 
 bool BasePipeline::runFilters(RegistrationContext& ctx) {
     ScopedTimer st(ctx.result.t_filter_ms);
+    auto& md = ctx.match_data;
+
+    // 如果没有过滤器，或某些过滤器仅做开关控制未写入 filtered，
+    // 默认将 raw_knn 的 top-1 结果提升为 filtered，保证后续几何阶段可继续运行。
+    if (md.filtered.empty() && !md.raw_knn.empty()) {
+        md.filtered.clear();
+        md.filtered.reserve(md.raw_knn.size());
+        for (const auto& nb : md.raw_knn) {
+            if (!nb.empty()) md.filtered.push_back(nb.front());
+        }
+        IR_LOG_INFO("Seeded filtered matches from raw_knn top-1: ",
+                    md.filtered.size(), " / ", md.raw_knn.size());
+    }
+
     bool ok = true;
-    for (const auto& f : filters_) {
+    for (const auto& f : _filters) {
         if (!f) continue;
         if (!f->apply(ctx)) {
             IR_LOG_WARN("Filter '", f->name(), "' returned false.");
             ok = false;
         }
     }
-    ctx.result.num_filtered_matches = static_cast<int>(ctx.match_data.filtered.size());
+    ctx.result.num_filtered_matches = static_cast<int>(md.filtered.size());
     return ok;
 }
 
 bool BasePipeline::runGeometry(RegistrationContext& ctx) {
     ScopedTimer st(ctx.result.t_geometry_ms);
-    if (!geometry_) {
+    if (!_geometry) {
         IR_LOG_ERROR("runGeometry: no estimator configured.");
+        ctx.geometry_data.message = "no geometry estimator configured";
         return false;
     }
-    const bool ok = geometry_->estimate(ctx);
+    const bool ok = _geometry->estimate(ctx);
     ctx.result.num_inliers   = ctx.geometry_data.num_inliers;
     ctx.result.inlier_ratio  = ctx.geometry_data.inlier_ratio;
     return ok;
@@ -131,10 +148,13 @@ bool BasePipeline::runGeometry(RegistrationContext& ctx) {
 
 bool BasePipeline::runWarp(RegistrationContext& ctx) {
     ScopedTimer st(ctx.result.t_warp_ms);
-    if (!config_.warp || !warper_) return true;
+    if (!_config.warp || !_warper) return true;
 
     const auto t = ctx.geometry_data.type;
-    if (t != GeometryType::HOMOGRAPHY && t != GeometryType::AFFINE) {
+    if (t != GeometryType::HOMOGRAPHY &&
+        t != GeometryType::AFFINE &&
+        t != GeometryType::RIGID &&
+        t != GeometryType::SIMILARITY) {
         IR_LOG_INFO("Warp skipped (", toString(t), " is not warpable).");
         return true;
     }
@@ -142,26 +162,54 @@ bool BasePipeline::runWarp(RegistrationContext& ctx) {
         IR_LOG_WARN("Warp skipped: geometry estimation invalid.");
         return false;
     }
-    return warper_->warp(ctx);
+    return _warper->warp(ctx);
 }
 
 bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
-    if (config_.output_dir.empty()) return true;
-    const fs::path matches_dir = config_.output_dir / "matches";
-    const fs::path warped_dir  = config_.output_dir / "warped";
+    if (_config.output_dir.empty()) return true;
+    const fs::path keypoints_dir = _config.output_dir / "keypoints";
+    const fs::path matches_dir = _config.output_dir / "matches";
+    const fs::path warped_dir  = _config.output_dir / "warped";
     std::error_code ec;
+    fs::create_directories(keypoints_dir, ec);
     fs::create_directories(matches_dir, ec);
     fs::create_directories(warped_dir,  ec);
 
     const std::string stem =
         ctx.image1_path.stem().string() + "_" + ctx.image2_path.stem().string()
-        + "_" + (extractor_ ? extractor_->name() : std::string("UNK"))
-        + "_" + (geometry_  ? toString(geometry_->type()) : std::string("UNK"));
+        + "_" + (_extractor ? _extractor->name() : std::string("UNK"))
+        + "_" + (_geometry  ? toString(_geometry->type()) : std::string("UNK"));
 
-    if (config_.draw_matches) {
+    if (_config.draw_keypoints) {
+        cv::Mat src_vis;
+        cv::Mat dst_vis;
+        cv::drawKeypoints(ctx.feature_data.first.image,
+                          ctx.feature_data.first.keypoints,
+                          src_vis,
+                          cv::Scalar::all(-1),
+                          cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+        cv::drawKeypoints(ctx.feature_data.second.image,
+                          ctx.feature_data.second.keypoints,
+                          dst_vis,
+                          cv::Scalar::all(-1),
+                          cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+
+        if (!src_vis.empty()) {
+            const fs::path out = keypoints_dir / (stem + "_source_keypoints.png");
+            cv::imwrite(out.string(), src_vis);
+            IR_LOG_INFO("Wrote source keypoints visualization: ", out.string());
+        }
+        if (!dst_vis.empty()) {
+            const fs::path out = keypoints_dir / (stem + "_target_keypoints.png");
+            cv::imwrite(out.string(), dst_vis);
+            IR_LOG_INFO("Wrote target keypoints visualization: ", out.string());
+        }
+    }
+
+    if (_config.draw_matches) {
         DrawMatches::Options opt;
-        opt.draw_inliers_only = config_.draw_inliers_only;
-        opt.max_matches       = config_.max_matches_drawn;
+        opt.draw_inliers_only = _config.draw_inliers_only;
+        opt.max_matches       = _config.max_matches_drawn;
         cv::Mat vis = DrawMatches::render(ctx, opt);
         if (!vis.empty()) {
             const fs::path out = matches_dir / (stem + "_matches.png");
@@ -170,7 +218,7 @@ bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
         }
     }
 
-    if (config_.warp && !ctx.warped_image.empty()) {
+    if (_config.warp && !ctx.warped_image.empty()) {
         const fs::path out = warped_dir / (stem + "_warped.png");
         cv::imwrite(out.string(), ctx.warped_image);
         IR_LOG_INFO("Wrote warped image: ", out.string());
@@ -191,14 +239,43 @@ bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
     return true;
 }
 
+bool BasePipeline::showWindows(RegistrationContext& ctx) {
+    bool shown = false;
+
+    if (_config.show_source_window && !ctx.feature_data.first.image.empty()) {
+        cv::imshow("Source Image", ctx.feature_data.first.image);
+        shown = true;
+    }
+    if (_config.show_target_window && !ctx.feature_data.second.image.empty()) {
+        cv::imshow("Target Image", ctx.feature_data.second.image);
+        shown = true;
+    }
+    if (_config.show_warped_window) {
+        if (!ctx.warped_image.empty()) {
+            cv::imshow("Warped Image", ctx.warped_image);
+            shown = true;
+        } else {
+            IR_LOG_WARN("show_warped_window is enabled, but warped_image is empty.");
+        }
+    }
+
+    if (shown) {
+        const int wait = (_config.wait_key < 0) ? 0 : _config.wait_key;
+        IR_LOG_INFO("Displaying visualization windows; waitKey=", wait);
+        cv::waitKey(wait);
+    }
+
+    return true;
+}
+
 bool BasePipeline::run(RegistrationContext& ctx) {
     Timer total;
 
     // 1. 重置上下文，并写入当前配置指定的输入输出路径。
     ctx.reset();
-    ctx.image1_path = config_.image1_path;
-    ctx.image2_path = config_.image2_path;
-    ctx.output_dir  = config_.output_dir;
+    ctx.image1_path = _config.image1_path;
+    ctx.image2_path = _config.image2_path;
+    ctx.output_dir  = _config.output_dir;
 
     auto fail = [&](const std::string& msg) {
         ctx.result.success = false;
@@ -221,11 +298,17 @@ bool BasePipeline::run(RegistrationContext& ctx) {
     if (!runFilters (ctx))   IR_LOG_WARN("Some filter stage reported a soft failure.");
 
     // 6. 基于过滤后的匹配估计几何模型，并标记内点。
-    if (!runGeometry(ctx))   return fail("geometry failed");
+    if (!runGeometry(ctx)) {
+        const std::string detail = ctx.geometry_data.message.empty()
+            ? std::string("geometry failed")
+            : std::string("geometry failed: ") + ctx.geometry_data.message;
+        return fail(detail);
+    }
 
     // 7. 根据几何结果生成配准图像，并保存可视化输出。
-    runWarp     (ctx);
-    saveOutputs (ctx);
+    runWarp      (ctx);
+    saveOutputs  (ctx);
+    showWindows  (ctx);
 
     // 8. 写入成功状态和总耗时。
     ctx.result.success     = true;
@@ -235,3 +318,4 @@ bool BasePipeline::run(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

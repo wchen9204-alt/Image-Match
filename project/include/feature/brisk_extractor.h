@@ -1,28 +1,32 @@
-#pragma once
+﻿#pragma once
 
-#include <yaml-cpp/yaml.h>
 #include <opencv2/features2d.hpp>
+#include <yaml-cpp/yaml.h>
 
 #include "interfaces/i_feature_extractor.h"
 
 namespace ir {
 
+/// BRISK 特征提取器。
 class BriskExtractor : public IFeatureExtractor {
 public:
+    /// 根据 YAML 配置初始化 BRISK 参数。
     explicit BriskExtractor(const YAML::Node& cfg);
 
-    std::string name()     const override { return "BRISK"; }
-    FeatureType type()     const override { return FeatureType::BRISK; }
+    std::string name() const override { return "BRISK"; }
+    FeatureType type() const override { return FeatureType::BRISK; }
     NormType    normType() const override { return NormType::HAMMING; }
 
+    /// 在上下文中提取 BRISK 关键点和描述子。
     bool extract(RegistrationContext& ctx) override;
 
 private:
-    int   thresh_       = 30;
-    int   octaves_      = 3;
-    float patternScale_ = 1.0f;
+    int   _thresh       = 30;
+    int   _octaves      = 3;
+    float _patternScale = 1.0f;
 
-    cv::Ptr<cv::BRISK> impl_;
+    cv::Ptr<cv::BRISK> _impl;
 };
 
 } // namespace ir
+

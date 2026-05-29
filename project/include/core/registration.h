@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <memory>
 #include <string>
@@ -32,17 +32,18 @@ public:
     bool run(RegistrationContext& ctx) override;
 
     /// 返回当前保存的流水线配置。
-    const PipelineConfig& config() const { return cfg_; }
+    const PipelineConfig& config() const { return _cfg; }
 
     /// 返回当前用于执行配准流程的流水线对象。
-    std::shared_ptr<IPipeline> pipeline() const { return pipeline_; }
+    std::shared_ptr<IPipeline> pipeline() const { return _pipeline; }
 
 private:
     /// 最近一次应用到该实例的配置。
-    PipelineConfig cfg_;
+    PipelineConfig _cfg;
 
     /// 执行特征提取、匹配和变换的具体流水线实现。
-    std::shared_ptr<IPipeline> pipeline_;
+    std::shared_ptr<IPipeline> _pipeline;
 };
 
 } // namespace ir
+

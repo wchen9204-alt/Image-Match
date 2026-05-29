@@ -1,4 +1,4 @@
-#include "feature/brisk_extractor.h"
+﻿#include "feature/brisk_extractor.h"
 
 #include <opencv2/imgproc.hpp>
 
@@ -10,19 +10,19 @@ namespace ir {
 BriskExtractor::BriskExtractor(const YAML::Node& cfg) {
     const auto params = cfg["params"];
 
-    thresh_       = yaml_utils::getInt  (params, "thresh",       30);
-    octaves_      = yaml_utils::getInt  (params, "octaves",      3);
-    patternScale_ = yaml_utils::getFloat(params, "patternScale", 1.0f);
+    _thresh       = yaml_utils::getInt  (params, "thresh",       30);
+    _octaves      = yaml_utils::getInt  (params, "octaves",      3);
+    _patternScale = yaml_utils::getFloat(params, "patternScale", 1.0f);
 
-    impl_ = cv::BRISK::create(thresh_, octaves_, patternScale_);
+    _impl = cv::BRISK::create(_thresh, _octaves, _patternScale);
 
-    IR_LOG_INFO("BRISK created: thresh=", thresh_,
-                ", octaves=",             octaves_,
-                ", patternScale=",        patternScale_);
+    IR_LOG_INFO("BRISK created: thresh=", _thresh,
+                ", octaves=",             _octaves,
+                ", patternScale=",        _patternScale);
 }
 
 bool BriskExtractor::extract(RegistrationContext& ctx) {
-    if (!impl_) {
+    if (!_impl) {
         IR_LOG_ERROR("BRISK extractor not constructed.");
         return false;
     }
@@ -42,9 +42,9 @@ bool BriskExtractor::extract(RegistrationContext& ctx) {
         cv::cvtColor(fd.second.image, fd.second.gray, cv::COLOR_BGR2GRAY);
     }
 
-    impl_->detectAndCompute(fd.first.gray,  cv::noArray(),
+    _impl->detectAndCompute(fd.first.gray,  cv::noArray(),
                             fd.first.keypoints,  fd.first.descriptors);
-    impl_->detectAndCompute(fd.second.gray, cv::noArray(),
+    _impl->detectAndCompute(fd.second.gray, cv::noArray(),
                             fd.second.keypoints, fd.second.descriptors);
 
     IR_LOG_INFO("BRISK extracted ", fd.first.keypoints.size(),
@@ -53,3 +53,4 @@ bool BriskExtractor::extract(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

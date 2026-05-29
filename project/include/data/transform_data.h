@@ -6,17 +6,18 @@
 
 namespace ir {
 
-// ---------------------------------------------------------------------------
-// TransformData：供图像变换模块使用的几何变换结果。
-// ---------------------------------------------------------------------------
+/// 图像变换阶段的结果数据。
 struct TransformData {
+    /// 当前变换类型。
     TransformType type = TransformType::UNKNOWN;
 
-    // 3x3 矩阵，用于透视变换或仿射矩阵扩展后的统一计算。
+    /// 统一使用的 3x3 变换矩阵。
     cv::Mat M;
 
+    /// 变换是否有效。
     bool valid = false;
 
+    /// 清空变换结果。
     void clear() {
         type  = TransformType::UNKNOWN;
         M.release();

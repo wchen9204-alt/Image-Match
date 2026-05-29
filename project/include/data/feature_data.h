@@ -7,15 +7,18 @@
 
 namespace ir {
 
-// ---------------------------------------------------------------------------
-// 单张图像的特征数据：关键点、描述子以及匹配时使用的距离类型。
-// ---------------------------------------------------------------------------
+/// 单张图像对应的特征数据。
 struct FeatureImageData {
-    cv::Mat                       image;        // 原始图像，BGR 或灰度。
-    cv::Mat                       gray;         // 用于检测的灰度图。
-    std::vector<cv::KeyPoint>     keypoints;
-    cv::Mat                       descriptors;  // 每行对应一个关键点，类型由提取器决定。
+    /// 原始图像。
+    cv::Mat image;
+    /// 预处理后的灰度图。
+    cv::Mat gray;
+    /// 关键点列表。
+    std::vector<cv::KeyPoint> keypoints;
+    /// 描述子矩阵，每一行对应一个关键点。
+    cv::Mat descriptors;
 
+    /// 清空当前图像的特征数据。
     void clear() {
         image.release();
         gray.release();
@@ -23,21 +26,23 @@ struct FeatureImageData {
         descriptors.release();
     }
 
+    /// 判断当前图像是否没有有效特征。
     bool empty() const {
         return keypoints.empty() || descriptors.empty();
     }
 };
 
-// ---------------------------------------------------------------------------
-// FeatureData：一对待配准图像的特征数据。
-// ---------------------------------------------------------------------------
+/// 一对待配准图像的特征数据。
 struct FeatureData {
     FeatureImageData first;
     FeatureImageData second;
 
-    FeatureType type      = FeatureType::UNKNOWN;
+    /// 本次特征提取使用的特征类型。
+    FeatureType type = FeatureType::UNKNOWN;
+    /// 本次特征提取使用的描述子距离类型。
     NormType    norm_type = NormType::UNKNOWN;
 
+    /// 清空两张图像的特征数据和类型信息。
     void clear() {
         first.clear();
         second.clear();
@@ -45,7 +50,7 @@ struct FeatureData {
         norm_type = NormType::UNKNOWN;
     }
 
-    // 任意一张图缺少关键点或描述子时返回 true。
+    /// 判断是否至少有一张图像没有有效特征。
     bool empty() const {
         return first.empty() || second.empty();
     }

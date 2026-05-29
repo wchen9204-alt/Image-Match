@@ -83,10 +83,15 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
     // 可视化选项。
     if (node["visualization"] && node["visualization"].IsMap()) {
         const auto& vis = node["visualization"];
-        cfg.draw_matches      = yaml_utils::getBool  (vis, "draw_matches",       true);
-        cfg.draw_inliers_only = yaml_utils::getBool  (vis, "draw_inliers_only",  true);
-        cfg.max_matches_drawn = yaml_utils::getInt   (vis, "max_matches_drawn",  100);
-        cfg.warp              = yaml_utils::getBool  (vis, "warp",               true);
+        cfg.draw_keypoints     = yaml_utils::getBool(vis, "draw_keypoints", false);
+        cfg.draw_matches       = yaml_utils::getBool(vis, "draw_matches", true);
+        cfg.draw_inliers_only  = yaml_utils::getBool(vis, "draw_inliers_only", true);
+        cfg.max_matches_drawn  = yaml_utils::getInt(vis, "max_matches_drawn", 100);
+        cfg.warp               = yaml_utils::getBool(vis, "warp", true);
+        cfg.show_source_window = yaml_utils::getBool(vis, "show_source_window", false);
+        cfg.show_target_window = yaml_utils::getBool(vis, "show_target_window", false);
+        cfg.show_warped_window = yaml_utils::getBool(vis, "show_warped_window", false);
+        cfg.wait_key           = yaml_utils::getInt(vis, "wait_key", 0);
     }
 
     IR_LOG_INFO("Pipeline '", cfg.name, "' loaded from ", path.string());

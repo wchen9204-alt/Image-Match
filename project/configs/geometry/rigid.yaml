@@ -1,0 +1,23 @@
+# ---------------------------------------------------------------------------
+# 2D 刚体变换估计器配置
+# 先使用 cv::estimateAffinePartial2D(...) 做鲁棒内点筛选，
+# 再在内点上回归严格的旋转 + 平移模型
+# 注释中会区分 OpenCV 原始默认值和本项目默认值
+# ---------------------------------------------------------------------------
+type: RIGID
+
+params:
+  # 鲁棒估计方法，可选 RANSAC / LMEDS
+  # estimateAffinePartial2D 的 OpenCV 原始默认值: RANSAC
+  # 本项目默认值: RANSAC
+  method: RANSAC
+  # 判定内点的最大重投影误差，单位像素，OpenCV 原始默认值: 3.0
+  ransacReprojThreshold: 3.0
+  # 最大迭代次数，OpenCV 原始默认值: 2000
+  maxIters: 2000
+  # 置信度，OpenCV 原始默认值: 0.99
+  confidence: 0.99
+  # 判定估计有效所需的最少内点数，本项目默认值: 3
+  minInliers: 3
+  # 初始相似模型的细化迭代次数，OpenCV 原始默认值: 10
+  refineIters: 10

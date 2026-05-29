@@ -6,16 +6,17 @@
 
 namespace ir {
 
-// ---------------------------------------------------------------------------
-// IMatcher：生成两张图描述子之间的初始匹配。
-// ---------------------------------------------------------------------------
+/// 描述子匹配器接口。
+///
+/// 接收特征提取阶段产生的描述子，并生成原始匹配结果写入上下文。
 class IMatcher {
 public:
     virtual ~IMatcher() = default;
 
+    /// 返回匹配器名称。
     virtual std::string name() const = 0;
 
-    // 执行匹配；AUTO 距离类型应参考 FeatureData::norm_type。
+    /// 执行描述子匹配，结果写入 `RegistrationContext::match_data`。
     virtual bool match(RegistrationContext& ctx) = 0;
 };
 

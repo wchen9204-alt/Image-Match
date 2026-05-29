@@ -1,4 +1,4 @@
-#include "filter/cross_check.h"
+﻿#include "filter/cross_check.h"
 
 #include <unordered_map>
 #include <opencv2/features2d.hpp>
@@ -10,15 +10,15 @@ namespace ir {
 
 CrossCheckFilter::CrossCheckFilter(const YAML::Node& cfg) {
     const auto params = cfg["params"];
-    enabled_ = yaml_utils::getBool(params, "enabled", true);
-    IR_LOG_INFO("CrossCheckFilter enabled=", enabled_);
+    _enabled = yaml_utils::getBool(params, "enabled", true);
+    IR_LOG_INFO("CrossCheckFilter enabled=", _enabled);
 }
 
 bool CrossCheckFilter::apply(RegistrationContext& ctx) {
     auto& fd = ctx.feature_data;
     auto& md = ctx.match_data;
 
-    if (!enabled_) {
+    if (!_enabled) {
         IR_LOG_INFO("CrossCheckFilter disabled - pass-through.");
         return true;
     }
@@ -82,3 +82,4 @@ bool CrossCheckFilter::apply(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

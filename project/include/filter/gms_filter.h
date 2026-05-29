@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <yaml-cpp/yaml.h>
 
@@ -18,9 +18,10 @@ public:
     bool apply(RegistrationContext& ctx) override;
 
 private:
-    bool   withRotation_   = false;
-    bool   withScale_      = false;
-    double thresholdFactor_ = 6.0;
+    bool   _withRotation   = false;
+    bool   _withScale      = false;
+    double _thresholdFactor = 6.0;
 };
 
 } // namespace ir
+

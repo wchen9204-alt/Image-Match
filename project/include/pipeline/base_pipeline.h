@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <memory>
 #include <vector>
@@ -13,9 +13,10 @@
 
 namespace ir {
 
-// ---------------------------------------------------------------------------
-// BasePipeline：串联加载、提取、匹配、过滤、估计、变换和保存阶段。
-// ---------------------------------------------------------------------------
+/// 基础配准流水线实现。
+///
+/// 将特征提取、匹配、过滤、几何估计、变换和结果保存这些阶段串联起来，
+/// 供更具体的 pipeline 类型继承和定制。
 class BasePipeline : public IPipeline {
 public:
     BasePipeline() = default;
@@ -25,21 +26,23 @@ public:
     bool run(RegistrationContext& ctx) override;
 
 protected:
-    // 阶段钩子函数，子类可按需重写。
+    /// 各阶段钩子函数，子类可按需重写。
     virtual bool loadImages(RegistrationContext& ctx);
-    virtual bool runExtract (RegistrationContext& ctx);
-    virtual bool runMatch   (RegistrationContext& ctx);
-    virtual bool runFilters (RegistrationContext& ctx);
+    virtual bool runExtract(RegistrationContext& ctx);
+    virtual bool runMatch(RegistrationContext& ctx);
+    virtual bool runFilters(RegistrationContext& ctx);
     virtual bool runGeometry(RegistrationContext& ctx);
-    virtual bool runWarp    (RegistrationContext& ctx);
+    virtual bool runWarp(RegistrationContext& ctx);
     virtual bool saveOutputs(RegistrationContext& ctx);
+    virtual bool showWindows(RegistrationContext& ctx);
 
-    PipelineConfig                                config_;
-    std::shared_ptr<IFeatureExtractor>            extractor_;
-    std::shared_ptr<IMatcher>                     matcher_;
-    std::vector<std::shared_ptr<IFilter>>         filters_;
-    std::shared_ptr<IGeometryEstimator>           geometry_;
-    std::shared_ptr<IWarper>                      warper_;
+    PipelineConfig                        _config;
+    std::shared_ptr<IFeatureExtractor>    _extractor;
+    std::shared_ptr<IMatcher>             _matcher;
+    std::vector<std::shared_ptr<IFilter>> _filters;
+    std::shared_ptr<IGeometryEstimator>   _geometry;
+    std::shared_ptr<IWarper>              _warper;
 };
 
 } // namespace ir
+

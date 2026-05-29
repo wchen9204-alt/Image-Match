@@ -18,14 +18,17 @@ bool PerspectiveWarper::warp(RegistrationContext& ctx) {
     cv::Mat H;
     if (gd.type == GeometryType::HOMOGRAPHY && !gd.H.empty()) {
         gd.H.convertTo(H, CV_64F);
-    } else if (gd.type == GeometryType::AFFINE && !gd.A.empty()) {
-        // 将 2x3 仿射矩阵扩展为 3x3。
+    } else if ((gd.type == GeometryType::AFFINE ||
+                gd.type == GeometryType::RIGID ||
+                gd.type == GeometryType::SIMILARITY) &&
+               !gd.A.empty()) {
+        // 将 2x3 仿射族矩阵扩展成 3x3，便于统一使用 warpPerspective。
         H = cv::Mat::eye(3, 3, CV_64F);
         cv::Mat A64;
         gd.A.convertTo(A64, CV_64F);
         A64.copyTo(H(cv::Rect(0, 0, 3, 2)));
     } else {
-        IR_LOG_WARN("PerspectiveWarper: only HOMOGRAPHY/AFFINE are warpable; "
+        IR_LOG_WARN("PerspectiveWarper: only HOMOGRAPHY/AFFINE/RIGID/SIMILARITY are warpable; "
                     "geometry type is ", toString(gd.type), ". Skipping warp.");
         ctx.warped_image.release();
         return false;

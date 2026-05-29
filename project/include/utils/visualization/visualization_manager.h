@@ -7,16 +7,16 @@
 
 namespace ir {
 
-// ---------------------------------------------------------------------------
-// VisualizationManager：统一保存配准后的匹配、内点、叠加和差异图。
-//
-// 主要供 Benchmark / batch_eval 使用。
-// ---------------------------------------------------------------------------
+/// 汇总输出可视化结果的管理器。
+///
+/// 主要供 Benchmark 或批处理脚本使用，将匹配、内点、叠加图、差异图
+/// 和变换后图像统一保存到结果目录中。
 class VisualizationManager {
 public:
+    /// 可视化开关与绘制上限。
     struct Options {
-        bool draw_matches  = true;
-        bool draw_inliers  = true;
+        bool draw_matches = true;
+        bool draw_inliers = true;
         bool draw_overlay  = true;
         bool draw_diff     = true;
         bool save_warped   = true;
@@ -24,16 +24,12 @@ public:
         int  max_inliers   = 200;
     };
 
-    // 输出文件目录：
-    //   <output_root>/matches/<stem>_matches.png
-    //   <output_root>/inliers/<stem>_inliers.png
-    //   <output_root>/overlay/<stem>_overlay.png
-    //   <output_root>/diff/<stem>_diff.png
-    //   <output_root>/warped/<stem>_warped.png
+    /// 保存默认可视化输出。
     bool saveAll(const RegistrationContext& ctx,
                  const std::filesystem::path& output_root,
                  const std::string& stem) const;
 
+    /// 按指定选项保存所有可视化输出。
     bool saveAll(const RegistrationContext& ctx,
                  const std::filesystem::path& output_root,
                  const std::string& stem,

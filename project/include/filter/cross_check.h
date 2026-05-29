@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <yaml-cpp/yaml.h>
 
@@ -23,7 +23,8 @@ public:
 
 private:
     /// 是否启用该过滤器。
-    bool enabled_ = true;
+    bool _enabled = true;
 };
 
 } // namespace ir
+

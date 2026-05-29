@@ -16,10 +16,13 @@ bool AffineWarper::warp(RegistrationContext& ctx) {
     }
 
     cv::Mat A;
-    if (gd.type == GeometryType::AFFINE && !gd.A.empty()) {
+    if ((gd.type == GeometryType::AFFINE ||
+         gd.type == GeometryType::RIGID ||
+         gd.type == GeometryType::SIMILARITY) &&
+        !gd.A.empty()) {
         gd.A.convertTo(A, CV_64F);
     } else if (gd.type == GeometryType::HOMOGRAPHY && !gd.H.empty()) {
-        // 仅在 H 本质为仿射变换时，取前两行作为 2x3 矩阵。
+        // 仅在 H 本质上是仿射变换时，取前两行作为 2x3 矩阵。
         cv::Mat H64;
         gd.H.convertTo(H64, CV_64F);
         A = H64(cv::Rect(0, 0, 3, 2)).clone();

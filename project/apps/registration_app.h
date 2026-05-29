@@ -1,7 +1,15 @@
 #pragma once
 
+#include <vector>
+
 #include <filesystem>
 #include <string>
+
+#include <yaml-cpp/yaml.h>
+
+#include "core/config.h"
+#include "core/result.h"
+#include "dataset/dataset_loader.h"
 
 namespace ir {
 
@@ -26,6 +34,28 @@ public:
     static int run(int argc, char** argv);
 
     static void printUsage(const std::string& exe);
+
+private:
+    struct BatchConfig {
+        std::string name;
+        std::filesystem::path pipeline_yaml;
+        DatasetLoader::Options dataset;
+        std::filesystem::path output_root;
+        bool save_visuals = true;
+        bool summary_csv  = true;
+    };
+
+    static int runSingle(const Args& args);
+    static int runBatch(const std::filesystem::path& batch_yaml);
+    static bool isBatchYaml(const YAML::Node& node);
+    static BatchConfig loadBatchConfig(const std::filesystem::path& yaml_path);
+    static std::filesystem::path resolveBatchOutputRoot(
+        const BatchConfig& batch,
+        const PipelineConfig& pipeline_cfg);
+    static void writeSummaryCsv(
+        const std::filesystem::path& csv_path,
+        const std::vector<std::string>& sample_names,
+        const std::vector<RegistrationResult>& results);
 };
 
 } // namespace ir

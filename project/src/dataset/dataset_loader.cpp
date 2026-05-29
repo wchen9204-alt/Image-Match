@@ -1,4 +1,4 @@
-#include "dataset/dataset_loader.h"
+﻿#include "dataset/dataset_loader.h"
 
 #include <algorithm>
 #include <fstream>
@@ -10,12 +10,12 @@ namespace fs = std::filesystem;
 
 namespace ir {
 
-DatasetLoader::DatasetLoader(const Options& opt) : opt_(opt) {}
+DatasetLoader::DatasetLoader(const Options& opt) : _opt(opt) {}
 
 bool DatasetLoader::resolveImage(const fs::path& dir,
                                  const std::string& stem,
                                  fs::path& out) const {
-    for (const auto& ext : opt_.extensions) {
+    for (const auto& ext : _opt.extensions) {
         const fs::path p = dir / (stem + ext);
         if (file_utils::fileExists(p)) {
             out = p;
@@ -49,34 +49,34 @@ bool DatasetLoader::tryLoadGroundTruth(const fs::path& dir, cv::Mat& H_gt) const
 std::vector<Sample> DatasetLoader::load() const {
     std::vector<Sample> out;
 
-    if (opt_.root.empty()) {
+    if (_opt.root.empty()) {
         IR_LOG_ERROR("DatasetLoader: empty root.");
         return out;
     }
-    if (!fs::exists(opt_.root)) {
-        IR_LOG_ERROR("DatasetLoader: root not found: ", opt_.root.string());
+    if (!fs::exists(_opt.root)) {
+        IR_LOG_ERROR("DatasetLoader: root not found: ", _opt.root.string());
         return out;
     }
 
     std::vector<fs::path> dirs;
-    if (!opt_.include.empty()) {
-        for (const auto& name : opt_.include) {
-            const fs::path d = opt_.root / name;
+    if (!_opt.include.empty()) {
+        for (const auto& name : _opt.include) {
+            const fs::path d = _opt.root / name;
             if (fs::is_directory(d)) dirs.push_back(d);
             else IR_LOG_WARN("DatasetLoader: include entry not a directory: ", d.string());
         }
     } else {
-        dirs = file_utils::listSubdirectories(opt_.root);
+        dirs = file_utils::listSubdirectories(_opt.root);
     }
 
     for (const auto& d : dirs) {
         Sample s;
         s.name = d.filename().string();
-        if (!resolveImage(d, opt_.pattern_source, s.source_path)) {
+        if (!resolveImage(d, _opt.pattern_source, s.source_path)) {
             IR_LOG_WARN("DatasetLoader: missing source for ", d.string());
             continue;
         }
-        if (!resolveImage(d, opt_.pattern_target, s.target_path)) {
+        if (!resolveImage(d, _opt.pattern_target, s.target_path)) {
             IR_LOG_WARN("DatasetLoader: missing target for ", d.string());
             continue;
         }
@@ -87,8 +87,9 @@ std::vector<Sample> DatasetLoader::load() const {
     std::sort(out.begin(), out.end(),
               [](const Sample& a, const Sample& b) { return a.name < b.name; });
 
-    IR_LOG_INFO("DatasetLoader: loaded ", out.size(), " samples from ", opt_.root.string());
+    IR_LOG_INFO("DatasetLoader: loaded ", out.size(), " samples from ", _opt.root.string());
     return out;
 }
 
 } // namespace ir
+

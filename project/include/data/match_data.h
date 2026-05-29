@@ -5,15 +5,18 @@
 
 namespace ir {
 
-// ---------------------------------------------------------------------------
-// MatchData：保存原始匹配、过滤后匹配以及几何估计得到的内点信息。
-// ---------------------------------------------------------------------------
+/// 匹配阶段的原始、中间和最终匹配结果。
 struct MatchData {
+    /// KNN 原始匹配结果。
     std::vector<std::vector<cv::DMatch>> raw_knn;
-    std::vector<cv::DMatch>              filtered;
-    std::vector<unsigned char>           inlier_mask;
-    std::vector<cv::DMatch>              inliers;
+    /// 过滤后的匹配结果。
+    std::vector<cv::DMatch> filtered;
+    /// 内点掩码。
+    std::vector<unsigned char> inlier_mask;
+    /// 最终内点匹配。
+    std::vector<cv::DMatch> inliers;
 
+    /// 清空所有匹配数据。
     void clear() {
         raw_knn.clear();
         filtered.clear();

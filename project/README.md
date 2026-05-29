@@ -1,6 +1,6 @@
 # Image Registration Framework
 
-A modular, OpenCV-based feature registration playground for Windows + VSCode + CMake. The first slice covers the six classic point-feature methods (SIFT, SURF, ORB, BRISK, KAZE, AKAZE), full BFMatcher with norm auto-routing, RatioTest + CrossCheck filters, and the four staple geometric estimators (Homography, Affine2D, Fundamental, Essential), wrapped in a YAML-driven pipeline.
+A modular, OpenCV-based feature registration playground for Windows + VSCode + CMake. The first slice covers the six classic point-feature methods (SIFT, SURF, ORB, BRISK, KAZE, AKAZE), full BFMatcher with norm auto-routing, RatioTest + CrossCheck filters, and the four staple geometric estimators (Homography, Affine2D, Rigid2D, Similarity2D), wrapped in a YAML-driven pipeline.
 
 The architecture is intentionally interface-first so later phases (line / region / deep features, evaluators, datasets) can be slotted in without touching the existing components.
 
@@ -15,7 +15,7 @@ project/
 │   ├── feature/                sift / surf / orb / brisk / kaze / akaze
 │   ├── matcher/                bf
 │   ├── filter/                 ratio_test / cross_check
-│   ├── geometry/               homography / affine / fundamental / essential
+│   ├── geometry/               homography / affine / rigid / similarity
 │   └── pipeline/               sift_pipeline / orb_pipeline
 ├── include/                    public headers
 │   ├── interfaces/             pure-virtual contracts
@@ -24,7 +24,7 @@ project/
 │   ├── feature/                concrete extractors
 │   ├── matcher/                BFMatcher
 │   ├── filter/                 RatioTest / CrossCheck
-│   ├── geometry/               Homography / Affine / Fundamental / Essential
+│   ├── geometry/               Homography / Affine / Rigid / Similarity
 │   ├── transform/              warpers
 │   ├── pipeline/               BasePipeline / FeaturePipeline
 │   └── utils/                  logger / timer / yaml_utils / draw_matches
@@ -84,7 +84,7 @@ Outputs land in `outputs/matches/` and `outputs/warped/`.
 
 ## Switching feature / geometry method
 
-Edit a pipeline YAML (or copy one of the templates). Every component is a single line:
+Edit a pipeline YAML directly. For SIFT, switch the geometric model by modifying the `geometry` line inside `configs/pipeline/sift_pipeline.yaml`:
 
 ```yaml
 feature:  configs/feature/akaze.yaml      # one of: sift, surf, orb, brisk, kaze, akaze
@@ -92,7 +92,7 @@ matcher:  configs/matcher/bf.yaml
 filters:
   - configs/filter/ratio_test.yaml
   - configs/filter/cross_check.yaml
-geometry: configs/geometry/fundamental.yaml   # homography / affine / fundamental / essential
+geometry: configs/geometry/homography.yaml    # homography / affine / rigid / similarity
 ```
 
 The `BFMatcher` reads `descriptor_norm` from the active feature YAML, so SIFT/SURF/KAZE auto-pick `L2` and ORB/BRISK/AKAZE(MLDB) auto-pick `HAMMING` without further configuration.

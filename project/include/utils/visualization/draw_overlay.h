@@ -6,15 +6,15 @@
 
 namespace ir {
 
-// ---------------------------------------------------------------------------
-// DrawOverlay：生成变换后源图与目标图的叠加图。
-// ---------------------------------------------------------------------------
+/// 将变换后的源图与目标图叠加显示。
 class DrawOverlay {
 public:
+    /// 绘制选项。
     struct Options {
-        double alpha = 0.5;       // 变换后源图的权重。
+        double alpha = 0.5;
     };
 
+    /// 渲染叠加图。
     static cv::Mat render(const RegistrationContext& ctx, const Options& opt);
 };
 

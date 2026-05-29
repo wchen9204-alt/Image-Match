@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <yaml-cpp/yaml.h>
 
@@ -6,21 +6,28 @@
 
 namespace ir {
 
+/// 单应矩阵估计器。
 class HomographyEstimator : public IGeometryEstimator {
 public:
+    /// 根据 YAML 配置初始化单应估计参数。
     explicit HomographyEstimator(const YAML::Node& cfg);
 
-    std::string  name() const override { return "Homography"; }
+    /// 返回估计器名称。
+    std::string name() const override { return "Homography"; }
+
+    /// 返回当前估计器的几何类型。
     GeometryType type() const override { return GeometryType::HOMOGRAPHY; }
 
+    /// 估计单应矩阵并写入上下文。
     bool estimate(RegistrationContext& ctx) override;
 
 private:
-    int    method_                 = 8;     // 默认使用 cv::RANSAC。
-    double ransacReprojThreshold_  = 3.0;
-    int    maxIters_               = 2000;
-    double confidence_             = 0.995;
-    int    minInliers_             = 8;
+    int    _method                = 8;
+    double _ransacReprojThreshold = 3.0;
+    int    _maxIters              = 2000;
+    double _confidence            = 0.995;
+    int    _minInliers            = 8;
 };
 
 } // namespace ir
+

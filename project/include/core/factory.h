@@ -27,7 +27,7 @@ public:
     /// 创建匹配过滤器，例如 ratio test、cross-check 或 GMS。
     static std::shared_ptr<IFilter> createFilter(const YAML::Node& cfg);
 
-    /// 创建几何估计器，例如单应、仿射、基础矩阵或本质矩阵估计器。
+    /// 创建几何估计器，例如单应、仿射、刚体或相似变换估计器。
     static std::shared_ptr<IGeometryEstimator> createGeometryEstimator(const YAML::Node& cfg);
 };
 

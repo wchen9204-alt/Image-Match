@@ -1,4 +1,4 @@
-#include "filter/ratio_test.h"
+﻿#include "filter/ratio_test.h"
 
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
@@ -7,8 +7,8 @@ namespace ir {
 
 RatioTestFilter::RatioTestFilter(const YAML::Node& cfg) {
     const auto params = cfg["params"];
-    ratio_ = yaml_utils::getFloat(params, "ratio", 0.75f);
-    IR_LOG_INFO("RatioTestFilter ratio=", ratio_);
+    _ratio = yaml_utils::getFloat(params, "ratio", 0.75f);
+    IR_LOG_INFO("RatioTestFilter ratio=", _ratio);
 }
 
 bool RatioTestFilter::apply(RegistrationContext& ctx) {
@@ -31,7 +31,7 @@ bool RatioTestFilter::apply(RegistrationContext& ctx) {
         }
         const cv::DMatch& m1 = neighbours[0];
         const cv::DMatch& m2 = neighbours[1];
-        if (m2.distance > 0.0f && (m1.distance / m2.distance) < ratio_) {
+        if (m2.distance > 0.0f && (m1.distance / m2.distance) < _ratio) {
             kept.push_back(m1);
         }
     }
@@ -43,3 +43,4 @@ bool RatioTestFilter::apply(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

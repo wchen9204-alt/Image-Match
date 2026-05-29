@@ -1,6 +1,7 @@
-#include "geometry/homography_estimator.h"
+﻿#include "geometry/homography_estimator.h"
 
 #include <opencv2/calib3d.hpp>
+#include <string>
 
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
@@ -43,19 +44,19 @@ HomographyEstimator::HomographyEstimator(const YAML::Node& cfg) {
     const std::string method_str =
         yaml_utils::getString(params, "method", "RANSAC");
     int m = robustMethodFromString(method_str);
-    method_ = (m < 0) ? cv::RANSAC : m;
+    _method = (m < 0) ? cv::RANSAC : m;
 
-    ransacReprojThreshold_ =
+    _ransacReprojThreshold =
         yaml_utils::getDouble(params, "ransacReprojThreshold", 3.0);
-    maxIters_   = yaml_utils::getInt   (params, "maxIters",   2000);
-    confidence_ = yaml_utils::getDouble(params, "confidence", 0.995);
-    minInliers_ = yaml_utils::getInt   (params, "minInliers", 8);
+    _maxIters   = yaml_utils::getInt   (params, "maxIters",   2000);
+    _confidence = yaml_utils::getDouble(params, "confidence", 0.995);
+    _minInliers = yaml_utils::getInt   (params, "minInliers", 8);
 
     IR_LOG_INFO("HomographyEstimator: method=", method_str,
-                ", thr=",        ransacReprojThreshold_,
-                ", maxIters=",   maxIters_,
-                ", confidence=", confidence_,
-                ", minInliers=", minInliers_);
+                ", thr=",        _ransacReprojThreshold,
+                ", maxIters=",   _maxIters,
+                ", confidence=", _confidence,
+                ", minInliers=", _minInliers);
 }
 
 bool HomographyEstimator::estimate(RegistrationContext& ctx) {
@@ -65,6 +66,8 @@ bool HomographyEstimator::estimate(RegistrationContext& ctx) {
     gd.type = GeometryType::HOMOGRAPHY;
 
     if (md.filtered.size() < 4) {
+        gd.message = "need at least 4 matches, got " +
+                     std::to_string(md.filtered.size());
         IR_LOG_ERROR("HomographyEstimator: need at least 4 matches, got ",
                      md.filtered.size());
         return false;
@@ -74,13 +77,14 @@ bool HomographyEstimator::estimate(RegistrationContext& ctx) {
     extractPoints(ctx, pts1, pts2);
 
     std::vector<unsigned char> mask;
-    cv::Mat H = cv::findHomography(pts1, pts2, method_,
-                                   ransacReprojThreshold_,
+    cv::Mat H = cv::findHomography(pts1, pts2, _method,
+                                   _ransacReprojThreshold,
                                    mask,
-                                   maxIters_,
-                                   confidence_);
+                                   _maxIters,
+                                   _confidence);
 
     if (H.empty()) {
+        gd.message = "findHomography returned an empty matrix";
         IR_LOG_ERROR("findHomography returned an empty matrix.");
         return false;
     }
@@ -93,7 +97,13 @@ bool HomographyEstimator::estimate(RegistrationContext& ctx) {
     gd.inlier_ratio = md.filtered.empty()
                           ? 0.0
                           : static_cast<double>(inliers) / md.filtered.size();
-    gd.valid        = inliers >= minInliers_;
+    gd.valid        = inliers >= _minInliers;
+    if (!gd.valid) {
+        gd.message = "estimated homography with " + std::to_string(inliers) +
+                     " inliers, below minInliers=" +
+                     std::to_string(_minInliers);
+        IR_LOG_WARN("HomographyEstimator rejected model: ", gd.message);
+    }
 
     IR_LOG_INFO("Homography inliers=", inliers, " / ", md.filtered.size(),
                 " (ratio=", gd.inlier_ratio, ")");
@@ -101,3 +111,4 @@ bool HomographyEstimator::estimate(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

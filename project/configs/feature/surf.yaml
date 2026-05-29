@@ -1,20 +1,22 @@
 # ---------------------------------------------------------------------------
 # SURF 特征提取器配置
 # 参数对应 cv::xfeatures2d::SURF::create(...)
-# 需要启用 xfeatures2d/non-free 的 OpenCV。
+# 注释中的“默认值”指 OpenCV 原始默认值
+# 需要启用包含 xfeatures2d / non-free 的 OpenCV
 # ---------------------------------------------------------------------------
 type: SURF
 
 params:
-  # 关键点检测阈值；越大特征越少但更强。
+  # Hessian 阈值，越大检测到的特征越少，默认值: 100.0
   hessianThreshold: 400.0
-  # 金字塔 octave 数量。
+  # 金字塔 octave 数量，默认值: 4
   nOctaves: 4
-  # 每个 octave 内的层数。
+  # 每个 octave 内的层数，默认值: 3
   nOctaveLayers: 3
-  # true 时返回 128 维描述子，否则返回 64 维。
+  # 是否输出 128 维扩展描述子，false 时为 64 维，默认值: false
   extended: false
-  # true 时不计算方向，速度更快但鲁棒性更低。
+  # 是否使用不带方向的 upright 描述子，默认值: false
   upright: false
 
+# SURF 使用浮点描述子，匹配距离类型通常为 L2
 descriptor_norm: L2

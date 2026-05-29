@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <yaml-cpp/yaml.h>
 
@@ -18,7 +18,8 @@ public:
     bool apply(RegistrationContext& ctx) override;
 
 private:
-    float ratio_ = 0.75f;
+    float _ratio = 0.75f;
 };
 
 } // namespace ir
+

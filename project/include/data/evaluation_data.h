@@ -6,24 +6,24 @@
 
 namespace ir {
 
-// ---------------------------------------------------------------------------
-// MetricResult：单个评价指标的结果。
-// ---------------------------------------------------------------------------
+/// 单个评测指标的结果。
 struct MetricResult {
+    /// 指标名。
     std::string name;
-    double      value   = 0.0;
-    bool        valid   = false;
-    std::string note;   // 可选的说明信息。
+    /// 指标数值。
+    double      value = 0.0;
+    /// 指标结果是否有效。
+    bool        valid = false;
+    /// 可选说明信息。
+    std::string note;
 };
 
-// ---------------------------------------------------------------------------
-// EvaluationData：一次配准运行产生的全部评价指标。
-// ---------------------------------------------------------------------------
+/// 一次配准运行的所有评测指标。
 struct EvaluationData {
-    // 按 metrics.yaml 声明顺序保存的指标列表。
+    /// 按 metrics.yaml 中的顺序保存的指标列表。
     std::vector<MetricResult> metrics;
 
-    // 按名称快速查询指标。
+    /// 按名称查找指标。
     const MetricResult* find(const std::string& name) const {
         for (const auto& m : metrics) {
             if (m.name == name) return &m;
@@ -31,7 +31,7 @@ struct EvaluationData {
         return nullptr;
     }
 
-    // 转成扁平 key/value，只包含有效指标。
+    /// 将有效指标转换为 key/value 形式，便于统计和导出。
     std::map<std::string, double> asMap() const {
         std::map<std::string, double> out;
         for (const auto& m : metrics) {
@@ -40,6 +40,7 @@ struct EvaluationData {
         return out;
     }
 
+    /// 清空指标列表。
     void clear() { metrics.clear(); }
 };
 

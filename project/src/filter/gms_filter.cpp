@@ -1,4 +1,4 @@
-#include "filter/gms_filter.h"
+﻿#include "filter/gms_filter.h"
 
 #include <opencv2/xfeatures2d.hpp>
 
@@ -9,13 +9,13 @@ namespace ir {
 
 GmsFilter::GmsFilter(const YAML::Node& cfg) {
     const auto params = cfg["params"];
-    withRotation_    = yaml_utils::getBool  (params, "withRotation",    false);
-    withScale_       = yaml_utils::getBool  (params, "withScale",       false);
-    thresholdFactor_ = yaml_utils::getDouble(params, "thresholdFactor", 6.0);
+    _withRotation    = yaml_utils::getBool  (params, "withRotation",    false);
+    _withScale       = yaml_utils::getBool  (params, "withScale",       false);
+    _thresholdFactor = yaml_utils::getDouble(params, "thresholdFactor", 6.0);
 
-    IR_LOG_INFO("GmsFilter: withRotation=", withRotation_,
-                ", withScale=",             withScale_,
-                ", thresholdFactor=",       thresholdFactor_);
+    IR_LOG_INFO("GmsFilter: withRotation=", _withRotation,
+                ", withScale=",             _withScale,
+                ", thresholdFactor=",       _thresholdFactor);
 }
 
 bool GmsFilter::apply(RegistrationContext& ctx) {
@@ -49,9 +49,9 @@ bool GmsFilter::apply(RegistrationContext& ctx) {
         fd.second.keypoints,
         input,
         kept,
-        withRotation_,
-        withScale_,
-        thresholdFactor_);
+        _withRotation,
+        _withScale,
+        _thresholdFactor);
 
     IR_LOG_INFO("GMS kept ", kept.size(), " / ", input.size(), " matches");
     md.filtered = std::move(kept);
@@ -59,3 +59,4 @@ bool GmsFilter::apply(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

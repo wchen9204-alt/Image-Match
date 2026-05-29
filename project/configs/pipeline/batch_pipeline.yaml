@@ -1,0 +1,14 @@
+name: batch_pipeline
+
+pipeline: configs/pipeline/sift_pipeline.yaml
+
+dataset:
+  root: datasets
+  pattern_source: source
+  pattern_target: target
+  include: []
+
+output:
+  root: ../../outputs/batch/current
+  save_visuals: true
+  summary_csv: true

@@ -1,4 +1,4 @@
-#include "feature/orb_extractor.h"
+﻿#include "feature/orb_extractor.h"
 
 #include <opencv2/imgproc.hpp>
 
@@ -10,37 +10,37 @@ namespace ir {
 OrbExtractor::OrbExtractor(const YAML::Node& cfg) {
     const auto params = cfg["params"];
 
-    nfeatures_     = yaml_utils::getInt  (params, "nfeatures",     2000);
-    scaleFactor_   = yaml_utils::getFloat(params, "scaleFactor",   1.2f);
-    nlevels_       = yaml_utils::getInt  (params, "nlevels",       8);
-    edgeThreshold_ = yaml_utils::getInt  (params, "edgeThreshold", 31);
-    firstLevel_    = yaml_utils::getInt  (params, "firstLevel",    0);
+    _nfeatures     = yaml_utils::getInt  (params, "nfeatures",     2000);
+    _scaleFactor   = yaml_utils::getFloat(params, "scaleFactor",   1.2f);
+    _nlevels       = yaml_utils::getInt  (params, "nlevels",       8);
+    _edgeThreshold = yaml_utils::getInt  (params, "edgeThreshold", 31);
+    _firstLevel    = yaml_utils::getInt  (params, "firstLevel",    0);
     WTA_K_         = yaml_utils::getInt  (params, "WTA_K",         2);
-    scoreType_     = yaml_utils::getInt  (params, "scoreType",
+    _scoreType     = yaml_utils::getInt  (params, "scoreType",
                                           static_cast<int>(cv::ORB::HARRIS_SCORE));
-    patchSize_     = yaml_utils::getInt  (params, "patchSize",     31);
-    fastThreshold_ = yaml_utils::getInt  (params, "fastThreshold", 20);
+    _patchSize     = yaml_utils::getInt  (params, "patchSize",     31);
+    _fastThreshold = yaml_utils::getInt  (params, "fastThreshold", 20);
 
-    impl_ = cv::ORB::create(
-        nfeatures_,
-        scaleFactor_,
-        nlevels_,
-        edgeThreshold_,
-        firstLevel_,
+    _impl = cv::ORB::create(
+        _nfeatures,
+        _scaleFactor,
+        _nlevels,
+        _edgeThreshold,
+        _firstLevel,
         WTA_K_,
-        static_cast<cv::ORB::ScoreType>(scoreType_),
-        patchSize_,
-        fastThreshold_);
+        static_cast<cv::ORB::ScoreType>(_scoreType),
+        _patchSize,
+        _fastThreshold);
 
-    IR_LOG_INFO("ORB created: nfeatures=", nfeatures_,
-                ", scaleFactor=",          scaleFactor_,
-                ", nlevels=",              nlevels_,
+    IR_LOG_INFO("ORB created: nfeatures=", _nfeatures,
+                ", scaleFactor=",          _scaleFactor,
+                ", nlevels=",              _nlevels,
                 ", WTA_K=",                WTA_K_,
-                ", patchSize=",            patchSize_);
+                ", patchSize=",            _patchSize);
 }
 
 bool OrbExtractor::extract(RegistrationContext& ctx) {
-    if (!impl_) {
+    if (!_impl) {
         IR_LOG_ERROR("ORB extractor not constructed.");
         return false;
     }
@@ -60,9 +60,9 @@ bool OrbExtractor::extract(RegistrationContext& ctx) {
         cv::cvtColor(fd.second.image, fd.second.gray, cv::COLOR_BGR2GRAY);
     }
 
-    impl_->detectAndCompute(fd.first.gray,  cv::noArray(),
+    _impl->detectAndCompute(fd.first.gray,  cv::noArray(),
                             fd.first.keypoints,  fd.first.descriptors);
-    impl_->detectAndCompute(fd.second.gray, cv::noArray(),
+    _impl->detectAndCompute(fd.second.gray, cv::noArray(),
                             fd.second.keypoints, fd.second.descriptors);
 
     IR_LOG_INFO("ORB extracted ", fd.first.keypoints.size(),
@@ -71,3 +71,4 @@ bool OrbExtractor::extract(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

@@ -1,4 +1,4 @@
-#include "feature/kaze_extractor.h"
+﻿#include "feature/kaze_extractor.h"
 
 #include <opencv2/imgproc.hpp>
 
@@ -10,32 +10,32 @@ namespace ir {
 KazeExtractor::KazeExtractor(const YAML::Node& cfg) {
     const auto params = cfg["params"];
 
-    extended_      = yaml_utils::getBool (params, "extended",      false);
-    upright_       = yaml_utils::getBool (params, "upright",       false);
-    threshold_     = yaml_utils::getFloat(params, "threshold",     0.001f);
-    nOctaves_      = yaml_utils::getInt  (params, "nOctaves",      4);
-    nOctaveLayers_ = yaml_utils::getInt  (params, "nOctaveLayers", 4);
-    diffusivity_   = yaml_utils::getInt  (params, "diffusivity",
+    _extended      = yaml_utils::getBool (params, "extended",      false);
+    _upright       = yaml_utils::getBool (params, "upright",       false);
+    _threshold     = yaml_utils::getFloat(params, "threshold",     0.001f);
+    _nOctaves      = yaml_utils::getInt  (params, "nOctaves",      4);
+    _nOctaveLayers = yaml_utils::getInt  (params, "nOctaveLayers", 4);
+    _diffusivity   = yaml_utils::getInt  (params, "diffusivity",
                                           static_cast<int>(cv::KAZE::DIFF_PM_G2));
 
-    impl_ = cv::KAZE::create(
-        extended_,
-        upright_,
-        threshold_,
-        nOctaves_,
-        nOctaveLayers_,
-        static_cast<cv::KAZE::DiffusivityType>(diffusivity_));
+    _impl = cv::KAZE::create(
+        _extended,
+        _upright,
+        _threshold,
+        _nOctaves,
+        _nOctaveLayers,
+        static_cast<cv::KAZE::DiffusivityType>(_diffusivity));
 
-    IR_LOG_INFO("KAZE created: extended=", extended_,
-                ", upright=",              upright_,
-                ", threshold=",            threshold_,
-                ", nOctaves=",             nOctaves_,
-                ", nOctaveLayers=",        nOctaveLayers_,
-                ", diffusivity=",          diffusivity_);
+    IR_LOG_INFO("KAZE created: extended=", _extended,
+                ", upright=",              _upright,
+                ", threshold=",            _threshold,
+                ", nOctaves=",             _nOctaves,
+                ", nOctaveLayers=",        _nOctaveLayers,
+                ", diffusivity=",          _diffusivity);
 }
 
 bool KazeExtractor::extract(RegistrationContext& ctx) {
-    if (!impl_) {
+    if (!_impl) {
         IR_LOG_ERROR("KAZE extractor not constructed.");
         return false;
     }
@@ -55,9 +55,9 @@ bool KazeExtractor::extract(RegistrationContext& ctx) {
         cv::cvtColor(fd.second.image, fd.second.gray, cv::COLOR_BGR2GRAY);
     }
 
-    impl_->detectAndCompute(fd.first.gray,  cv::noArray(),
+    _impl->detectAndCompute(fd.first.gray,  cv::noArray(),
                             fd.first.keypoints,  fd.first.descriptors);
-    impl_->detectAndCompute(fd.second.gray, cv::noArray(),
+    _impl->detectAndCompute(fd.second.gray, cv::noArray(),
                             fd.second.keypoints, fd.second.descriptors);
 
     IR_LOG_INFO("KAZE extracted ", fd.first.keypoints.size(),
@@ -66,3 +66,4 @@ bool KazeExtractor::extract(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

@@ -1,7 +1,9 @@
 # ---------------------------------------------------------------------------
-# 配准流程配置：BRISK + BF (Hamming) + RatioTest + CrossCheck + Homography
+# BRISK 配准流程配置
+# 当前文件用于组织一条完整的特征配准流程，可按需手动调整
+# feature / matcher / filters / geometry 等子配置
 # ---------------------------------------------------------------------------
-name: brisk_bf_homography
+name: brisk_pipeline
 
 feature:  configs/feature/brisk.yaml
 matcher:  configs/matcher/bf.yaml

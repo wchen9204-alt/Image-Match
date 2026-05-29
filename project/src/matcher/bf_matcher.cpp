@@ -1,4 +1,4 @@
-#include "matcher/bf_matcher.h"
+﻿#include "matcher/bf_matcher.h"
 
 #include <opencv2/features2d.hpp>
 
@@ -13,13 +13,13 @@ BfMatcher::BfMatcher(const YAML::Node& cfg) {
     const std::string norm_str =
         yaml_utils::getString(params, "norm_type", "AUTO");
     norm_type_  = normTypeFromString(norm_str);
-    crossCheck_ = yaml_utils::getBool(params, "crossCheck", false);
+    _crossCheck = yaml_utils::getBool(params, "crossCheck", false);
     knn_k_      = yaml_utils::getInt (params, "knn_k",      2);
     if (knn_k_ < 1) knn_k_ = 1;
 
     IR_LOG_INFO("BFMatcher created: norm=", norm_str,
                 " (resolved to ", toString(norm_type_), ")",
-                ", crossCheck=", crossCheck_,
+                ", crossCheck=", _crossCheck,
                 ", knn_k=",      knn_k_);
 }
 
@@ -53,9 +53,9 @@ bool BfMatcher::match(RegistrationContext& ctx) {
                 fd.second.descriptors.rows, " x ",
                 fd.second.descriptors.cols);
 
-    cv::Ptr<cv::BFMatcher> matcher = cv::BFMatcher::create(cv_norm, crossCheck_);
+    cv::Ptr<cv::BFMatcher> matcher = cv::BFMatcher::create(cv_norm, _crossCheck);
 
-    if (crossCheck_) {
+    if (_crossCheck) {
         // OpenCV 内置 crossCheck 不能与 knnMatch 同时使用。
         std::vector<cv::DMatch> single;
         matcher->match(fd.first.descriptors, fd.second.descriptors, single);
@@ -76,3 +76,4 @@ bool BfMatcher::match(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

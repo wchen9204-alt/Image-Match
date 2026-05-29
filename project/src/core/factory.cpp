@@ -18,9 +18,9 @@
 #include "filter/ratio_test.h"
 
 #include "geometry/affine_estimator.h"
-#include "geometry/essential_estimator.h"
-#include "geometry/fundamental_estimator.h"
 #include "geometry/homography_estimator.h"
+#include "geometry/rigid_estimator.h"
+#include "geometry/similarity_estimator.h"
 
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
@@ -85,8 +85,8 @@ Factory::createGeometryEstimator(const YAML::Node& cfg) {
     switch (gt) {
         case GeometryType::HOMOGRAPHY:  return std::make_shared<HomographyEstimator>(cfg);
         case GeometryType::AFFINE:      return std::make_shared<AffineEstimator>(cfg);
-        case GeometryType::FUNDAMENTAL: return std::make_shared<FundamentalEstimator>(cfg);
-        case GeometryType::ESSENTIAL:   return std::make_shared<EssentialEstimator>(cfg);
+        case GeometryType::RIGID:       return std::make_shared<RigidEstimator>(cfg);
+        case GeometryType::SIMILARITY:  return std::make_shared<SimilarityEstimator>(cfg);
         default:
             throw std::runtime_error("Factory: unknown geometry estimator type: " + t);
     }
