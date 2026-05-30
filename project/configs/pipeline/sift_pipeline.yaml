@@ -10,14 +10,13 @@ feature:  configs/feature/sift.yaml
 matcher:  configs/matcher/flann.yaml
 
 filters:
-  - configs/filter/ratio_test.yaml
-  - configs/filter/cross_check.yaml
+ - configs/filter/ratio_test.yaml
 
-geometry: configs/geometry/rigid.yaml
+geometry: configs/geometry/similarity.yaml
 
 io:
-  image1: datasets/test10/source.png
-  image2: datasets/test10/target.png
+  image1: datasets/test8/source.tiff
+  image2: datasets/test8/target.tiff
   output_dir: outputs
 
 visualization:

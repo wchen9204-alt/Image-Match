@@ -42,20 +42,18 @@ private:
         DatasetLoader::Options dataset;
         std::filesystem::path output_root;
         bool save_visuals = true;
-        bool summary_csv  = true;
+        bool summary_csv = true;
     };
 
     static int runSingle(const Args& args);
     static int runBatch(const std::filesystem::path& batch_yaml);
     static bool isBatchYaml(const YAML::Node& node);
     static BatchConfig loadBatchConfig(const std::filesystem::path& yaml_path);
-    static std::filesystem::path resolveBatchOutputRoot(
-        const BatchConfig& batch,
-        const PipelineConfig& pipeline_cfg);
-    static void writeSummaryCsv(
-        const std::filesystem::path& csv_path,
-        const std::vector<std::string>& sample_names,
-        const std::vector<RegistrationResult>& results);
+    static std::filesystem::path resolveBatchOutputRoot(const BatchConfig& batch,
+                                                        const PipelineConfig& pipeline_cfg);
+    static void writeSummaryCsv(const std::filesystem::path& csv_path,
+                                const std::vector<std::string>& sample_names,
+                                const std::vector<RegistrationResult>& results);
 };
 
 } // namespace ir

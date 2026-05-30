@@ -1,21 +1,24 @@
 # ---------------------------------------------------------------------------
 # BF 匹配器配置
-# 参数对应 cv::BFMatcher
-# 注释中会区分 OpenCV 原始默认值和本项目默认值
+# 通过 `type` 选择暴力匹配器，通过 `method` 选择具体 OpenCV 接口：
+#   - match
+#   - knn
+#   - radius
 # ---------------------------------------------------------------------------
 type: BF
 
 params:
-  # 距离类型，可选 L2 / L1 / HAMMING / HAMMING2 / AUTO
-  # OpenCV 原始默认值: L2
-  # 本项目默认值: AUTO（自动跟随当前特征描述子类型）
+  # MATCH / KNN / RADIUS
+  method: knn
+
+  # L2 / L1 / HAMMING / HAMMING2 / AUTO
   norm_type: AUTO
 
-  # 是否启用 OpenCV 内置 crossCheck
-  # OpenCV 原始默认值: false
-  # 本项目默认值: false
-  crossCheck: false
-
-  # knnMatch 的 k 值
-  # OpenCV 无固定默认值，这是本项目默认值: 2
+  # 当 method: knn 时使用，默认2
   knn_k: 2
+
+  # 当 method: radius 时使用，默认100.0
+  radius: 100.0
+
+  # 仅在 method: match 时生效
+  crossCheck: true

@@ -26,7 +26,8 @@ bool RatioTestFilter::apply(RegistrationContext& ctx) {
     for (const auto& neighbours : md.raw_knn) {
         if (neighbours.size() < 2) {
             // k<2 时无法做比值检验，保留当前单个匹配。
-            if (!neighbours.empty()) kept.push_back(neighbours.front());
+            if (!neighbours.empty())
+                kept.push_back(neighbours.front());
             continue;
         }
         const cv::DMatch& m1 = neighbours[0];
@@ -37,10 +38,8 @@ bool RatioTestFilter::apply(RegistrationContext& ctx) {
     }
 
     md.filtered = std::move(kept);
-    IR_LOG_INFO("RatioTestFilter kept ", md.filtered.size(),
-                " / ", md.raw_knn.size(), " matches");
+    IR_LOG_INFO("RatioTestFilter kept ", md.filtered.size(), " / ", md.raw_knn.size(), " matches");
     return true;
 }
 
 } // namespace ir
-

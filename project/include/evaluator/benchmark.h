@@ -21,14 +21,14 @@ class Benchmark {
 public:
     /// 基准测试配置。
     struct Config {
-        DatasetLoader::Options             dataset;
+        DatasetLoader::Options dataset;
         std::vector<std::filesystem::path> pipeline_yamls;
-        std::filesystem::path              metrics_yaml;
-        std::filesystem::path              output_root;
-        std::filesystem::path              csv_dir;
-        std::filesystem::path              reports_dir;
-        std::filesystem::path              benchmark_dir;
-        bool                               save_visuals = false;
+        std::filesystem::path metrics_yaml;
+        std::filesystem::path output_root;
+        std::filesystem::path csv_dir;
+        std::filesystem::path reports_dir;
+        std::filesystem::path benchmark_dir;
+        bool save_visuals = false;
     };
 
     Benchmark() = default;

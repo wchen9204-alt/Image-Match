@@ -9,7 +9,7 @@ namespace ir {
 /// 一个数据样本，通常包含源图、目标图以及可选真值单应矩阵。
 struct Sample {
     /// 样本名，用于结果文件命名和日志输出。
-    std::string           name;
+    std::string name;
     /// 源图路径。
     std::filesystem::path source_path;
     /// 目标图路径。

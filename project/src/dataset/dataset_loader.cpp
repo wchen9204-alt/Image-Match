@@ -27,21 +27,25 @@ bool DatasetLoader::resolveImage(const fs::path& dir,
 
 bool DatasetLoader::tryLoadGroundTruth(const fs::path& dir, cv::Mat& H_gt) const {
     const fs::path p = dir / "H_gt.txt";
-    if (!file_utils::fileExists(p)) return false;
+    if (!file_utils::fileExists(p))
+        return false;
 
     std::ifstream f(p);
-    if (!f) return false;
+    if (!f)
+        return false;
 
     std::vector<double> v;
     v.reserve(9);
     double x;
-    while (f >> x) v.push_back(x);
+    while (f >> x)
+        v.push_back(x);
     if (v.size() != 9) {
         IR_LOG_WARN("H_gt.txt at ", p.string(), " expected 9 values, got ", v.size());
         return false;
     }
     cv::Mat H(3, 3, CV_64F);
-    for (int i = 0; i < 9; ++i) H.at<double>(i / 3, i % 3) = v[i];
+    for (int i = 0; i < 9; ++i)
+        H.at<double>(i / 3, i % 3) = v[i];
     H_gt = H;
     return true;
 }
@@ -62,8 +66,10 @@ std::vector<Sample> DatasetLoader::load() const {
     if (!_opt.include.empty()) {
         for (const auto& name : _opt.include) {
             const fs::path d = _opt.root / name;
-            if (fs::is_directory(d)) dirs.push_back(d);
-            else IR_LOG_WARN("DatasetLoader: include entry not a directory: ", d.string());
+            if (fs::is_directory(d))
+                dirs.push_back(d);
+            else
+                IR_LOG_WARN("DatasetLoader: include entry not a directory: ", d.string());
         }
     } else {
         dirs = file_utils::listSubdirectories(_opt.root);
@@ -84,12 +90,11 @@ std::vector<Sample> DatasetLoader::load() const {
         out.push_back(std::move(s));
     }
 
-    std::sort(out.begin(), out.end(),
-              [](const Sample& a, const Sample& b) { return a.name < b.name; });
+    std::sort(
+        out.begin(), out.end(), [](const Sample& a, const Sample& b) { return a.name < b.name; });
 
     IR_LOG_INFO("DatasetLoader: loaded ", out.size(), " samples from ", _opt.root.string());
     return out;
 }
 
 } // namespace ir
-

@@ -30,15 +30,16 @@ cv::Mat DrawMatches::render(const RegistrationContext& ctx, const Options& opt) 
     }
 
     cv::Mat canvas;
-    cv::drawMatches(
-        fd.first.image,  fd.first.keypoints,
-        fd.second.image, fd.second.keypoints,
-        draw,
-        canvas,
-        opt.match_color,
-        opt.single_point,
-        std::vector<char>(),
-        cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+    cv::drawMatches(fd.first.image,
+                    fd.first.keypoints,
+                    fd.second.image,
+                    fd.second.keypoints,
+                    draw,
+                    canvas,
+                    opt.match_color,
+                    opt.single_point,
+                    std::vector<char>(),
+                    cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
 
     return canvas;
 }

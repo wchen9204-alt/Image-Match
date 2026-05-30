@@ -19,7 +19,7 @@ struct TransformData {
 
     /// 清空变换结果。
     void clear() {
-        type  = TransformType::UNKNOWN;
+        type = TransformType::UNKNOWN;
         M.release();
         valid = false;
     }

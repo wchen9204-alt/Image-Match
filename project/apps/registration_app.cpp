@@ -31,36 +31,34 @@ void printSummary(const RegistrationContext& ctx) {
     std::cout << "\n================ Registration summary ================\n";
     std::cout << "  status        : " << (r.success ? "OK" : "FAILED") << "\n";
     std::cout << "  message       : " << r.message << "\n";
-    std::cout << "  keypoints     : " << r.num_keypoints_first << " / "
-                                       << r.num_keypoints_second << "\n";
+    std::cout << "  keypoints     : " << r.num_keypoints_first << " / " << r.num_keypoints_second
+              << "\n";
     std::cout << "  raw matches   : " << r.num_raw_matches << "\n";
     std::cout << "  filtered      : " << r.num_filtered_matches << "\n";
-    std::cout << "  inliers       : " << r.num_inliers
-                                       << " (" << std::fixed << std::setprecision(3)
-                                       << r.inlier_ratio << ")\n";
+    std::cout << "  inliers       : " << r.num_inliers << " (" << std::fixed << std::setprecision(3)
+              << r.inlier_ratio << ")\n";
     std::cout << "  -- timings --\n";
-    std::cout << "  load          : " << fmtMs(r.t_load_ms)     << "\n";
-    std::cout << "  extract       : " << fmtMs(r.t_extract_ms)  << "\n";
-    std::cout << "  match         : " << fmtMs(r.t_match_ms)    << "\n";
-    std::cout << "  filter        : " << fmtMs(r.t_filter_ms)   << "\n";
+    std::cout << "  load          : " << fmtMs(r.t_load_ms) << "\n";
+    std::cout << "  extract       : " << fmtMs(r.t_extract_ms) << "\n";
+    std::cout << "  match         : " << fmtMs(r.t_match_ms) << "\n";
+    std::cout << "  filter        : " << fmtMs(r.t_filter_ms) << "\n";
     std::cout << "  geometry      : " << fmtMs(r.t_geometry_ms) << "\n";
-    std::cout << "  warp          : " << fmtMs(r.t_warp_ms)     << "\n";
-    std::cout << "  TOTAL         : " << fmtMs(r.t_total_ms)    << "\n";
+    std::cout << "  warp          : " << fmtMs(r.t_warp_ms) << "\n";
+    std::cout << "  TOTAL         : " << fmtMs(r.t_total_ms) << "\n";
     std::cout << "======================================================\n";
 }
 
 } // namespace
 
 void RegistrationApp::printUsage(const std::string& exe) {
-    std::cout
-        << "Usage:\n"
-        << "  " << exe << " <pipeline.yaml> [image1] [image2] [output_dir]\n\n"
-        << "  " << exe << " <batch.yaml>\n\n"
-        << "Examples:\n"
-        << "  " << exe << " configs/pipeline/sift_pipeline.yaml\n"
-        << "  " << exe << " configs/pipeline/batch_pipeline.yaml\n"
-        << "  " << exe << " configs/pipeline/orb_pipeline.yaml a.jpg b.jpg outputs\n"
-        << std::endl;
+    std::cout << "Usage:\n"
+              << "  " << exe << " <pipeline.yaml> [image1] [image2] [output_dir]\n\n"
+              << "  " << exe << " <batch.yaml>\n\n"
+              << "Examples:\n"
+              << "  " << exe << " configs/pipeline/sift_pipeline.yaml\n"
+              << "  " << exe << " configs/pipeline/batch_pipeline.yaml\n"
+              << "  " << exe << " configs/pipeline/orb_pipeline.yaml a.jpg b.jpg outputs\n"
+              << std::endl;
 }
 
 int RegistrationApp::runSingle(const Args& args) {
@@ -70,8 +68,7 @@ int RegistrationApp::runSingle(const Args& args) {
         return 2;
     }
     if (!fs::exists(args.pipeline_yaml)) {
-        std::cerr << "Pipeline YAML not found: "
-                  << args.pipeline_yaml.string() << "\n";
+        std::cerr << "Pipeline YAML not found: " << args.pipeline_yaml.string() << "\n";
         return 2;
     }
 
@@ -85,9 +82,12 @@ int RegistrationApp::runSingle(const Args& args) {
     }
 
     // 3. 如果命令行传入图片或输出目录，则覆盖 YAML 中的默认配置。
-    if (!args.image1.empty()) cfg.image1_path = fs::weakly_canonical(args.image1);
-    if (!args.image2.empty()) cfg.image2_path = fs::weakly_canonical(args.image2);
-    if (!args.output_dir.empty()) cfg.output_dir = fs::weakly_canonical(args.output_dir);
+    if (!args.image1.empty())
+        cfg.image1_path = fs::weakly_canonical(args.image1);
+    if (!args.image2.empty())
+        cfg.image2_path = fs::weakly_canonical(args.image2);
+    if (!args.output_dir.empty())
+        cfg.output_dir = fs::weakly_canonical(args.output_dir);
 
     // 4. 检查必须的输入图片路径。
     if (cfg.image1_path.empty() || cfg.image2_path.empty()) {
@@ -139,47 +139,39 @@ RegistrationApp::loadBatchConfig(const std::filesystem::path& yaml_path) {
     cfg.name = yaml_utils::getString(node, "name", yaml_path.stem().string());
 
     const auto batch_dir = yaml_path.parent_path();
-    cfg.pipeline_yaml = Config::resolvePath(
-        batch_dir, yaml_utils::getString(node, "pipeline"));
+    cfg.pipeline_yaml = Config::resolvePath(batch_dir, yaml_utils::getString(node, "pipeline"));
 
     const YAML::Node dataset = node["dataset"];
-    cfg.dataset.root = Config::resolvePath(
-        batch_dir, yaml_utils::getString(dataset, "root"));
-    cfg.dataset.pattern_source =
-        yaml_utils::getString(dataset, "pattern_source", "source");
-    cfg.dataset.pattern_target =
-        yaml_utils::getString(dataset, "pattern_target", "target");
-    cfg.dataset.include =
-        yaml_utils::getVec<std::string>(dataset, "include", {});
+    cfg.dataset.root = Config::resolvePath(batch_dir, yaml_utils::getString(dataset, "root"));
+    cfg.dataset.pattern_source = yaml_utils::getString(dataset, "pattern_source", "source");
+    cfg.dataset.pattern_target = yaml_utils::getString(dataset, "pattern_target", "target");
+    cfg.dataset.include = yaml_utils::getVec<std::string>(dataset, "include", {});
 
     const YAML::Node output = node["output"];
     cfg.output_root = Config::resolvePath(
         batch_dir, yaml_utils::getString(output, "root", "../../outputs/batch"));
     cfg.save_visuals = yaml_utils::getBool(output, "save_visuals", true);
-    cfg.summary_csv  = yaml_utils::getBool(output, "summary_csv", true);
+    cfg.summary_csv = yaml_utils::getBool(output, "summary_csv", true);
     return cfg;
 }
 
-std::filesystem::path RegistrationApp::resolveBatchOutputRoot(
-    const BatchConfig& batch,
-    const PipelineConfig& pipeline_cfg) {
-    if (batch.output_root.empty()) return {};
+std::filesystem::path RegistrationApp::resolveBatchOutputRoot(const BatchConfig& batch,
+                                                              const PipelineConfig& pipeline_cfg) {
+    if (batch.output_root.empty())
+        return {};
 
     std::filesystem::path out = batch.output_root;
     if (out.filename() == "current") {
         const std::string pipeline_name =
-            !pipeline_cfg.name.empty()
-                ? pipeline_cfg.name
-                : batch.pipeline_yaml.stem().string();
+            !pipeline_cfg.name.empty() ? pipeline_cfg.name : batch.pipeline_yaml.stem().string();
         out = out.parent_path() / pipeline_name;
     }
     return out;
 }
 
-void RegistrationApp::writeSummaryCsv(
-    const std::filesystem::path& csv_path,
-    const std::vector<std::string>& sample_names,
-    const std::vector<RegistrationResult>& results) {
+void RegistrationApp::writeSummaryCsv(const std::filesystem::path& csv_path,
+                                      const std::vector<std::string>& sample_names,
+                                      const std::vector<RegistrationResult>& results) {
     std::ostringstream oss;
     oss << "sample_name,success,message,"
         << "num_keypoints_first,num_keypoints_second,"
@@ -188,16 +180,10 @@ void RegistrationApp::writeSummaryCsv(
 
     for (size_t i = 0; i < sample_names.size() && i < results.size(); ++i) {
         const auto& r = results[i];
-        oss << file_utils::csvEscape(sample_names[i]) << ","
-            << (r.success ? "1" : "0") << ","
-            << file_utils::csvEscape(r.message) << ","
-            << r.num_keypoints_first << ","
-            << r.num_keypoints_second << ","
-            << r.num_raw_matches << ","
-            << r.num_filtered_matches << ","
-            << r.num_inliers << ","
-            << r.inlier_ratio << ","
-            << r.t_total_ms << "\n";
+        oss << file_utils::csvEscape(sample_names[i]) << "," << (r.success ? "1" : "0") << ","
+            << file_utils::csvEscape(r.message) << "," << r.num_keypoints_first << ","
+            << r.num_keypoints_second << "," << r.num_raw_matches << "," << r.num_filtered_matches
+            << "," << r.num_inliers << "," << r.inlier_ratio << "," << r.t_total_ms << "\n";
     }
 
     file_utils::writeWholeFile(csv_path, oss.str());
@@ -206,14 +192,12 @@ void RegistrationApp::writeSummaryCsv(
 int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
     const BatchConfig batch = loadBatchConfig(batch_yaml);
     const PipelineConfig base_cfg = Config::loadPipeline(batch.pipeline_yaml);
-    const std::filesystem::path output_root =
-        resolveBatchOutputRoot(batch, base_cfg);
+    const std::filesystem::path output_root = resolveBatchOutputRoot(batch, base_cfg);
 
     DatasetLoader loader(batch.dataset);
     const std::vector<Sample> samples = loader.load();
     if (samples.empty()) {
-        std::cerr << "No dataset samples found for batch config: "
-                  << batch_yaml.string() << "\n";
+        std::cerr << "No dataset samples found for batch config: " << batch_yaml.string() << "\n";
         return 7;
     }
 
@@ -221,8 +205,10 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
     std::filesystem::create_directories(output_root, ec);
 
     std::vector<std::string> sample_names;
+    std::vector<std::string> succeeded_names;
     std::vector<RegistrationResult> results;
     sample_names.reserve(samples.size());
+    succeeded_names.reserve(samples.size());
     results.reserve(samples.size());
 
     int ok_count = 0;
@@ -230,7 +216,7 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
         PipelineConfig cfg = base_cfg;
         cfg.image1_path = sample.source_path;
         cfg.image2_path = sample.target_path;
-        cfg.output_dir  = output_root / sample.name;
+        cfg.output_dir = output_root / sample.name;
         if (!batch.save_visuals) {
             cfg.draw_matches = false;
             cfg.warp = false;
@@ -254,7 +240,10 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
         printSummary(ctx);
         sample_names.push_back(sample.name);
         results.push_back(ctx.result);
-        if (ok) ++ok_count;
+        if (ok) {
+            ++ok_count;
+            succeeded_names.push_back(sample.name);
+        }
     }
 
     if (batch.summary_csv) {
@@ -265,6 +254,16 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
 
     std::cout << "\nBatch summary: " << ok_count << " / " << samples.size()
               << " samples succeeded.\n";
+    if (!succeeded_names.empty()) {
+        std::cout << "Successful samples: ";
+        for (size_t i = 0; i < succeeded_names.size(); ++i) {
+            if (i > 0) {
+                std::cout << ", ";
+            }
+            std::cout << succeeded_names[i];
+        }
+        std::cout << "\n";
+    }
     return ok_count == static_cast<int>(samples.size()) ? 0 : 1;
 }
 
@@ -299,9 +298,12 @@ int RegistrationApp::run(int argc, char** argv) {
 
     Args args;
     args.pipeline_yaml = argv[1];
-    if (argc >= 3) args.image1     = argv[2];
-    if (argc >= 4) args.image2     = argv[3];
-    if (argc >= 5) args.output_dir = argv[4];
+    if (argc >= 3)
+        args.image1 = argv[2];
+    if (argc >= 4)
+        args.image2 = argv[3];
+    if (argc >= 5)
+        args.output_dir = argv[4];
 
     return run(args);
 }

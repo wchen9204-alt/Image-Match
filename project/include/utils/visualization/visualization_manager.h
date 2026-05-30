@@ -17,11 +17,11 @@ public:
     struct Options {
         bool draw_matches = true;
         bool draw_inliers = true;
-        bool draw_overlay  = true;
-        bool draw_diff     = true;
-        bool save_warped   = true;
-        int  max_matches   = 100;
-        int  max_inliers   = 200;
+        bool draw_overlay = true;
+        bool draw_diff = true;
+        bool save_warped = true;
+        int max_matches = 100;
+        int max_inliers = 200;
     };
 
     /// 保存默认可视化输出。

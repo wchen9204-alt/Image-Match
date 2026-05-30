@@ -20,19 +20,19 @@ void extractPoints(const RegistrationContext& ctx,
     pts1.reserve(md.filtered.size());
     pts2.reserve(md.filtered.size());
     for (const auto& m : md.filtered) {
-        pts1.push_back(fd.first.keypoints [m.queryIdx].pt);
+        pts1.push_back(fd.first.keypoints[m.queryIdx].pt);
         pts2.push_back(fd.second.keypoints[m.trainIdx].pt);
     }
 }
 
-void promoteInliers(RegistrationContext& ctx,
-                    const std::vector<unsigned char>& mask) {
+void promoteInliers(RegistrationContext& ctx, const std::vector<unsigned char>& mask) {
     auto& md = ctx.match_data;
     md.inlier_mask = mask;
     md.inliers.clear();
     md.inliers.reserve(mask.size());
     for (size_t i = 0; i < md.filtered.size() && i < mask.size(); ++i) {
-        if (mask[i]) md.inliers.push_back(md.filtered[i]);
+        if (mask[i])
+            md.inliers.push_back(md.filtered[i]);
     }
 }
 
@@ -41,22 +41,25 @@ void promoteInliers(RegistrationContext& ctx,
 HomographyEstimator::HomographyEstimator(const YAML::Node& cfg) {
     const auto params = cfg["params"];
 
-    const std::string method_str =
-        yaml_utils::getString(params, "method", "RANSAC");
+    const std::string method_str = yaml_utils::getString(params, "method", "RANSAC");
     int m = robustMethodFromString(method_str);
     _method = (m < 0) ? cv::RANSAC : m;
 
-    _ransacReprojThreshold =
-        yaml_utils::getDouble(params, "ransacReprojThreshold", 3.0);
-    _maxIters   = yaml_utils::getInt   (params, "maxIters",   2000);
+    _ransacReprojThreshold = yaml_utils::getDouble(params, "ransacReprojThreshold", 3.0);
+    _maxIters = yaml_utils::getInt(params, "maxIters", 2000);
     _confidence = yaml_utils::getDouble(params, "confidence", 0.995);
-    _minInliers = yaml_utils::getInt   (params, "minInliers", 8);
+    _minInliers = yaml_utils::getInt(params, "minInliers", 8);
 
-    IR_LOG_INFO("HomographyEstimator: method=", method_str,
-                ", thr=",        _ransacReprojThreshold,
-                ", maxIters=",   _maxIters,
-                ", confidence=", _confidence,
-                ", minInliers=", _minInliers);
+    IR_LOG_INFO("HomographyEstimator: method=",
+                method_str,
+                ", thr=",
+                _ransacReprojThreshold,
+                ", maxIters=",
+                _maxIters,
+                ", confidence=",
+                _confidence,
+                ", minInliers=",
+                _minInliers);
 }
 
 bool HomographyEstimator::estimate(RegistrationContext& ctx) {
@@ -66,10 +69,8 @@ bool HomographyEstimator::estimate(RegistrationContext& ctx) {
     gd.type = GeometryType::HOMOGRAPHY;
 
     if (md.filtered.size() < 4) {
-        gd.message = "need at least 4 matches, got " +
-                     std::to_string(md.filtered.size());
-        IR_LOG_ERROR("HomographyEstimator: need at least 4 matches, got ",
-                     md.filtered.size());
+        gd.message = "need at least 4 matches, got " + std::to_string(md.filtered.size());
+        IR_LOG_ERROR("HomographyEstimator: need at least 4 matches, got ", md.filtered.size());
         return false;
     }
 
@@ -77,11 +78,8 @@ bool HomographyEstimator::estimate(RegistrationContext& ctx) {
     extractPoints(ctx, pts1, pts2);
 
     std::vector<unsigned char> mask;
-    cv::Mat H = cv::findHomography(pts1, pts2, _method,
-                                   _ransacReprojThreshold,
-                                   mask,
-                                   _maxIters,
-                                   _confidence);
+    cv::Mat H = cv::findHomography(
+        pts1, pts2, _method, _ransacReprojThreshold, mask, _maxIters, _confidence);
 
     if (H.empty()) {
         gd.message = "findHomography returned an empty matrix";
@@ -92,23 +90,24 @@ bool HomographyEstimator::estimate(RegistrationContext& ctx) {
     promoteInliers(ctx, mask);
     const int inliers = static_cast<int>(md.inliers.size());
 
-    gd.H            = H;
-    gd.num_inliers  = inliers;
-    gd.inlier_ratio = md.filtered.empty()
-                          ? 0.0
-                          : static_cast<double>(inliers) / md.filtered.size();
-    gd.valid        = inliers >= _minInliers;
+    gd.H = H;
+    gd.num_inliers = inliers;
+    gd.inlier_ratio = md.filtered.empty() ? 0.0 : static_cast<double>(inliers) / md.filtered.size();
+    gd.valid = inliers >= _minInliers;
     if (!gd.valid) {
         gd.message = "estimated homography with " + std::to_string(inliers) +
-                     " inliers, below minInliers=" +
-                     std::to_string(_minInliers);
+                     " inliers, below minInliers=" + std::to_string(_minInliers);
         IR_LOG_WARN("HomographyEstimator rejected model: ", gd.message);
     }
 
-    IR_LOG_INFO("Homography inliers=", inliers, " / ", md.filtered.size(),
-                " (ratio=", gd.inlier_ratio, ")");
+    IR_LOG_INFO("Homography inliers=",
+                inliers,
+                " / ",
+                md.filtered.size(),
+                " (ratio=",
+                gd.inlier_ratio,
+                ")");
     return gd.valid;
 }
 
 } // namespace ir
-

@@ -10,24 +10,25 @@ namespace ir {
 SiftExtractor::SiftExtractor(const YAML::Node& cfg) {
     const auto params = cfg["params"];
 
-    _nfeatures         = yaml_utils::getInt   (params, "nfeatures",         0);
-    _nOctaveLayers     = yaml_utils::getInt   (params, "nOctaveLayers",     3);
+    _nfeatures = yaml_utils::getInt(params, "nfeatures", 0);
+    _nOctaveLayers = yaml_utils::getInt(params, "nOctaveLayers", 3);
     _contrastThreshold = yaml_utils::getDouble(params, "contrastThreshold", 0.04);
-    _edgeThreshold     = yaml_utils::getDouble(params, "edgeThreshold",     10.0);
-    _sigma             = yaml_utils::getDouble(params, "sigma",             1.6);
+    _edgeThreshold = yaml_utils::getDouble(params, "edgeThreshold", 10.0);
+    _sigma = yaml_utils::getDouble(params, "sigma", 1.6);
 
-    _impl = cv::SIFT::create(
-        _nfeatures,
-        _nOctaveLayers,
-        _contrastThreshold,
-        _edgeThreshold,
-        _sigma);
+    _impl =
+        cv::SIFT::create(_nfeatures, _nOctaveLayers, _contrastThreshold, _edgeThreshold, _sigma);
 
-    IR_LOG_INFO("SIFT created: nfeatures=", _nfeatures,
-                ", nOctaveLayers=",   _nOctaveLayers,
-                ", contrast=",        _contrastThreshold,
-                ", edge=",            _edgeThreshold,
-                ", sigma=",           _sigma);
+    IR_LOG_INFO("SIFT created: nfeatures=",
+                _nfeatures,
+                ", nOctaveLayers=",
+                _nOctaveLayers,
+                ", contrast=",
+                _contrastThreshold,
+                ", edge=",
+                _edgeThreshold,
+                ", sigma=",
+                _sigma);
 }
 
 bool SiftExtractor::extract(RegistrationContext& ctx) {
@@ -37,7 +38,7 @@ bool SiftExtractor::extract(RegistrationContext& ctx) {
     }
 
     auto& fd = ctx.feature_data;
-    fd.type      = FeatureType::SIFT;
+    fd.type = FeatureType::SIFT;
     fd.norm_type = NormType::L2;
 
     if (fd.first.image.empty() || fd.second.image.empty()) {
@@ -52,15 +53,16 @@ bool SiftExtractor::extract(RegistrationContext& ctx) {
         cv::cvtColor(fd.second.image, fd.second.gray, cv::COLOR_BGR2GRAY);
     }
 
-    _impl->detectAndCompute(fd.first.gray,  cv::noArray(),
-                            fd.first.keypoints,  fd.first.descriptors);
-    _impl->detectAndCompute(fd.second.gray, cv::noArray(),
-                            fd.second.keypoints, fd.second.descriptors);
+    _impl->detectAndCompute(fd.first.gray, cv::noArray(), fd.first.keypoints, fd.first.descriptors);
+    _impl->detectAndCompute(
+        fd.second.gray, cv::noArray(), fd.second.keypoints, fd.second.descriptors);
 
-    IR_LOG_INFO("SIFT extracted ", fd.first.keypoints.size(),
-                " / ",            fd.second.keypoints.size(), " keypoints");
+    IR_LOG_INFO("SIFT extracted ",
+                fd.first.keypoints.size(),
+                " / ",
+                fd.second.keypoints.size(),
+                " keypoints");
     return !fd.empty();
 }
 
 } // namespace ir
-

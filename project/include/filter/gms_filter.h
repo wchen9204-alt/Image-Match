@@ -18,10 +18,9 @@ public:
     bool apply(RegistrationContext& ctx) override;
 
 private:
-    bool   _withRotation   = false;
-    bool   _withScale      = false;
+    bool _withRotation = false;
+    bool _withScale = false;
     double _thresholdFactor = 6.0;
 };
 
 } // namespace ir
-

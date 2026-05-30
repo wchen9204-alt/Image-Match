@@ -19,7 +19,7 @@ public:
     MetricResult compute(const RegistrationContext& ctx, const Sample& sample) override;
 
 private:
-    double pixel_threshold_ = 3.0;
+    double _pixelThreshold = 3.0;
 };
 
 } // namespace ir

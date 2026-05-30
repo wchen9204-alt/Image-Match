@@ -19,9 +19,8 @@ public:
     MetricResult compute(const RegistrationContext& ctx, const Sample& sample) override;
 
 private:
-    int    _window = 11;
-    double _sigma  = 1.5;
+    int _window = 11;
+    double _sigma = 1.5;
 };
 
 } // namespace ir
-

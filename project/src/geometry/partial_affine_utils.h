@@ -26,21 +26,22 @@ inline void extractPoints(const RegistrationContext& ctx,
     }
 }
 
-inline void promoteInliers(RegistrationContext& ctx,
-                           const std::vector<unsigned char>& mask) {
+inline void promoteInliers(RegistrationContext& ctx, const std::vector<unsigned char>& mask) {
     auto& md = ctx.match_data;
     md.inlier_mask = mask;
     md.inliers.clear();
     md.inliers.reserve(mask.size());
     for (size_t i = 0; i < md.filtered.size() && i < mask.size(); ++i) {
-        if (mask[i]) md.inliers.push_back(md.filtered[i]);
+        if (mask[i])
+            md.inliers.push_back(md.filtered[i]);
     }
 }
 
 inline bool estimateRigid2D(const std::vector<cv::Point2f>& src,
                             const std::vector<cv::Point2f>& dst,
                             cv::Mat& A) {
-    if (src.size() != dst.size() || src.size() < 2) return false;
+    if (src.size() != dst.size() || src.size() < 2)
+        return false;
 
     cv::Point2d c1(0.0, 0.0);
     cv::Point2d c2(0.0, 0.0);
@@ -84,24 +85,20 @@ inline bool estimateRigid2D(const std::vector<cv::Point2f>& src,
     return true;
 }
 
-inline std::vector<unsigned char> maskByReprojection(
-    const std::vector<cv::Point2f>& src,
-    const std::vector<cv::Point2f>& dst,
-    const cv::Mat& A,
-    double threshold) {
+inline std::vector<unsigned char> maskByReprojection(const std::vector<cv::Point2f>& src,
+                                                     const std::vector<cv::Point2f>& dst,
+                                                     const cv::Mat& A,
+                                                     double threshold) {
     std::vector<unsigned char> mask(src.size(), 0);
-    if (src.size() != dst.size() || A.empty()) return mask;
+    if (src.size() != dst.size() || A.empty())
+        return mask;
 
     const double thr2 = threshold * threshold;
     for (size_t i = 0; i < src.size(); ++i) {
         const double x = src[i].x;
         const double y = src[i].y;
-        const double px = A.at<double>(0, 0) * x +
-                          A.at<double>(0, 1) * y +
-                          A.at<double>(0, 2);
-        const double py = A.at<double>(1, 0) * x +
-                          A.at<double>(1, 1) * y +
-                          A.at<double>(1, 2);
+        const double px = A.at<double>(0, 0) * x + A.at<double>(0, 1) * y + A.at<double>(0, 2);
+        const double py = A.at<double>(1, 0) * x + A.at<double>(1, 1) * y + A.at<double>(1, 2);
         const double dx = px - dst[i].x;
         const double dy = py - dst[i].y;
         if (dx * dx + dy * dy <= thr2) {
@@ -111,9 +108,7 @@ inline std::vector<unsigned char> maskByReprojection(
     return mask;
 }
 
-inline std::string rejectMessage(const std::string& kind,
-                                 int inliers,
-                                 int minInliers) {
+inline std::string rejectMessage(const std::string& kind, int inliers, int minInliers) {
     return "estimated " + kind + " with " + std::to_string(inliers) +
            " inliers, below minInliers=" + std::to_string(minInliers);
 }

@@ -30,15 +30,15 @@ struct PipelineConfig {
     std::filesystem::path output_dir;
 
     /// 可视化和输出控制选项。
-    bool draw_keypoints     = false;
-    bool draw_matches       = true;
-    bool draw_inliers_only  = true;
-    int  max_matches_drawn  = 100;
-    bool warp               = true;
+    bool draw_keypoints = false;
+    bool draw_matches = true;
+    bool draw_inliers_only = true;
+    int max_matches_drawn = 100;
+    bool warp = true;
     bool show_source_window = false;
     bool show_target_window = false;
     bool show_warped_window = false;
-    int  wait_key           = 0;
+    int wait_key = 0;
 };
 
 /// 配置文件加载与路径解析工具。
@@ -53,9 +53,8 @@ public:
     static PipelineConfig loadPipeline(const std::filesystem::path& path);
 
     /// 将相对路径解析成相对于 `base_dir` 的绝对或规范化路径。
-    static std::filesystem::path resolvePath(
-        const std::filesystem::path& base_dir,
-        const std::string& relative_or_absolute);
+    static std::filesystem::path resolvePath(const std::filesystem::path& base_dir,
+                                             const std::string& relative_or_absolute);
 };
 
 } // namespace ir

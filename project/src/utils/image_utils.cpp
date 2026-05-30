@@ -6,7 +6,8 @@ namespace ir {
 namespace image_utils {
 
 cv::Mat toGrayFloat(const cv::Mat& src) {
-    if (src.empty()) return {};
+    if (src.empty())
+        return {};
     cv::Mat gray;
     if (src.channels() == 1) {
         gray = src;
@@ -23,16 +24,18 @@ cv::Mat toGrayFloat(const cv::Mat& src) {
 }
 
 cv::Mat warpedValidMask(const cv::Mat& src, const cv::Mat& H, const cv::Size& dst_size) {
-    if (src.empty() || H.empty()) return {};
+    if (src.empty() || H.empty())
+        return {};
     cv::Mat ones(src.size(), CV_8UC1, cv::Scalar(255));
     cv::Mat warped_mask;
-    cv::warpPerspective(ones, warped_mask, H, dst_size,
-                        cv::INTER_NEAREST, cv::BORDER_CONSTANT, cv::Scalar(0));
+    cv::warpPerspective(
+        ones, warped_mask, H, dst_size, cv::INTER_NEAREST, cv::BORDER_CONSTANT, cv::Scalar(0));
     return warped_mask;
 }
 
 cv::Mat nonZeroMask(const cv::Mat& warped) {
-    if (warped.empty()) return {};
+    if (warped.empty())
+        return {};
     cv::Mat gray;
     if (warped.channels() == 1) {
         gray = warped;
@@ -41,12 +44,13 @@ cv::Mat nonZeroMask(const cv::Mat& warped) {
     }
     cv::Mat mask;
     cv::threshold(gray, mask, 0, 255, cv::THRESH_BINARY);
-    if (mask.type() != CV_8UC1) mask.convertTo(mask, CV_8UC1);
+    if (mask.type() != CV_8UC1)
+        mask.convertTo(mask, CV_8UC1);
     return mask;
 }
 
-void cropToMask(const cv::Mat& a, const cv::Mat& b, const cv::Mat& mask,
-                cv::Mat& a_out, cv::Mat& b_out) {
+void cropToMask(
+    const cv::Mat& a, const cv::Mat& b, const cv::Mat& mask, cv::Mat& a_out, cv::Mat& b_out) {
     if (a.empty() || b.empty() || mask.empty()) {
         a_out = a.clone();
         b_out = b.clone();

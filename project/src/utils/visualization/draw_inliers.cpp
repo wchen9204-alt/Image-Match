@@ -27,17 +27,19 @@ cv::Mat DrawInliers::render(const RegistrationContext& ctx, const Options& opt) 
         std::vector<cv::DMatch> outliers;
         outliers.reserve(md.filtered.size());
         for (size_t i = 0; i < md.filtered.size() && i < md.inlier_mask.size(); ++i) {
-            if (!md.inlier_mask[i]) outliers.push_back(md.filtered[i]);
+            if (!md.inlier_mask[i])
+                outliers.push_back(md.filtered[i]);
         }
-        cv::drawMatches(
-            fd.first.image,  fd.first.keypoints,
-            fd.second.image, fd.second.keypoints,
-            outliers,
-            canvas,
-            opt.non_inlier_color,
-            opt.non_inlier_color,
-            std::vector<char>(),
-            cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+        cv::drawMatches(fd.first.image,
+                        fd.first.keypoints,
+                        fd.second.image,
+                        fd.second.keypoints,
+                        outliers,
+                        canvas,
+                        opt.non_inlier_color,
+                        opt.non_inlier_color,
+                        std::vector<char>(),
+                        cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
     }
 
     std::vector<cv::DMatch> inliers = md.inliers;
@@ -46,22 +48,21 @@ cv::Mat DrawInliers::render(const RegistrationContext& ctx, const Options& opt) 
             inliers.begin(),
             inliers.begin() + opt.max_inliers,
             inliers.end(),
-            [](const cv::DMatch& a, const cv::DMatch& b) {
-                return a.distance < b.distance;
-            });
+            [](const cv::DMatch& a, const cv::DMatch& b) { return a.distance < b.distance; });
         inliers.resize(opt.max_inliers);
     }
 
     cv::Mat overlay;
-    cv::drawMatches(
-        fd.first.image,  fd.first.keypoints,
-        fd.second.image, fd.second.keypoints,
-        inliers,
-        overlay,
-        opt.inlier_color,
-        opt.inlier_color,
-        std::vector<char>(),
-        cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+    cv::drawMatches(fd.first.image,
+                    fd.first.keypoints,
+                    fd.second.image,
+                    fd.second.keypoints,
+                    inliers,
+                    overlay,
+                    opt.inlier_color,
+                    opt.inlier_color,
+                    std::vector<char>(),
+                    cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
 
     if (canvas.empty()) {
         canvas = overlay;

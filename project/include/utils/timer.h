@@ -7,7 +7,7 @@ namespace ir {
 /// 简单的单段计时器。
 class Timer {
 public:
-    using clock      = std::chrono::steady_clock;
+    using clock = std::chrono::steady_clock;
     using time_point = clock::time_point;
 
     /// 构造后立即开始计时。
@@ -34,13 +34,12 @@ public:
     /// 析构时写入累计耗时。
     ~ScopedTimer() { _out = _t.elapsedMs(); }
 
-    ScopedTimer(const ScopedTimer&)            = delete;
+    ScopedTimer(const ScopedTimer&) = delete;
     ScopedTimer& operator=(const ScopedTimer&) = delete;
 
 private:
     double& _out;
-    Timer   _t;
+    Timer _t;
 };
 
 } // namespace ir
-

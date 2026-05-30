@@ -1,6 +1,5 @@
-﻿#pragma once
+#pragma once
 
-#include <opencv2/features2d.hpp>
 #include <yaml-cpp/yaml.h>
 
 #include "core/types.h"
@@ -8,7 +7,7 @@
 
 namespace ir {
 
-/// 基于暴力搜索的描述子匹配器。
+/// 暴力描述子匹配器，可通过 YAML 选择具体的 OpenCV 匹配接口。
 class BfMatcher : public IMatcher {
 public:
     /// 根据 YAML 配置初始化匹配器参数。
@@ -17,14 +16,15 @@ public:
     /// 返回匹配器名称。
     std::string name() const override { return "BFMatcher"; }
 
-    /// 在上下文中执行最近邻匹配。
+    /// 执行暴力匹配，并将结果写入配准上下文。
     bool match(RegistrationContext& ctx) override;
 
 private:
-    NormType norm_type_  = NormType::UNKNOWN;
-    bool     _crossCheck  = false;
-    int      knn_k_       = 2;
+    NormType _normType = NormType::UNKNOWN;
+    MatchMethod _method = MatchMethod::MATCH;
+    int _knnK = 2;
+    float _radius = 100.0f;
+    bool _crossCheck = false;
 };
 
 } // namespace ir
-

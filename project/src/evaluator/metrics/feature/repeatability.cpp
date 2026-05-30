@@ -8,11 +8,10 @@
 namespace ir {
 
 RepeatabilityMetric::RepeatabilityMetric(const YAML::Node& params) {
-    pixel_threshold_ = yaml_utils::getDouble(params, "pixel_threshold", 3.0);
+    _pixelThreshold = yaml_utils::getDouble(params, "pixel_threshold", 3.0);
 }
 
-MetricResult RepeatabilityMetric::compute(const RegistrationContext& ctx,
-                                          const Sample& sample) {
+MetricResult RepeatabilityMetric::compute(const RegistrationContext& ctx, const Sample& sample) {
     MetricResult r{name(), 0.0, false, ""};
 
     if (!sample.has_ground_truth()) {
@@ -28,19 +27,24 @@ MetricResult RepeatabilityMetric::compute(const RegistrationContext& ctx,
 
     std::vector<cv::Point2f> p1;
     p1.reserve(kp1.size());
-    for (const auto& k : kp1) p1.push_back(k.pt);
+    for (const auto& k : kp1) {
+        p1.push_back(k.pt);
+    }
 
     std::vector<cv::Point2f> p1_in_2;
     cv::perspectiveTransform(p1, p1_in_2, sample.H_gt);
 
     const cv::Size t_sz = ctx.feature_data.second.image.size();
-    const double thr2 = pixel_threshold_ * pixel_threshold_;
+    const double thr2 = _pixelThreshold * _pixelThreshold;
 
     int valid = 0;
     int repeated = 0;
     for (size_t i = 0; i < p1_in_2.size(); ++i) {
         const auto& q = p1_in_2[i];
-        if (q.x < 0 || q.y < 0 || q.x >= t_sz.width || q.y >= t_sz.height) continue;
+        if (q.x < 0 || q.y < 0 || q.x >= t_sz.width || q.y >= t_sz.height) {
+            continue;
+        }
+
         ++valid;
         for (const auto& k : kp2) {
             const double dx = q.x - k.pt.x;

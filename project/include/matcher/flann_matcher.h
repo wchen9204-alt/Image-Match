@@ -1,6 +1,5 @@
 #pragma once
 
-#include <opencv2/features2d.hpp>
 #include <yaml-cpp/yaml.h>
 
 #include "core/types.h"
@@ -8,7 +7,7 @@
 
 namespace ir {
 
-/// 基于 FLANN 的描述子匹配器。
+/// 基于 FLANN 的描述子匹配器，可通过 YAML 选择具体的 OpenCV 匹配接口。
 class FlannMatcher : public IMatcher {
 public:
     /// 根据 YAML 配置初始化匹配器参数。
@@ -17,25 +16,24 @@ public:
     /// 返回匹配器名称。
     std::string name() const override { return "FlannMatcher"; }
 
-    /// 在上下文中执行近似最近邻匹配。
+    /// 执行 FLANN 匹配，并将结果写入配准上下文。
     bool match(RegistrationContext& ctx) override;
 
 private:
-    NormType norm_type_ = NormType::UNKNOWN;
-    int      knn_k_     = 2;
+    NormType _normType = NormType::UNKNOWN;
+    MatchMethod _method = MatchMethod::KNN;
+    int _knnK = 2;
+    float _radius = 100.0f;
 
-    /// KDTree 相关参数。
-    int kd_trees_ = 5;
+    int _kdTrees = 5;
 
-    /// LSH 相关参数。
-    int lsh_table_number_      = 12;
-    int lsh_key_size_          = 20;
-    int lsh_multi_probe_level_ = 2;
+    int _lshTableNumber = 12;
+    int _lshKeySize = 20;
+    int _lshMultiProbeLevel = 2;
 
-    /// 搜索参数。
-    int   search_checks_ = 50;
-    float search_eps_    = 0.0f;
-    bool  search_sorted_ = true;
+    int _searchChecks = 50;
+    float _searchEps = 0.0f;
+    bool _searchSorted = true;
 };
 
 } // namespace ir

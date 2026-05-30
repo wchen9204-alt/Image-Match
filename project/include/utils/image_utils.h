@@ -17,8 +17,8 @@ cv::Mat warpedValidMask(const cv::Mat& src_size, const cv::Mat& H, const cv::Siz
 cv::Mat nonZeroMask(const cv::Mat& warped);
 
 /// 根据掩码裁剪两张图像的共同有效区域。
-void cropToMask(const cv::Mat& a, const cv::Mat& b, const cv::Mat& mask,
-                cv::Mat& a_out, cv::Mat& b_out);
+void cropToMask(
+    const cv::Mat& a, const cv::Mat& b, const cv::Mat& mask, cv::Mat& a_out, cv::Mat& b_out);
 
 } // namespace image_utils
 } // namespace ir

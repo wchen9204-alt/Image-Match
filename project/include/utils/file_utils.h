@@ -26,8 +26,7 @@ bool writeWholeFile(const std::filesystem::path& path, const std::string& conten
 std::string csvEscape(const std::string& s);
 
 /// 根据样本名和 pipeline 名生成安全的文件名主体。
-std::string makeStem(const std::string& sample_name,
-                     const std::string& pipeline_name);
+std::string makeStem(const std::string& sample_name, const std::string& pipeline_name);
 
 /// 枚举 root 下的一层子目录，并按名称排序。
 std::vector<std::filesystem::path> listSubdirectories(const std::filesystem::path& root);

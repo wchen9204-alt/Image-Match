@@ -16,23 +16,22 @@ public:
     std::string name() const override { return "AKAZE"; }
     FeatureType type() const override { return FeatureType::AKAZE; }
     /// AKAZE 默认使用二进制描述子，通常对应 Hamming 距离。
-    NormType    normType() const override { return _norm; }
+    NormType normType() const override { return _norm; }
 
     /// 在上下文中提取 AKAZE 关键点和描述子。
     bool extract(RegistrationContext& ctx) override;
 
 private:
-    int   descriptor_type_    = static_cast<int>(cv::AKAZE::DESCRIPTOR_MLDB);
-    int   descriptor_size_    = 0;
-    int   descriptor_channels_= 3;
-    float _threshold          = 0.001f;
-    int   _nOctaves           = 4;
-    int   _nOctaveLayers      = 4;
-    int   _diffusivity        = static_cast<int>(cv::KAZE::DIFF_PM_G2);
+    int _descriptorType = static_cast<int>(cv::AKAZE::DESCRIPTOR_MLDB);
+    int _descriptorSize = 0;
+    int _descriptorChannels = 3;
+    float _threshold = 0.001f;
+    int _nOctaves = 4;
+    int _nOctaveLayers = 4;
+    int _diffusivity = static_cast<int>(cv::KAZE::DIFF_PM_G2);
 
-    NormType           _norm = NormType::HAMMING;
-    cv::Ptr<cv::AKAZE>  _impl;
+    NormType _norm = NormType::HAMMING;
+    cv::Ptr<cv::AKAZE> _impl;
 };
 
 } // namespace ir
-

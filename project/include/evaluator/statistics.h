@@ -10,12 +10,12 @@ namespace ir {
 
 /// 单个指标的汇总统计结果。
 struct MetricStats {
-    int    count  = 0;
-    double mean   = 0.0;
+    int count = 0;
+    double mean = 0.0;
     double median = 0.0;
     double stddev = 0.0;
-    double minv   = 0.0;
-    double maxv   = 0.0;
+    double minv = 0.0;
+    double maxv = 0.0;
 };
 
 /// 按 pipeline 聚合评测指标并计算统计信息。
@@ -38,4 +38,3 @@ private:
 };
 
 } // namespace ir
-

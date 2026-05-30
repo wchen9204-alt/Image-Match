@@ -15,18 +15,17 @@ public:
 
     std::string name() const override { return "BRISK"; }
     FeatureType type() const override { return FeatureType::BRISK; }
-    NormType    normType() const override { return NormType::HAMMING; }
+    NormType normType() const override { return NormType::HAMMING; }
 
     /// 在上下文中提取 BRISK 关键点和描述子。
     bool extract(RegistrationContext& ctx) override;
 
 private:
-    int   _thresh       = 30;
-    int   _octaves      = 3;
+    int _thresh = 30;
+    int _octaves = 3;
     float _patternScale = 1.0f;
 
     cv::Ptr<cv::BRISK> _impl;
 };
 
 } // namespace ir
-

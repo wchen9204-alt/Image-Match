@@ -35,24 +35,28 @@ std::string typeOf(const YAML::Node& cfg) {
 
 } // namespace
 
-std::shared_ptr<IFeatureExtractor>
-Factory::createFeatureExtractor(const YAML::Node& cfg) {
+std::shared_ptr<IFeatureExtractor> Factory::createFeatureExtractor(const YAML::Node& cfg) {
     const std::string t = typeOf(cfg);
     const FeatureType ft = featureTypeFromString(t);
     switch (ft) {
-        case FeatureType::SIFT:  return std::make_shared<SiftExtractor>(cfg);
-        case FeatureType::SURF:  return std::make_shared<SurfExtractor>(cfg);
-        case FeatureType::ORB:   return std::make_shared<OrbExtractor>(cfg);
-        case FeatureType::BRISK: return std::make_shared<BriskExtractor>(cfg);
-        case FeatureType::KAZE:  return std::make_shared<KazeExtractor>(cfg);
-        case FeatureType::AKAZE: return std::make_shared<AkazeExtractor>(cfg);
-        default:
-            throw std::runtime_error("Factory: unknown feature extractor type: " + t);
+    case FeatureType::SIFT:
+        return std::make_shared<SiftExtractor>(cfg);
+    case FeatureType::SURF:
+        return std::make_shared<SurfExtractor>(cfg);
+    case FeatureType::ORB:
+        return std::make_shared<OrbExtractor>(cfg);
+    case FeatureType::BRISK:
+        return std::make_shared<BriskExtractor>(cfg);
+    case FeatureType::KAZE:
+        return std::make_shared<KazeExtractor>(cfg);
+    case FeatureType::AKAZE:
+        return std::make_shared<AkazeExtractor>(cfg);
+    default:
+        throw std::runtime_error("Factory: unknown feature extractor type: " + t);
     }
 }
 
-std::shared_ptr<IMatcher>
-Factory::createMatcher(const YAML::Node& cfg) {
+std::shared_ptr<IMatcher> Factory::createMatcher(const YAML::Node& cfg) {
     const std::string t = typeOf(cfg);
     if (t == "BF" || t == "BFMatcher" || t == "BRUTE_FORCE") {
         return std::make_shared<BfMatcher>(cfg);
@@ -63,8 +67,7 @@ Factory::createMatcher(const YAML::Node& cfg) {
     throw std::runtime_error("Factory: unknown matcher type: " + t);
 }
 
-std::shared_ptr<IFilter>
-Factory::createFilter(const YAML::Node& cfg) {
+std::shared_ptr<IFilter> Factory::createFilter(const YAML::Node& cfg) {
     const std::string t = typeOf(cfg);
     if (t == "RATIO_TEST" || t == "RatioTest") {
         return std::make_shared<RatioTestFilter>(cfg);
@@ -78,17 +81,20 @@ Factory::createFilter(const YAML::Node& cfg) {
     throw std::runtime_error("Factory: unknown filter type: " + t);
 }
 
-std::shared_ptr<IGeometryEstimator>
-Factory::createGeometryEstimator(const YAML::Node& cfg) {
+std::shared_ptr<IGeometryEstimator> Factory::createGeometryEstimator(const YAML::Node& cfg) {
     const std::string t = typeOf(cfg);
     const GeometryType gt = geometryTypeFromString(t);
     switch (gt) {
-        case GeometryType::HOMOGRAPHY:  return std::make_shared<HomographyEstimator>(cfg);
-        case GeometryType::AFFINE:      return std::make_shared<AffineEstimator>(cfg);
-        case GeometryType::RIGID:       return std::make_shared<RigidEstimator>(cfg);
-        case GeometryType::SIMILARITY:  return std::make_shared<SimilarityEstimator>(cfg);
-        default:
-            throw std::runtime_error("Factory: unknown geometry estimator type: " + t);
+    case GeometryType::HOMOGRAPHY:
+        return std::make_shared<HomographyEstimator>(cfg);
+    case GeometryType::AFFINE:
+        return std::make_shared<AffineEstimator>(cfg);
+    case GeometryType::RIGID:
+        return std::make_shared<RigidEstimator>(cfg);
+    case GeometryType::SIMILARITY:
+        return std::make_shared<SimilarityEstimator>(cfg);
+    default:
+        throw std::runtime_error("Factory: unknown geometry estimator type: " + t);
     }
 }
 

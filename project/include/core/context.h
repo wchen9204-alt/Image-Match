@@ -25,10 +25,10 @@ public:
     RegistrationContext() = default;
 
     /// 原始与中间结果数据：特征、匹配、几何、变换以及评测信息。
-    FeatureData    feature_data;
-    MatchData      match_data;
-    GeometryData   geometry_data;
-    TransformData  transform_data;
+    FeatureData feature_data;
+    MatchData match_data;
+    GeometryData geometry_data;
+    TransformData transform_data;
     EvaluationData evaluation;
 
     /// 本次配准流程的汇总结果。

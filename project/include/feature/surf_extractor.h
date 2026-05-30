@@ -15,20 +15,19 @@ public:
 
     std::string name() const override { return "SURF"; }
     FeatureType type() const override { return FeatureType::SURF; }
-    NormType    normType() const override { return NormType::L2; }
+    NormType normType() const override { return NormType::L2; }
 
     /// 在上下文中提取 SURF 关键点和描述子。
     bool extract(RegistrationContext& ctx) override;
 
 private:
     double _hessianThreshold = 400.0;
-    int    _nOctaves         = 4;
-    int    _nOctaveLayers    = 3;
-    bool   _extended         = false;
-    bool   _upright          = false;
+    int _nOctaves = 4;
+    int _nOctaveLayers = 3;
+    bool _extended = false;
+    bool _upright = false;
 
     cv::Ptr<cv::xfeatures2d::SURF> _impl;
 };
 
 } // namespace ir
-

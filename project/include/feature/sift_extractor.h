@@ -15,20 +15,19 @@ public:
 
     std::string name() const override { return "SIFT"; }
     FeatureType type() const override { return FeatureType::SIFT; }
-    NormType    normType() const override { return NormType::L2; }
+    NormType normType() const override { return NormType::L2; }
 
     /// 在上下文中提取 SIFT 关键点和描述子。
     bool extract(RegistrationContext& ctx) override;
 
 private:
-    int    _nfeatures         = 0;
-    int    _nOctaveLayers     = 3;
+    int _nfeatures = 0;
+    int _nOctaveLayers = 3;
     double _contrastThreshold = 0.04;
-    double _edgeThreshold     = 10.0;
-    double _sigma             = 1.6;
+    double _edgeThreshold = 10.0;
+    double _sigma = 1.6;
 
     cv::Ptr<cv::SIFT> _impl;
 };
 
 } // namespace ir
-

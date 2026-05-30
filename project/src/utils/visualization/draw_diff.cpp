@@ -20,8 +20,14 @@ cv::Mat DrawDiff::render(const RegistrationContext& ctx, const Options& opt) {
     }
 
     cv::Mat a, b;
-    if (warped.channels() == 1) a = warped; else cv::cvtColor(warped, a, cv::COLOR_BGR2GRAY);
-    if (target.channels() == 1) b = target; else cv::cvtColor(target, b, cv::COLOR_BGR2GRAY);
+    if (warped.channels() == 1)
+        a = warped;
+    else
+        cv::cvtColor(warped, a, cv::COLOR_BGR2GRAY);
+    if (target.channels() == 1)
+        b = target;
+    else
+        cv::cvtColor(target, b, cv::COLOR_BGR2GRAY);
 
     cv::Mat diff;
     cv::absdiff(a, b, diff);
@@ -29,7 +35,8 @@ cv::Mat DrawDiff::render(const RegistrationContext& ctx, const Options& opt) {
         diff.convertTo(diff, diff.type(), opt.scale);
     }
 
-    if (!opt.heatmap) return diff;
+    if (!opt.heatmap)
+        return diff;
 
     cv::Mat colored;
     cv::applyColorMap(diff, colored, cv::COLORMAP_JET);

@@ -13,9 +13,11 @@ namespace yaml_utils {
 /// 从节点中读取指定类型的值，缺失或转换失败时返回默认值。
 template <typename T>
 inline T get(const YAML::Node& node, const std::string& key, const T& fallback) {
-    if (!node || !node.IsMap()) return fallback;
+    if (!node || !node.IsMap())
+        return fallback;
     const YAML::Node child = node[key];
-    if (!child || child.IsNull()) return fallback;
+    if (!child || child.IsNull())
+        return fallback;
     try {
         return child.as<T>();
     } catch (const YAML::Exception&) {
@@ -52,16 +54,18 @@ inline bool getBool(const YAML::Node& node, const std::string& key, bool fallbac
 
 /// 读取序列并转换为 `std::vector<T>`。
 template <typename T>
-inline std::vector<T> getVec(const YAML::Node& node,
-                             const std::string& key,
-                             const std::vector<T>& fallback = {}) {
-    if (!node || !node.IsMap()) return fallback;
+inline std::vector<T>
+getVec(const YAML::Node& node, const std::string& key, const std::vector<T>& fallback = {}) {
+    if (!node || !node.IsMap())
+        return fallback;
     const YAML::Node child = node[key];
-    if (!child || !child.IsSequence()) return fallback;
+    if (!child || !child.IsSequence())
+        return fallback;
     std::vector<T> out;
     out.reserve(child.size());
     try {
-        for (const auto& v : child) out.push_back(v.as<T>());
+        for (const auto& v : child)
+            out.push_back(v.as<T>());
     } catch (const YAML::Exception&) {
         return fallback;
     }

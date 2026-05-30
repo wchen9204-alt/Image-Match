@@ -1,7 +1,7 @@
 ﻿#include "filter/cross_check.h"
 
-#include <unordered_map>
 #include <opencv2/features2d.hpp>
+#include <unordered_map>
 
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
@@ -35,7 +35,9 @@ bool CrossCheckFilter::apply(RegistrationContext& ctx) {
     } else {
         forward.reserve(md.raw_knn.size());
         for (const auto& nb : md.raw_knn) {
-            if (!nb.empty()) forward.push_back(nb.front());
+            if (!nb.empty()) {
+                forward.push_back(nb.front());
+            }
         }
     }
 
@@ -48,10 +50,9 @@ bool CrossCheckFilter::apply(RegistrationContext& ctx) {
     // 反向 1-NN 搜索：交换两侧描述子。
     NormType norm = fd.norm_type;
     if (norm == NormType::UNKNOWN) {
-        norm = (fd.first.descriptors.type() == CV_8U)
-                   ? NormType::HAMMING
-                   : NormType::L2;
+        norm = (fd.first.descriptors.type() == CV_8U) ? NormType::HAMMING : NormType::L2;
     }
+
     cv::Ptr<cv::BFMatcher> rev = cv::BFMatcher::create(toCvNorm(norm), false);
 
     std::vector<cv::DMatch> reverse;
@@ -75,11 +76,9 @@ bool CrossCheckFilter::apply(RegistrationContext& ctx) {
         }
     }
 
-    IR_LOG_INFO("CrossCheckFilter kept ", kept.size(),
-                " / ", forward.size(), " matches");
+    IR_LOG_INFO("CrossCheckFilter kept ", kept.size(), " / ", forward.size(), " matches");
     md.filtered = std::move(kept);
     return true;
 }
 
 } // namespace ir
-

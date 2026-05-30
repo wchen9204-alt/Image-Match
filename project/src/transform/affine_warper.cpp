@@ -16,8 +16,7 @@ bool AffineWarper::warp(RegistrationContext& ctx) {
     }
 
     cv::Mat A;
-    if ((gd.type == GeometryType::AFFINE ||
-         gd.type == GeometryType::RIGID ||
+    if ((gd.type == GeometryType::AFFINE || gd.type == GeometryType::RIGID ||
          gd.type == GeometryType::SIMILARITY) &&
         !gd.A.empty()) {
         gd.A.convertTo(A, CV_64F);
@@ -42,8 +41,8 @@ bool AffineWarper::warp(RegistrationContext& ctx) {
                    cv::BORDER_CONSTANT,
                    cv::Scalar::all(0));
 
-    IR_LOG_INFO("AffineWarper produced ",
-                ctx.warped_image.cols, "x", ctx.warped_image.rows, " image.");
+    IR_LOG_INFO(
+        "AffineWarper produced ", ctx.warped_image.cols, "x", ctx.warped_image.rows, " image.");
     return !ctx.warped_image.empty();
 }
 

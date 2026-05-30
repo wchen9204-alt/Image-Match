@@ -36,13 +36,12 @@ protected:
     virtual bool saveOutputs(RegistrationContext& ctx);
     virtual bool showWindows(RegistrationContext& ctx);
 
-    PipelineConfig                        _config;
-    std::shared_ptr<IFeatureExtractor>    _extractor;
-    std::shared_ptr<IMatcher>             _matcher;
+    PipelineConfig _config;
+    std::shared_ptr<IFeatureExtractor> _extractor;
+    std::shared_ptr<IMatcher> _matcher;
     std::vector<std::shared_ptr<IFilter>> _filters;
-    std::shared_ptr<IGeometryEstimator>   _geometry;
-    std::shared_ptr<IWarper>              _warper;
+    std::shared_ptr<IGeometryEstimator> _geometry;
+    std::shared_ptr<IWarper> _warper;
 };
 
 } // namespace ir
-

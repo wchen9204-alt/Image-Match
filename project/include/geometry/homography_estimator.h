@@ -22,12 +22,11 @@ public:
     bool estimate(RegistrationContext& ctx) override;
 
 private:
-    int    _method                = 8;
+    int _method = 8;
     double _ransacReprojThreshold = 3.0;
-    int    _maxIters              = 2000;
-    double _confidence            = 0.995;
-    int    _minInliers            = 8;
+    int _maxIters = 2000;
+    double _confidence = 0.995;
+    int _minInliers = 8;
 };
 
 } // namespace ir
-

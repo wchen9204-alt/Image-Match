@@ -11,8 +11,8 @@ class DrawDiff {
 public:
     /// 绘制选项。
     struct Options {
-        bool   heatmap = true;
-        double scale   = 1.0;
+        bool heatmap = true;
+        double scale = 1.0;
     };
 
     /// 渲染差异图。

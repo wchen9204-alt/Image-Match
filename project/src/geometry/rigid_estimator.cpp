@@ -22,7 +22,8 @@ void collectMaskedPoints(const std::vector<cv::Point2f>& src,
     inlierSrc.reserve(src.size());
     inlierDst.reserve(dst.size());
     for (size_t i = 0; i < src.size() && i < mask.size(); ++i) {
-        if (!mask[i]) continue;
+        if (!mask[i])
+            continue;
         inlierSrc.push_back(src[i]);
         inlierDst.push_back(dst[i]);
     }
@@ -33,24 +34,28 @@ void collectMaskedPoints(const std::vector<cv::Point2f>& src,
 RigidEstimator::RigidEstimator(const YAML::Node& cfg) {
     const auto params = cfg["params"];
 
-    const std::string method_str =
-        yaml_utils::getString(params, "method", "RANSAC");
+    const std::string method_str = yaml_utils::getString(params, "method", "RANSAC");
     int m = robustMethodFromString(method_str);
     _method = (m < 0) ? cv::RANSAC : m;
 
-    _ransacReprojThreshold =
-        yaml_utils::getDouble(params, "ransacReprojThreshold", 3.0);
-    _maxIters   = yaml_utils::getInt   (params, "maxIters",    2000);
-    _confidence = yaml_utils::getDouble(params, "confidence",  0.99);
-    _refineIters= yaml_utils::getInt   (params, "refineIters", 10);
-    _minInliers = yaml_utils::getInt   (params, "minInliers",  3);
+    _ransacReprojThreshold = yaml_utils::getDouble(params, "ransacReprojThreshold", 3.0);
+    _maxIters = yaml_utils::getInt(params, "maxIters", 2000);
+    _confidence = yaml_utils::getDouble(params, "confidence", 0.99);
+    _refineIters = yaml_utils::getInt(params, "refineIters", 10);
+    _minInliers = yaml_utils::getInt(params, "minInliers", 3);
 
-    IR_LOG_INFO("RigidEstimator: method=", method_str,
-                ", thr=",         _ransacReprojThreshold,
-                ", maxIters=",    _maxIters,
-                ", confidence=",  _confidence,
-                ", refineIters=", _refineIters,
-                ", minInliers=",  _minInliers);
+    IR_LOG_INFO("RigidEstimator: method=",
+                method_str,
+                ", thr=",
+                _ransacReprojThreshold,
+                ", maxIters=",
+                _maxIters,
+                ", confidence=",
+                _confidence,
+                ", refineIters=",
+                _refineIters,
+                ", minInliers=",
+                _minInliers);
 }
 
 bool RigidEstimator::estimate(RegistrationContext& ctx) {
@@ -60,10 +65,8 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
     gd.type = GeometryType::RIGID;
 
     if (md.filtered.size() < 2) {
-        gd.message = "need at least 2 matches, got " +
-                     std::to_string(md.filtered.size());
-        IR_LOG_ERROR("RigidEstimator: need at least 2 matches, got ",
-                     md.filtered.size());
+        gd.message = "need at least 2 matches, got " + std::to_string(md.filtered.size());
+        IR_LOG_ERROR("RigidEstimator: need at least 2 matches, got ", md.filtered.size());
         return false;
     }
 
@@ -71,15 +74,14 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
     partial_affine_utils::extractPoints(ctx, pts1, pts2);
 
     std::vector<unsigned char> initialMask;
-    cv::Mat similarityA = cv::estimateAffinePartial2D(
-        pts1,
-        pts2,
-        initialMask,
-        _method,
-        _ransacReprojThreshold,
-        static_cast<size_t>(_maxIters),
-        _confidence,
-        static_cast<size_t>(_refineIters));
+    cv::Mat similarityA = cv::estimateAffinePartial2D(pts1,
+                                                      pts2,
+                                                      initialMask,
+                                                      _method,
+                                                      _ransacReprojThreshold,
+                                                      static_cast<size_t>(_maxIters),
+                                                      _confidence,
+                                                      static_cast<size_t>(_refineIters));
 
     if (similarityA.empty()) {
         gd.message = "estimateAffinePartial2D returned an empty matrix";
@@ -105,33 +107,28 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
     }
 
     std::vector<unsigned char> mask =
-        partial_affine_utils::maskByReprojection(pts1, pts2, A,
-                                                 _ransacReprojThreshold);
+        partial_affine_utils::maskByReprojection(pts1, pts2, A, _ransacReprojThreshold);
 
     collectMaskedPoints(pts1, pts2, mask, inlierPts1, inlierPts2);
     if (inlierPts1.size() >= 2 &&
         partial_affine_utils::estimateRigid2D(inlierPts1, inlierPts2, A)) {
-        mask = partial_affine_utils::maskByReprojection(pts1, pts2, A,
-                                                        _ransacReprojThreshold);
+        mask = partial_affine_utils::maskByReprojection(pts1, pts2, A, _ransacReprojThreshold);
     }
 
     partial_affine_utils::promoteInliers(ctx, mask);
     const int inliers = static_cast<int>(md.inliers.size());
 
-    gd.A            = A;
-    gd.num_inliers  = inliers;
-    gd.inlier_ratio = md.filtered.empty()
-                          ? 0.0
-                          : static_cast<double>(inliers) / md.filtered.size();
-    gd.valid        = inliers >= _minInliers;
+    gd.A = A;
+    gd.num_inliers = inliers;
+    gd.inlier_ratio = md.filtered.empty() ? 0.0 : static_cast<double>(inliers) / md.filtered.size();
+    gd.valid = inliers >= _minInliers;
     if (!gd.valid) {
-        gd.message = partial_affine_utils::rejectMessage(
-            "rigid transform", inliers, _minInliers);
+        gd.message = partial_affine_utils::rejectMessage("rigid transform", inliers, _minInliers);
         IR_LOG_WARN("RigidEstimator rejected model: ", gd.message);
     }
 
-    IR_LOG_INFO("Rigid2D inliers=", inliers, " / ", md.filtered.size(),
-                " (ratio=", gd.inlier_ratio, ")");
+    IR_LOG_INFO(
+        "Rigid2D inliers=", inliers, " / ", md.filtered.size(), " (ratio=", gd.inlier_ratio, ")");
     return gd.valid;
 }
 

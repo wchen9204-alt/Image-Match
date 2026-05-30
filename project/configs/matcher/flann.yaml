@@ -1,30 +1,42 @@
 # ---------------------------------------------------------------------------
 # FLANN 匹配器配置
-# 根据距离类型使用 KDTree (L2) 或 LSH (HAMMING)
-# 这些参数主要是本项目默认值，不是 OpenCV 统一构造默认值
+# 通过 `type` 选择 FLANN 匹配器，通过 `method` 选择具体 OpenCV 接口：
+#   - match
+#   - knn
+#   - radius
+# 浮点描述子使用 KDTree，二进制描述子使用 LSH。
 # ---------------------------------------------------------------------------
 type: FLANN
 
 params:
-  # 距离类型，可选 L2 / HAMMING / AUTO
-  # 本项目默认值: AUTO（自动跟随当前特征描述子类型）
+  # MATCH / KNN / RADIUS，默认 knn
+  method: knn
+
+  # L2 / HAMMING / HAMMING2 / AUTO，默认 AUTO
   norm_type: AUTO
 
-  # knnMatch 的 k 值，本项目默认值: 2
+  # 当 method: knn 时使用，默认 2
   knn_k: 2
 
-  # KDTree 参数，本项目默认值: 5
+  # 当 method: radius 时使用，默认 100.0
+  radius: 100.0
+
   kdtree:
+    # KDTree 树数量，默认 5
     trees: 5
 
-  # LSH 参数，本项目默认值如下
   lsh:
+    # LSH 哈希表数量，默认 12
     table_number: 12
+    # LSH key 大小，默认 20
     key_size: 20
+    # LSH 多探测层级，默认 2
     multi_probe_level: 2
 
-  # 搜索参数，本项目默认值如下
   search:
+    # 搜索检查次数，默认 50
     checks: 50
+    # 搜索 eps 参数，默认 0.0
     eps: 0.0
+    # 是否按距离排序返回，默认 true
     sorted: true

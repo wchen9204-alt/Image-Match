@@ -27,9 +27,7 @@ struct FeatureImageData {
     }
 
     /// 判断当前图像是否没有有效特征。
-    bool empty() const {
-        return keypoints.empty() || descriptors.empty();
-    }
+    bool empty() const { return keypoints.empty() || descriptors.empty(); }
 };
 
 /// 一对待配准图像的特征数据。
@@ -40,20 +38,18 @@ struct FeatureData {
     /// 本次特征提取使用的特征类型。
     FeatureType type = FeatureType::UNKNOWN;
     /// 本次特征提取使用的描述子距离类型。
-    NormType    norm_type = NormType::UNKNOWN;
+    NormType norm_type = NormType::UNKNOWN;
 
     /// 清空两张图像的特征数据和类型信息。
     void clear() {
         first.clear();
         second.clear();
-        type      = FeatureType::UNKNOWN;
+        type = FeatureType::UNKNOWN;
         norm_type = NormType::UNKNOWN;
     }
 
     /// 判断是否至少有一张图像没有有效特征。
-    bool empty() const {
-        return first.empty() || second.empty();
-    }
+    bool empty() const { return first.empty() || second.empty(); }
 };
 
 } // namespace ir

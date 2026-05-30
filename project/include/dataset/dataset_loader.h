@@ -15,11 +15,11 @@ class DatasetLoader {
 public:
     /// 加载参数。
     struct Options {
-        std::filesystem::path    root;
-        std::string              pattern_source = "source";
-        std::string              pattern_target = "target";
+        std::filesystem::path root;
+        std::string pattern_source = "source";
+        std::string pattern_target = "target";
         std::vector<std::string> include;
-        std::vector<std::string> extensions = { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff" };
+        std::vector<std::string> extensions = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"};
     };
 
     /// 按给定配置创建加载器。
@@ -41,4 +41,3 @@ private:
 };
 
 } // namespace ir
-

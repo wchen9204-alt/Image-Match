@@ -10,15 +10,18 @@ namespace ir {
 BriskExtractor::BriskExtractor(const YAML::Node& cfg) {
     const auto params = cfg["params"];
 
-    _thresh       = yaml_utils::getInt  (params, "thresh",       30);
-    _octaves      = yaml_utils::getInt  (params, "octaves",      3);
+    _thresh = yaml_utils::getInt(params, "thresh", 30);
+    _octaves = yaml_utils::getInt(params, "octaves", 3);
     _patternScale = yaml_utils::getFloat(params, "patternScale", 1.0f);
 
     _impl = cv::BRISK::create(_thresh, _octaves, _patternScale);
 
-    IR_LOG_INFO("BRISK created: thresh=", _thresh,
-                ", octaves=",             _octaves,
-                ", patternScale=",        _patternScale);
+    IR_LOG_INFO("BRISK created: thresh=",
+                _thresh,
+                ", octaves=",
+                _octaves,
+                ", patternScale=",
+                _patternScale);
 }
 
 bool BriskExtractor::extract(RegistrationContext& ctx) {
@@ -28,7 +31,7 @@ bool BriskExtractor::extract(RegistrationContext& ctx) {
     }
 
     auto& fd = ctx.feature_data;
-    fd.type      = FeatureType::BRISK;
+    fd.type = FeatureType::BRISK;
     fd.norm_type = NormType::HAMMING;
 
     if (fd.first.image.empty() || fd.second.image.empty()) {
@@ -42,15 +45,16 @@ bool BriskExtractor::extract(RegistrationContext& ctx) {
         cv::cvtColor(fd.second.image, fd.second.gray, cv::COLOR_BGR2GRAY);
     }
 
-    _impl->detectAndCompute(fd.first.gray,  cv::noArray(),
-                            fd.first.keypoints,  fd.first.descriptors);
-    _impl->detectAndCompute(fd.second.gray, cv::noArray(),
-                            fd.second.keypoints, fd.second.descriptors);
+    _impl->detectAndCompute(fd.first.gray, cv::noArray(), fd.first.keypoints, fd.first.descriptors);
+    _impl->detectAndCompute(
+        fd.second.gray, cv::noArray(), fd.second.keypoints, fd.second.descriptors);
 
-    IR_LOG_INFO("BRISK extracted ", fd.first.keypoints.size(),
-                " / ",             fd.second.keypoints.size(), " keypoints");
+    IR_LOG_INFO("BRISK extracted ",
+                fd.first.keypoints.size(),
+                " / ",
+                fd.second.keypoints.size(),
+                " keypoints");
     return !fd.empty();
 }
 
 } // namespace ir
-

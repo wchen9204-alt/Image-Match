@@ -19,7 +19,7 @@ public:
     MetricResult compute(const RegistrationContext& ctx, const Sample& sample) override;
 
 private:
-    double max_value_ = 255.0;
+    double _maxValue = 255.0;
 };
 
 } // namespace ir

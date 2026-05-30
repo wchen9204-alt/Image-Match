@@ -15,24 +15,23 @@ public:
 
     std::string name() const override { return "ORB"; }
     FeatureType type() const override { return FeatureType::ORB; }
-    NormType    normType() const override { return NormType::HAMMING; }
+    NormType normType() const override { return NormType::HAMMING; }
 
     /// 在上下文中提取 ORB 关键点和描述子。
     bool extract(RegistrationContext& ctx) override;
 
 private:
-    int   _nfeatures     = 2000;
-    float _scaleFactor   = 1.2f;
-    int   _nlevels       = 8;
-    int   _edgeThreshold = 31;
-    int   _firstLevel    = 0;
-    int   WTA_K_         = 2;
-    int   _scoreType     = static_cast<int>(cv::ORB::HARRIS_SCORE);
-    int   _patchSize     = 31;
-    int   _fastThreshold = 20;
+    int _nfeatures = 2000;
+    float _scaleFactor = 1.2f;
+    int _nlevels = 8;
+    int _edgeThreshold = 31;
+    int _firstLevel = 0;
+    int _wtaK = 2;
+    int _scoreType = static_cast<int>(cv::ORB::HARRIS_SCORE);
+    int _patchSize = 31;
+    int _fastThreshold = 20;
 
     cv::Ptr<cv::ORB> _impl;
 };
 
 } // namespace ir
-

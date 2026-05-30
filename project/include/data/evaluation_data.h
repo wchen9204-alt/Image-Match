@@ -11,9 +11,9 @@ struct MetricResult {
     /// 指标名。
     std::string name;
     /// 指标数值。
-    double      value = 0.0;
+    double value = 0.0;
     /// 指标结果是否有效。
-    bool        valid = false;
+    bool valid = false;
     /// 可选说明信息。
     std::string note;
 };
@@ -26,7 +26,8 @@ struct EvaluationData {
     /// 按名称查找指标。
     const MetricResult* find(const std::string& name) const {
         for (const auto& m : metrics) {
-            if (m.name == name) return &m;
+            if (m.name == name)
+                return &m;
         }
         return nullptr;
     }
@@ -35,7 +36,8 @@ struct EvaluationData {
     std::map<std::string, double> asMap() const {
         std::map<std::string, double> out;
         for (const auto& m : metrics) {
-            if (m.valid) out[m.name] = m.value;
+            if (m.valid)
+                out[m.name] = m.value;
         }
         return out;
     }
