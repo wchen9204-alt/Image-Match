@@ -6,6 +6,7 @@ namespace ir {
 namespace image_utils {
 
 cv::Mat toGrayFloat(const cv::Mat& src) {
+    // 统一转为 [0, 1] 范围灰度浮点图，便于图像指标和差异度量复用同一输入规范。
     if (src.empty())
         return {};
     cv::Mat gray;
@@ -24,6 +25,7 @@ cv::Mat toGrayFloat(const cv::Mat& src) {
 }
 
 cv::Mat warpedValidMask(const cv::Mat& src, const cv::Mat& H, const cv::Size& dst_size) {
+    // 有效区域掩码通过对全 1 图做同样的几何变换获得，与实际插值路径保持一致。
     if (src.empty() || H.empty())
         return {};
     cv::Mat ones(src.size(), CV_8UC1, cv::Scalar(255));
@@ -34,6 +36,7 @@ cv::Mat warpedValidMask(const cv::Mat& src, const cv::Mat& H, const cv::Size& ds
 }
 
 cv::Mat nonZeroMask(const cv::Mat& warped) {
+    // 非零掩码用于近似提取变换后有效区域，适合没有显式几何矩阵的场景。
     if (warped.empty())
         return {};
     cv::Mat gray;
@@ -51,6 +54,7 @@ cv::Mat nonZeroMask(const cv::Mat& warped) {
 
 void cropToMask(
     const cv::Mat& a, const cv::Mat& b, const cv::Mat& mask, cv::Mat& a_out, cv::Mat& b_out) {
+    // 裁剪共同有效区域时保持输入不可变，输出统一返回拷贝结果。
     if (a.empty() || b.empty() || mask.empty()) {
         a_out = a.clone();
         b_out = b.clone();

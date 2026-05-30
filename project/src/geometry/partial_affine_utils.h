@@ -11,6 +11,7 @@
 
 namespace ir::partial_affine_utils {
 
+/// 从过滤后的匹配集中提取两组对应点，供相似/刚体估计复用。
 inline void extractPoints(const RegistrationContext& ctx,
                           std::vector<cv::Point2f>& pts1,
                           std::vector<cv::Point2f>& pts2) {
@@ -26,6 +27,7 @@ inline void extractPoints(const RegistrationContext& ctx,
     }
 }
 
+/// 将内点掩码回写到上下文，统一维护 `inlier_mask` 与 `inliers` 两份结果。
 inline void promoteInliers(RegistrationContext& ctx, const std::vector<unsigned char>& mask) {
     auto& md = ctx.match_data;
     md.inlier_mask = mask;
@@ -37,6 +39,7 @@ inline void promoteInliers(RegistrationContext& ctx, const std::vector<unsigned 
     }
 }
 
+/// 基于质心对齐和 SVD 分解求解二维刚体变换。
 inline bool estimateRigid2D(const std::vector<cv::Point2f>& src,
                             const std::vector<cv::Point2f>& dst,
                             cv::Mat& A) {
@@ -85,6 +88,7 @@ inline bool estimateRigid2D(const std::vector<cv::Point2f>& src,
     return true;
 }
 
+/// 按重投影误差阈值重新评估全量匹配的内外点归属。
 inline std::vector<unsigned char> maskByReprojection(const std::vector<cv::Point2f>& src,
                                                      const std::vector<cv::Point2f>& dst,
                                                      const cv::Mat& A,
@@ -108,6 +112,7 @@ inline std::vector<unsigned char> maskByReprojection(const std::vector<cv::Point
     return mask;
 }
 
+/// 生成统一的模型拒绝信息，便于不同估计器保持日志口径一致。
 inline std::string rejectMessage(const std::string& kind, int inliers, int minInliers) {
     return "estimated " + kind + " with " + std::to_string(inliers) +
            " inliers, below minInliers=" + std::to_string(minInliers);

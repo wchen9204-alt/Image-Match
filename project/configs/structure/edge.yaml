@@ -1,0 +1,13 @@
+type: EDGE
+
+params:
+  threshold1: 50.0
+  threshold2: 150.0
+  apertureSize: 3
+  l2Gradient: false
+  blurKernel: 3
+  dilateIterations: 1
+
+estimation:
+  responseThreshold: 0.01
+  phaseBlurKernel: 5

@@ -1,0 +1,9 @@
+# ---------------------------------------------------------------------------
+# Min Distance 过滤
+# 参考 OpenCV 教程常见写法：distance <= max(multiplier * min_dist, min_cutoff)
+# ---------------------------------------------------------------------------
+type: MIN_DISTANCE
+
+params:
+  multiplier: 2.0
+  min_cutoff: 30.0

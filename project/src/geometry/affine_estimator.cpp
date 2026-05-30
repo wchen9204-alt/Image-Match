@@ -1,4 +1,4 @@
-﻿#include "geometry/affine_estimator.h"
+#include "geometry/affine_estimator.h"
 
 #include <opencv2/calib3d.hpp>
 #include <string>
@@ -10,6 +10,7 @@ namespace ir {
 
 namespace {
 
+// 几何估计统一从 `filtered` 中读取匹配点，保证输入已经过前序过滤器裁剪。
 void extractPoints(const RegistrationContext& ctx,
                    std::vector<cv::Point2f>& pts1,
                    std::vector<cv::Point2f>& pts2) {
@@ -25,6 +26,7 @@ void extractPoints(const RegistrationContext& ctx,
     }
 }
 
+// 将鲁棒估计返回的掩码回写到上下文，便于后续可视化和统计模块直接消费。
 void promoteInliers(RegistrationContext& ctx, const std::vector<unsigned char>& mask) {
     auto& md = ctx.match_data;
     md.inlier_mask = mask;
@@ -68,6 +70,8 @@ AffineEstimator::AffineEstimator(const YAML::Node& cfg) {
 bool AffineEstimator::estimate(RegistrationContext& ctx) {
     auto& md = ctx.match_data;
     auto& gd = ctx.geometry_data;
+
+    // 1. 每次估计前清空旧几何结果，并声明当前模型类型。
     gd.clear();
     gd.type = GeometryType::AFFINE;
 
@@ -80,6 +84,7 @@ bool AffineEstimator::estimate(RegistrationContext& ctx) {
     std::vector<cv::Point2f> pts1, pts2;
     extractPoints(ctx, pts1, pts2);
 
+    // 2. 仿射模型通过 RANSAC/LMEDS 等鲁棒方法拟合，并可做少量迭代精修。
     std::vector<unsigned char> mask;
     cv::Mat A = cv::estimateAffine2D(pts1,
                                      pts2,
@@ -99,6 +104,7 @@ bool AffineEstimator::estimate(RegistrationContext& ctx) {
     promoteInliers(ctx, mask);
     const int inliers = static_cast<int>(md.inliers.size());
 
+    // 3. 模型求解成功并不等于质量达标，仍需经过最小内点数门限筛选。
     gd.A = A;
     gd.num_inliers = inliers;
     gd.inlier_ratio = md.filtered.empty() ? 0.0 : static_cast<double>(inliers) / md.filtered.size();

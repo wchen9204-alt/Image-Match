@@ -20,6 +20,12 @@ OrbExtractor::OrbExtractor(const YAML::Node& cfg) {
     _patchSize = yaml_utils::getInt(params, "patchSize", 31);
     _fastThreshold = yaml_utils::getInt(params, "fastThreshold", 20);
 
+    if (_wtaK != 2 && _wtaK != 3 && _wtaK != 4) {
+        IR_LOG_WARN("ORB WTA_K must be 2, 3, or 4; using 2 instead of ", _wtaK);
+        _wtaK = 2;
+    }
+    _norm = (_wtaK == 3 || _wtaK == 4) ? NormType::HAMMING2 : NormType::HAMMING;
+
     _impl = cv::ORB::create(_nfeatures,
                             _scaleFactor,
                             _nlevels,
@@ -39,7 +45,9 @@ OrbExtractor::OrbExtractor(const YAML::Node& cfg) {
                 ", WTA_K=",
                 _wtaK,
                 ", patchSize=",
-                _patchSize);
+                _patchSize,
+                ", norm=",
+                toString(_norm));
 }
 
 bool OrbExtractor::extract(RegistrationContext& ctx) {
@@ -50,7 +58,7 @@ bool OrbExtractor::extract(RegistrationContext& ctx) {
 
     auto& fd = ctx.feature_data;
     fd.type = FeatureType::ORB;
-    fd.norm_type = NormType::HAMMING;
+    fd.norm_type = _norm;
 
     if (fd.first.image.empty() || fd.second.image.empty()) {
         IR_LOG_ERROR("ORB::extract - source images are empty.");

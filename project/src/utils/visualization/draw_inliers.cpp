@@ -23,7 +23,7 @@ cv::Mat DrawInliers::render(const RegistrationContext& ctx, const Options& opt) 
     cv::Mat canvas;
 
     if (opt.draw_outliers && !md.filtered.empty() && !md.inlier_mask.empty()) {
-        // 先画外点，再把内点覆盖到上层。
+        // 先绘制外点层，再把内点覆盖到上层，突出鲁棒估计真正接受的对应关系。
         std::vector<cv::DMatch> outliers;
         outliers.reserve(md.filtered.size());
         for (size_t i = 0; i < md.filtered.size() && i < md.inlier_mask.size(); ++i) {
@@ -44,6 +44,7 @@ cv::Mat DrawInliers::render(const RegistrationContext& ctx, const Options& opt) 
 
     std::vector<cv::DMatch> inliers = md.inliers;
     if (opt.max_inliers > 0 && static_cast<int>(inliers.size()) > opt.max_inliers) {
+        // 内点数量过多时优先保留距离更小的匹配，避免可视化过于拥挤。
         std::partial_sort(
             inliers.begin(),
             inliers.begin() + opt.max_inliers,
@@ -67,7 +68,7 @@ cv::Mat DrawInliers::render(const RegistrationContext& ctx, const Options& opt) 
     if (canvas.empty()) {
         canvas = overlay;
     } else {
-        // 将外点层和内点层合成到同一画布。
+        // 外点层与内点层做半透明合成，既保留整体分布，也不掩盖最终有效匹配。
         cv::addWeighted(canvas, 0.5, overlay, 0.5, 0.0, canvas);
     }
     return canvas;

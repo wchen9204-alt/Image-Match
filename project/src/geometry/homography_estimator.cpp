@@ -1,4 +1,4 @@
-﻿#include "geometry/homography_estimator.h"
+#include "geometry/homography_estimator.h"
 
 #include <opencv2/calib3d.hpp>
 #include <string>
@@ -10,6 +10,7 @@ namespace ir {
 
 namespace {
 
+// 几何估计统一从 `filtered` 中读取匹配点，保证输入已经过前序过滤器裁剪。
 void extractPoints(const RegistrationContext& ctx,
                    std::vector<cv::Point2f>& pts1,
                    std::vector<cv::Point2f>& pts2) {
@@ -25,6 +26,7 @@ void extractPoints(const RegistrationContext& ctx,
     }
 }
 
+// 将鲁棒估计返回的掩码回写到上下文，便于后续可视化和统计模块直接消费。
 void promoteInliers(RegistrationContext& ctx, const std::vector<unsigned char>& mask) {
     auto& md = ctx.match_data;
     md.inlier_mask = mask;
@@ -65,6 +67,8 @@ HomographyEstimator::HomographyEstimator(const YAML::Node& cfg) {
 bool HomographyEstimator::estimate(RegistrationContext& ctx) {
     auto& md = ctx.match_data;
     auto& gd = ctx.geometry_data;
+
+    // 1. 每次估计前清空旧几何结果，并声明当前模型类型。
     gd.clear();
     gd.type = GeometryType::HOMOGRAPHY;
 
@@ -77,6 +81,7 @@ bool HomographyEstimator::estimate(RegistrationContext& ctx) {
     std::vector<cv::Point2f> pts1, pts2;
     extractPoints(ctx, pts1, pts2);
 
+    // 2. 单应矩阵通过鲁棒估计抑制误匹配，掩码同时作为内点判定依据。
     std::vector<unsigned char> mask;
     cv::Mat H = cv::findHomography(
         pts1, pts2, _method, _ransacReprojThreshold, mask, _maxIters, _confidence);
@@ -90,6 +95,7 @@ bool HomographyEstimator::estimate(RegistrationContext& ctx) {
     promoteInliers(ctx, mask);
     const int inliers = static_cast<int>(md.inliers.size());
 
+    // 3. 模型求解成功并不等于质量达标，仍需经过最小内点数门限筛选。
     gd.H = H;
     gd.num_inliers = inliers;
     gd.inlier_ratio = md.filtered.empty() ? 0.0 : static_cast<double>(inliers) / md.filtered.size();

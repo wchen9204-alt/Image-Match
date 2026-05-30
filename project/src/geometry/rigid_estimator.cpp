@@ -12,6 +12,7 @@ namespace ir {
 
 namespace {
 
+// 根据掩码抽取当前内点集合，为后续刚体闭式拟合提供输入。
 void collectMaskedPoints(const std::vector<cv::Point2f>& src,
                          const std::vector<cv::Point2f>& dst,
                          const std::vector<unsigned char>& mask,
@@ -61,6 +62,8 @@ RigidEstimator::RigidEstimator(const YAML::Node& cfg) {
 bool RigidEstimator::estimate(RegistrationContext& ctx) {
     auto& md = ctx.match_data;
     auto& gd = ctx.geometry_data;
+
+    // 1. 每次估计前清空旧几何结果，并声明当前模型类型。
     gd.clear();
     gd.type = GeometryType::RIGID;
 
@@ -73,6 +76,7 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
     std::vector<cv::Point2f> pts1, pts2;
     partial_affine_utils::extractPoints(ctx, pts1, pts2);
 
+    // 2. 先用相似变换鲁棒估计拿到初始内点，再收缩到无尺度自由度的刚体模型。
     std::vector<unsigned char> initialMask;
     cv::Mat similarityA = cv::estimateAffinePartial2D(pts1,
                                                       pts2,
@@ -106,6 +110,7 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
         return false;
     }
 
+    // 3. 用刚体模型重新计算全量重投影误差掩码，再做一次内点自洽收缩。
     std::vector<unsigned char> mask =
         partial_affine_utils::maskByReprojection(pts1, pts2, A, _ransacReprojThreshold);
 
@@ -118,6 +123,7 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
     partial_affine_utils::promoteInliers(ctx, mask);
     const int inliers = static_cast<int>(md.inliers.size());
 
+    // 4. 最终仍需通过最小内点数门限，避免由局部偶然对齐触发伪成功。
     gd.A = A;
     gd.num_inliers = inliers;
     gd.inlier_ratio = md.filtered.empty() ? 0.0 : static_cast<double>(inliers) / md.filtered.size();

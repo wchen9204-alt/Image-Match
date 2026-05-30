@@ -17,10 +17,7 @@ enum class LogLevel { Debug = 0, Info = 1, Warn = 2, Error = 3 };
 class Logger {
 public:
     /// 返回全局唯一日志器实例。
-    static Logger& instance() {
-        static Logger inst;
-        return inst;
-    }
+    static Logger& instance();
 
     /// 设置最低输出级别。
     void setLevel(LogLevel lv) { _level = lv; }
@@ -36,10 +33,7 @@ public:
         oss << prefix(lv);
         appendAll(oss, std::forward<Args>(args)...);
         std::lock_guard<std::mutex> g(_mu);
-        if (lv >= LogLevel::Warn)
-            std::cerr << oss.str() << std::endl;
-        else
-            std::cout << oss.str() << std::endl;
+        writeLine(lv, oss.str());
     }
 
 private:
@@ -68,6 +62,8 @@ private:
         oss << std::forward<T>(t);
         appendAll(oss, std::forward<Rest>(rest)...);
     }
+
+    static void writeLine(LogLevel lv, const std::string& msg);
 
     LogLevel _level = LogLevel::Info;
     std::mutex _mu;

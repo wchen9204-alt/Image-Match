@@ -30,21 +30,13 @@ bool GmsFilter::apply(RegistrationContext& ctx) {
         return false;
     }
 
-    std::vector<cv::DMatch> input;
-    if (!md.filtered.empty()) {
-        input = md.filtered;
-    } else {
-        input.reserve(md.raw_knn.size());
-        for (const auto& nb : md.raw_knn) {
-            if (!nb.empty())
-                input.push_back(nb.front());
-        }
-    }
+    std::vector<cv::DMatch> input = md.filtered;
     if (input.empty()) {
         IR_LOG_WARN("GMS: no input matches.");
         return false;
     }
 
+    // GMS 利用网格统计约束过滤局部不一致匹配，适合大规模稠密候选场景。
     std::vector<cv::DMatch> kept;
     cv::xfeatures2d::matchGMS(fd.first.image.size(),
                               fd.second.image.size(),

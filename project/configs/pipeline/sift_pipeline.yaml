@@ -10,7 +10,10 @@ feature:  configs/feature/sift.yaml
 matcher:  configs/matcher/flann.yaml
 
 filters:
- - configs/filter/ratio_test.yaml
+  - configs/filter/ratio_test.yaml
+ # - configs/filter/cross_check.yaml
+ # - configs/filter/distance_distribution.yaml
+ # - configs/filter/distance_threshold.yaml
 
 geometry: configs/geometry/similarity.yaml
 

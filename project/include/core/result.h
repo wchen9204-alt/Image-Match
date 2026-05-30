@@ -15,6 +15,9 @@ struct RegistrationResult {
     /// 各阶段关键数量统计。
     int num_keypoints_first = 0;
     int num_keypoints_second = 0;
+    /// 结构法提取到的结构元素数量；点特征法中保持为 0。
+    int num_structures_first = 0;
+    int num_structures_second = 0;
     int num_raw_matches = 0;
     int num_filtered_matches = 0;
     int num_inliers = 0;

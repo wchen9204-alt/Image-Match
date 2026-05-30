@@ -1,6 +1,6 @@
 name: batch_pipeline
 
-pipeline: configs/pipeline/sift_pipeline.yaml
+pipeline: configs/pipeline/akaze_pipeline.yaml
 
 dataset:
   root: datasets

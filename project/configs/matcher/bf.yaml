@@ -1,6 +1,6 @@
 # ---------------------------------------------------------------------------
-# BF 匹配器配置
-# 通过 `type` 选择暴力匹配器，通过 `method` 选择具体 OpenCV 接口：
+# BF matcher config
+# type selects the brute-force matcher, method selects the OpenCV API:
 #   - match
 #   - knn
 #   - radius
@@ -14,11 +14,11 @@ params:
   # L2 / L1 / HAMMING / HAMMING2 / AUTO
   norm_type: AUTO
 
-  # 当 method: knn 时使用，默认2
+  # Used when method: knn
   knn_k: 2
 
-  # 当 method: radius 时使用，默认100.0
+  # Used when method: radius
   radius: 100.0
 
-  # 仅在 method: match 时生效
+  # Only applies when method: match
   crossCheck: true

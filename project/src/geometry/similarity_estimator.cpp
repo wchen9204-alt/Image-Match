@@ -40,6 +40,8 @@ SimilarityEstimator::SimilarityEstimator(const YAML::Node& cfg) {
 bool SimilarityEstimator::estimate(RegistrationContext& ctx) {
     auto& md = ctx.match_data;
     auto& gd = ctx.geometry_data;
+
+    // 1. 每次估计前清空旧几何结果，并声明当前模型类型。
     gd.clear();
     gd.type = GeometryType::SIMILARITY;
 
@@ -52,6 +54,7 @@ bool SimilarityEstimator::estimate(RegistrationContext& ctx) {
     std::vector<cv::Point2f> pts1, pts2;
     partial_affine_utils::extractPoints(ctx, pts1, pts2);
 
+    // 2. 相似模型保留旋转、平移和统一缩放，适合处理比例变化但不允许剪切。
     std::vector<unsigned char> mask;
     cv::Mat A = cv::estimateAffinePartial2D(pts1,
                                             pts2,
@@ -71,6 +74,7 @@ bool SimilarityEstimator::estimate(RegistrationContext& ctx) {
     partial_affine_utils::promoteInliers(ctx, mask);
     const int inliers = static_cast<int>(md.inliers.size());
 
+    // 3. 模型求解成功并不等于质量达标，仍需经过最小内点数门限筛选。
     gd.A = A;
     gd.num_inliers = inliers;
     gd.inlier_ratio = md.filtered.empty() ? 0.0 : static_cast<double>(inliers) / md.filtered.size();

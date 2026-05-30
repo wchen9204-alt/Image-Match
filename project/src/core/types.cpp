@@ -10,6 +10,7 @@ namespace ir {
 
 namespace {
 
+// 配置解析统一走大写归一化，降低大小写和别名差异对枚举映射的影响。
 std::string toUpper(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
         return static_cast<char>(std::toupper(c));
@@ -62,6 +63,34 @@ FeatureType featureTypeFromString(const std::string& s) {
     return FeatureType::UNKNOWN;
 }
 
+std::string toString(StructureType t) {
+    switch (t) {
+    case StructureType::EDGE:
+        return "EDGE";
+    case StructureType::LINE:
+        return "LINE";
+    case StructureType::CONTOUR:
+        return "CONTOUR";
+    case StructureType::UNKNOWN:
+    default:
+        return "UNKNOWN";
+    }
+}
+
+StructureType structureTypeFromString(const std::string& s) {
+    const std::string u = toUpper(s);
+    if (u == "EDGE" || u == "CANNY") {
+        return StructureType::EDGE;
+    }
+    if (u == "LINE" || u == "HOUGH_LINE" || u == "HOUGH") {
+        return StructureType::LINE;
+    }
+    if (u == "CONTOUR" || u == "CONTOURS") {
+        return StructureType::CONTOUR;
+    }
+    return StructureType::UNKNOWN;
+}
+
 std::string toString(NormType t) {
     switch (t) {
     case NormType::L1:
@@ -99,6 +128,7 @@ NormType normTypeFromString(const std::string& s) {
 }
 
 int toCvNorm(NormType t) {
+    // 未知距离默认回退到 L2，优先兼容浮点描述子常见路径。
     switch (t) {
     case NormType::L1:
         return cv::NORM_L1;
@@ -176,6 +206,7 @@ GeometryType geometryTypeFromString(const std::string& s) {
 }
 
 int robustMethodFromString(const std::string& s) {
+    // 几何估计方法与 OpenCV 常量在这里集中映射，避免业务代码散落魔法值。
     const std::string u = toUpper(s);
     if (u == "RANSAC") {
         return cv::RANSAC;

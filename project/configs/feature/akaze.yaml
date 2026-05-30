@@ -18,7 +18,7 @@ params:
   # 描述子通道数，默认值: 3
   descriptor_channels: 3
   # 关键点响应阈值，默认值: 0.001
-  threshold: 0.001
+  threshold: 0.0001
   # 最大 octave 数量，默认值: 4
   nOctaves: 4
   # 每个 octave 的子层数，默认值: 4

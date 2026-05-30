@@ -23,23 +23,12 @@ bool CrossCheckFilter::apply(RegistrationContext& ctx) {
         return true;
     }
 
-    if (md.filtered.empty() && md.raw_knn.empty()) {
+    if (md.filtered.empty()) {
         IR_LOG_WARN("CrossCheckFilter: no matches available to verify.");
         return false;
     }
 
-    // 输入匹配：优先使用已有过滤结果，否则取 raw_knn 的 top-1。
-    std::vector<cv::DMatch> forward;
-    if (!md.filtered.empty()) {
-        forward = md.filtered;
-    } else {
-        forward.reserve(md.raw_knn.size());
-        for (const auto& nb : md.raw_knn) {
-            if (!nb.empty()) {
-                forward.push_back(nb.front());
-            }
-        }
-    }
+    std::vector<cv::DMatch> forward = md.filtered;
 
     if (forward.empty()) {
         IR_LOG_WARN("CrossCheckFilter: forward set is empty.");

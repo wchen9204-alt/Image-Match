@@ -37,6 +37,7 @@ bool SiftExtractor::extract(RegistrationContext& ctx) {
         return false;
     }
 
+    // SIFT 生成浮点描述子，因此在特征阶段直接写入 L2 距离约定。
     auto& fd = ctx.feature_data;
     fd.type = FeatureType::SIFT;
     fd.norm_type = NormType::L2;
@@ -46,6 +47,7 @@ bool SiftExtractor::extract(RegistrationContext& ctx) {
         return false;
     }
 
+    // 灰度图优先复用上游预处理结果，避免重复颜色空间转换。
     if (fd.first.gray.empty()) {
         cv::cvtColor(fd.first.image, fd.first.gray, cv::COLOR_BGR2GRAY);
     }
@@ -53,6 +55,7 @@ bool SiftExtractor::extract(RegistrationContext& ctx) {
         cv::cvtColor(fd.second.image, fd.second.gray, cv::COLOR_BGR2GRAY);
     }
 
+    // 检测与描述子计算合并执行，保证关键点与描述子参数完全一致。
     _impl->detectAndCompute(fd.first.gray, cv::noArray(), fd.first.keypoints, fd.first.descriptors);
     _impl->detectAndCompute(
         fd.second.gray, cv::noArray(), fd.second.keypoints, fd.second.descriptors);

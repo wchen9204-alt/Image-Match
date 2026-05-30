@@ -10,6 +10,7 @@ namespace ir {
 
 namespace {
 
+// 距离类型优先使用显式配置，其次继承特征阶段约定，最后再按描述子类型兜底推断。
 NormType resolveNormType(const FeatureData& fd, NormType configuredNorm) {
     NormType effective = configuredNorm;
     if (effective == NormType::UNKNOWN) {
@@ -21,6 +22,7 @@ NormType resolveNormType(const FeatureData& fd, NormType configuredNorm) {
     return effective;
 }
 
+// FLANN 的索引实现对数据类型更敏感，浮点距离需要显式转换到 `CV_32F`。
 void prepareFlannDescriptors(const FeatureData& fd, NormType effective, cv::Mat& d1, cv::Mat& d2) {
     d1 = fd.first.descriptors;
     d2 = fd.second.descriptors;
@@ -92,6 +94,8 @@ FlannMatcher::FlannMatcher(const YAML::Node& cfg) {
 bool FlannMatcher::match(RegistrationContext& ctx) {
     auto& fd = ctx.feature_data;
     auto& md = ctx.match_data;
+
+    // 每次匹配前清空旧结果，避免复用上下文时把不同图像对的数据混在一起。
     md.clear();
 
     if (fd.first.descriptors.empty() || fd.second.descriptors.empty()) {
@@ -103,9 +107,11 @@ bool FlannMatcher::match(RegistrationContext& ctx) {
 
     cv::Ptr<cv::flann::IndexParams> index;
     if (effective == NormType::HAMMING || effective == NormType::HAMMING2) {
+        // 二进制描述子使用 LSH，避免 KD-Tree 对汉明空间的不适配。
         index = cv::makePtr<cv::flann::LshIndexParams>(
             _lshTableNumber, _lshKeySize, _lshMultiProbeLevel);
     } else {
+        // 浮点描述子采用 KD-Tree，兼顾大规模近邻搜索效率与召回率。
         index = cv::makePtr<cv::flann::KDTreeIndexParams>(_kdTrees);
     }
     cv::Ptr<cv::flann::SearchParams> search =
@@ -132,6 +138,7 @@ bool FlannMatcher::match(RegistrationContext& ctx) {
 
     switch (_method) {
     case MatchMethod::MATCH: {
+        // `MATCH` 分支统一包装成单元素 knn 行，便于后续过滤器复用同一数据结构。
         std::vector<cv::DMatch> matches;
         matcher.match(d1, d2, matches);
 
@@ -145,6 +152,7 @@ bool FlannMatcher::match(RegistrationContext& ctx) {
         return !md.filtered.empty();
     }
     case MatchMethod::KNN:
+        // k-NN 结果是 FLANN 的常见用法，通常与 ratio test 联合使用。
         matcher.knnMatch(d1, d2, md.raw_knn, _knnK);
         IR_LOG_INFO("FlannMatcher produced ",
                     md.raw_knn.size(),
@@ -155,6 +163,7 @@ bool FlannMatcher::match(RegistrationContext& ctx) {
                     ")");
         return !md.raw_knn.empty();
     case MatchMethod::RADIUS:
+        // 半径搜索保留局部邻域集合，便于在高密度特征场景中探索不同裁剪策略。
         matcher.radiusMatch(d1, d2, md.raw_knn, _radius);
         IR_LOG_INFO("FlannMatcher produced ",
                     md.raw_knn.size(),

@@ -15,7 +15,7 @@ public:
 
     std::string name() const override { return "ORB"; }
     FeatureType type() const override { return FeatureType::ORB; }
-    NormType normType() const override { return NormType::HAMMING; }
+    NormType normType() const override { return _norm; }
 
     /// 在上下文中提取 ORB 关键点和描述子。
     bool extract(RegistrationContext& ctx) override;
@@ -31,6 +31,7 @@ private:
     int _patchSize = 31;
     int _fastThreshold = 20;
 
+    NormType _norm = NormType::HAMMING;
     cv::Ptr<cv::ORB> _impl;
 };
 

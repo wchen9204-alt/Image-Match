@@ -4,12 +4,15 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <sstream>
 
 #include "core/config.h"
 #include "core/context.h"
 #include "dataset/dataset_loader.h"
+#include "interfaces/i_pipeline.h"
 #include "pipeline/feature_pipeline.h"
+#include "pipeline/structure_pipeline.h"
 #include "utils/file_utils.h"
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
@@ -20,23 +23,15 @@ namespace ir {
 
 namespace {
 
+// 统一格式化毫秒耗时，保证终端摘要的小数位一致。
 std::string fmtMs(double v) {
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(2) << v << " ms";
     return oss.str();
 }
 
-void printSummary(const RegistrationContext& ctx) {
-    const auto& r = ctx.result;
-    std::cout << "\n================ Registration summary ================\n";
-    std::cout << "  status        : " << (r.success ? "OK" : "FAILED") << "\n";
-    std::cout << "  message       : " << r.message << "\n";
-    std::cout << "  keypoints     : " << r.num_keypoints_first << " / " << r.num_keypoints_second
-              << "\n";
-    std::cout << "  raw matches   : " << r.num_raw_matches << "\n";
-    std::cout << "  filtered      : " << r.num_filtered_matches << "\n";
-    std::cout << "  inliers       : " << r.num_inliers << " (" << std::fixed << std::setprecision(3)
-              << r.inlier_ratio << ")\n";
+// 统一输出各阶段耗时，避免点特征法和结构法重复维护同一段格式。
+void printTimingSummary(const RegistrationResult& r) {
     std::cout << "  -- timings --\n";
     std::cout << "  load          : " << fmtMs(r.t_load_ms) << "\n";
     std::cout << "  extract       : " << fmtMs(r.t_extract_ms) << "\n";
@@ -45,7 +40,59 @@ void printSummary(const RegistrationContext& ctx) {
     std::cout << "  geometry      : " << fmtMs(r.t_geometry_ms) << "\n";
     std::cout << "  warp          : " << fmtMs(r.t_warp_ms) << "\n";
     std::cout << "  TOTAL         : " << fmtMs(r.t_total_ms) << "\n";
-    std::cout << "======================================================\n";
+}
+
+// 点特征法摘要聚焦 keypoint/descriptor 匹配链路。
+void printFeatureSummary(const RegistrationContext& ctx) {
+    const auto& r = ctx.result;
+    std::cout << "\n================ Feature registration summary ================\n";
+    std::cout << "  status        : " << (r.success ? "OK" : "FAILED") << "\n";
+    std::cout << "  message       : " << r.message << "\n";
+    std::cout << "  keypoints     : " << r.num_keypoints_first << " / " << r.num_keypoints_second
+              << "\n";
+    std::cout << "  raw matches   : " << r.num_raw_matches << "\n";
+    std::cout << "  filtered      : " << r.num_filtered_matches << "\n";
+    std::cout << "  inliers       : " << r.num_inliers << " (" << std::fixed
+              << std::setprecision(3) << r.inlier_ratio << ")\n";
+    printTimingSummary(r);
+    std::cout << "=============================================================\n";
+}
+
+// 结构法摘要聚焦边缘/直线/轮廓数量，以及当前结构配准的估计结果。
+void printStructureSummary(const RegistrationContext& ctx) {
+    const auto& r = ctx.result;
+    const auto& gd = ctx.geometry_data;
+    std::cout << "\n================ Structure registration summary ================\n";
+    std::cout << "  status        : " << (r.success ? "OK" : "FAILED") << "\n";
+    std::cout << "  message       : " << r.message << "\n";
+    std::cout << "  structure type: " << toString(ctx.structure_data.type) << "\n";
+    std::cout << "  structures    : " << r.num_structures_first << " / "
+              << r.num_structures_second << "\n";
+    if (!gd.A.empty() && gd.A.rows >= 2 && gd.A.cols >= 3) {
+        std::cout << "  translation   : dx=" << std::fixed << std::setprecision(3)
+                  << gd.A.at<double>(0, 2) << ", dy=" << gd.A.at<double>(1, 2) << "\n";
+    }
+    std::cout << "  response      : " << std::fixed << std::setprecision(3) << r.inlier_ratio
+              << "\n";
+    printTimingSummary(r);
+    std::cout << "================================================================\n";
+}
+
+// 根据 pipeline 类型选择摘要格式，避免两类方法的统计字段混在一起。
+void printSummary(const RegistrationContext& ctx, bool structurePipeline) {
+    if (structurePipeline) {
+        printStructureSummary(ctx);
+        return;
+    }
+    printFeatureSummary(ctx);
+}
+
+// 当前用是否配置 structure 子项来区分点特征法和结构法。
+std::shared_ptr<IPipeline> createPipelineForConfig(const PipelineConfig& cfg) {
+    if (!cfg.structure_path.empty()) {
+        return std::make_shared<StructurePipeline>();
+    }
+    return std::make_shared<FeaturePipeline>();
 }
 
 } // namespace
@@ -62,7 +109,7 @@ void RegistrationApp::printUsage(const std::string& exe) {
 }
 
 int RegistrationApp::runSingle(const Args& args) {
-    // 1. 检查 pipeline YAML 文件是否传入并存在。
+    // 1. 先校验 pipeline YAML 路径，避免后续阶段在缺少配置时继续下沉。
     if (args.pipeline_yaml.empty()) {
         std::cerr << "Pipeline YAML path is empty.\n";
         return 2;
@@ -72,7 +119,7 @@ int RegistrationApp::runSingle(const Args& args) {
         return 2;
     }
 
-    // 2. 加载 pipeline 配置，这是后续创建 SIFT/ORB 等组件的入口。
+    // 2. 加载 pipeline 配置；具体算法组件都由子 YAML 决定。
     PipelineConfig cfg;
     try {
         cfg = Config::loadPipeline(args.pipeline_yaml);
@@ -81,7 +128,7 @@ int RegistrationApp::runSingle(const Args& args) {
         return 3;
     }
 
-    // 3. 如果命令行传入图片或输出目录，则覆盖 YAML 中的默认配置。
+    // 3. 命令行显式传入的图像和输出目录优先级高于 YAML。
     if (!args.image1.empty())
         cfg.image1_path = fs::weakly_canonical(args.image1);
     if (!args.image2.empty())
@@ -89,7 +136,7 @@ int RegistrationApp::runSingle(const Args& args) {
     if (!args.output_dir.empty())
         cfg.output_dir = fs::weakly_canonical(args.output_dir);
 
-    // 4. 检查必须的输入图片路径。
+    // 4. 单次运行必须具备一对输入图像。
     if (cfg.image1_path.empty() || cfg.image2_path.empty()) {
         std::cerr << "Missing image1 / image2. Provide them either in the YAML "
                      "(io.image1 / io.image2) or as positional arguments.\n";
@@ -104,27 +151,27 @@ int RegistrationApp::runSingle(const Args& args) {
         return 5;
     }
 
-    // 5. 创建输出目录，后续匹配图和配准结果会写到这里。
+    // 5. 输出目录提前创建，避免流程成功后因为落盘失败而丢失诊断图。
     if (!cfg.output_dir.empty()) {
         std::error_code ec;
         fs::create_directories(cfg.output_dir, ec);
     }
 
-    // 6. 创建并配置配准管道，configure 会根据 YAML 创建具体算法组件。
-    FeaturePipeline pipeline;
-    if (!pipeline.configure(cfg)) {
+    // 6. 根据配置选择点特征流水线或结构特征流水线。
+    auto pipeline = createPipelineForConfig(cfg);
+    if (!pipeline->configure(cfg)) {
         std::cerr << "Pipeline configure failed.\n";
         return 6;
     }
 
-    // 7. 创建上下文对象，用于保存图片、特征、匹配、几何结果等中间数据。
+    // 7. 上下文承担阶段间数据交换职责，也是最终统计结果的统一出口。
     RegistrationContext ctx;
 
-    // 8. 执行完整 pipeline；SIFT 特征提取等核心步骤会在这里触发。
-    const bool ok = pipeline.run(ctx);
+    // 8. 单次运行沿用统一流水线编排，具体算法由配置决定。
+    const bool ok = pipeline->run(ctx);
 
-    // 9. 打印最终统计结果。
-    printSummary(ctx);
+    // 9. 根据 pipeline 类型输出不同摘要，避免点特征和结构特征字段混杂。
+    printSummary(ctx, !cfg.structure_path.empty());
     return ok ? 0 : 1;
 }
 
@@ -134,6 +181,7 @@ bool RegistrationApp::isBatchYaml(const YAML::Node& node) {
 
 RegistrationApp::BatchConfig
 RegistrationApp::loadBatchConfig(const std::filesystem::path& yaml_path) {
+    // 批处理配置以 batch.yaml 所在目录为基准解析相对路径，便于配置整体迁移。
     const YAML::Node node = Config::load(yaml_path);
     BatchConfig cfg;
     cfg.name = yaml_utils::getString(node, "name", yaml_path.stem().string());
@@ -160,6 +208,7 @@ std::filesystem::path RegistrationApp::resolveBatchOutputRoot(const BatchConfig&
     if (batch.output_root.empty())
         return {};
 
+    // `current` 表示结果自动落到当前流水线名称对应目录下，便于批量切换算法。
     std::filesystem::path out = batch.output_root;
     if (out.filename() == "current") {
         const std::string pipeline_name =
@@ -172,9 +221,11 @@ std::filesystem::path RegistrationApp::resolveBatchOutputRoot(const BatchConfig&
 void RegistrationApp::writeSummaryCsv(const std::filesystem::path& csv_path,
                                       const std::vector<std::string>& sample_names,
                                       const std::vector<RegistrationResult>& results) {
+    // 汇总表保留两类方法的核心数量字段，便于后续横向比较。
     std::ostringstream oss;
     oss << "sample_name,success,message,"
         << "num_keypoints_first,num_keypoints_second,"
+        << "num_structures_first,num_structures_second,"
         << "num_raw_matches,num_filtered_matches,num_inliers,"
         << "inlier_ratio,t_total_ms\n";
 
@@ -182,18 +233,22 @@ void RegistrationApp::writeSummaryCsv(const std::filesystem::path& csv_path,
         const auto& r = results[i];
         oss << file_utils::csvEscape(sample_names[i]) << "," << (r.success ? "1" : "0") << ","
             << file_utils::csvEscape(r.message) << "," << r.num_keypoints_first << ","
-            << r.num_keypoints_second << "," << r.num_raw_matches << "," << r.num_filtered_matches
-            << "," << r.num_inliers << "," << r.inlier_ratio << "," << r.t_total_ms << "\n";
+            << r.num_keypoints_second << "," << r.num_structures_first << ","
+            << r.num_structures_second << "," << r.num_raw_matches << ","
+            << r.num_filtered_matches << "," << r.num_inliers << "," << r.inlier_ratio << ","
+            << r.t_total_ms << "\n";
     }
 
     file_utils::writeWholeFile(csv_path, oss.str());
 }
 
 int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
+    // 1. 先加载批处理配置，再派生单样本运行时的基础 pipeline 配置。
     const BatchConfig batch = loadBatchConfig(batch_yaml);
     const PipelineConfig base_cfg = Config::loadPipeline(batch.pipeline_yaml);
     const std::filesystem::path output_root = resolveBatchOutputRoot(batch, base_cfg);
 
+    // 2. 数据集扫描与输出根目录准备是批处理前置条件。
     DatasetLoader loader(batch.dataset);
     const std::vector<Sample> samples = loader.load();
     if (samples.empty()) {
@@ -213,6 +268,7 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
 
     int ok_count = 0;
     for (const auto& sample : samples) {
+        // 3. 每个样本复用同一算法配置，只替换输入图像与输出目录。
         PipelineConfig cfg = base_cfg;
         cfg.image1_path = sample.source_path;
         cfg.image2_path = sample.target_path;
@@ -225,8 +281,9 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
         cfg.show_target_window = false;
         cfg.show_warped_window = false;
 
-        FeaturePipeline pipeline;
-        if (!pipeline.configure(cfg)) {
+        auto pipeline = createPipelineForConfig(cfg);
+        if (!pipeline->configure(cfg)) {
+            // 配置失败单独记为该样本失败，避免影响整批任务继续执行。
             RegistrationResult failed;
             failed.success = false;
             failed.message = "pipeline configure failed";
@@ -236,8 +293,8 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
         }
 
         RegistrationContext ctx;
-        const bool ok = pipeline.run(ctx);
-        printSummary(ctx);
+        const bool ok = pipeline->run(ctx);
+        printSummary(ctx, !cfg.structure_path.empty());
         sample_names.push_back(sample.name);
         results.push_back(ctx.result);
         if (ok) {
@@ -246,6 +303,7 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
         }
     }
 
+    // 4. 批处理汇总结果独立落盘，便于后续比较不同样本表现。
     if (batch.summary_csv) {
         const auto csv_path = output_root / "summary.csv";
         writeSummaryCsv(csv_path, sample_names, results);
@@ -268,6 +326,7 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
 }
 
 int RegistrationApp::run(const Args& args) {
+    // 入口先判断 YAML 类型，再路由到单样本或批处理分支。
     if (args.pipeline_yaml.empty()) {
         std::cerr << "Pipeline YAML path is empty.\n";
         return 2;
@@ -291,6 +350,7 @@ int RegistrationApp::run(const Args& args) {
 }
 
 int RegistrationApp::run(int argc, char** argv) {
+    // 位置参数保持最小约定，避免命令行层承担复杂解析逻辑。
     if (argc < 2) {
         printUsage(argc > 0 ? argv[0] : "registration_app");
         return 1;

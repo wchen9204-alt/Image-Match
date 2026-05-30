@@ -1,0 +1,13 @@
+# ---------------------------------------------------------------------------
+# 距离分布过滤
+# mode:
+#   - mean_std: threshold = mean + std_multiplier * stddev
+#   - percentile: threshold = 指定分位点距离
+# ---------------------------------------------------------------------------
+type: DISTANCE_DISTRIBUTION
+
+params:
+  mode: mean_std
+  std_multiplier: 1.0
+  percentile: 0.8
+  min_distance_floor: 0.0

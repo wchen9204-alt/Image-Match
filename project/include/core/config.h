@@ -18,6 +18,8 @@ struct PipelineConfig {
 
     /// 特征提取器、匹配器和几何估计器的配置文件路径。
     std::filesystem::path feature_path;
+    /// 结构特征提取器配置文件路径；配置该项时使用 StructurePipeline。
+    std::filesystem::path structure_path;
     std::filesystem::path matcher_path;
     std::filesystem::path geometry_path;
 

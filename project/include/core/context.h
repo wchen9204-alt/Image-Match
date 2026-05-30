@@ -11,6 +11,7 @@
 #include "data/feature_data.h"
 #include "data/geometry_data.h"
 #include "data/match_data.h"
+#include "data/structure_data.h"
 #include "data/transform_data.h"
 
 namespace ir {
@@ -26,6 +27,7 @@ public:
 
     /// 原始与中间结果数据：特征、匹配、几何、变换以及评测信息。
     FeatureData feature_data;
+    StructureData structure_data;
     MatchData match_data;
     GeometryData geometry_data;
     TransformData transform_data;
@@ -45,6 +47,7 @@ public:
     /// 重置运行时数据，但保留已配置的输入输出路径。
     void reset() {
         feature_data.clear();
+        structure_data.clear();
         match_data.clear();
         geometry_data.clear();
         transform_data.clear();

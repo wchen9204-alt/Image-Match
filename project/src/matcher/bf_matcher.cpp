@@ -9,6 +9,7 @@ namespace ir {
 
 namespace {
 
+// 距离类型优先使用显式配置，其次继承特征阶段约定，最后再按描述子类型兜底推断。
 NormType resolveNormType(const FeatureData& fd, NormType configuredNorm) {
     NormType effective = configuredNorm;
     if (effective == NormType::UNKNOWN) {
@@ -45,6 +46,7 @@ BfMatcher::BfMatcher(const YAML::Node& cfg) {
 
     _crossCheck = yaml_utils::getBool(params, "crossCheck", false);
     if (_crossCheck && _method != MatchMethod::MATCH) {
+        // Cross-check 要求一一最近邻关系，与 k-NN / radius 结果语义不兼容。
         IR_LOG_WARN("BFMatcher crossCheck only applies to method=MATCH; disabling it for method=",
                     toString(_method));
         _crossCheck = false;
@@ -68,6 +70,8 @@ BfMatcher::BfMatcher(const YAML::Node& cfg) {
 bool BfMatcher::match(RegistrationContext& ctx) {
     auto& fd = ctx.feature_data;
     auto& md = ctx.match_data;
+
+    // 每次匹配前清空旧结果，避免复用上下文时把不同图像对的数据混在一起。
     md.clear();
 
     if (fd.first.descriptors.empty() || fd.second.descriptors.empty()) {
@@ -97,6 +101,7 @@ bool BfMatcher::match(RegistrationContext& ctx) {
 
     switch (_method) {
     case MatchMethod::MATCH: {
+        // `MATCH` 分支统一包装成单元素 knn 行，便于后续过滤器复用同一数据结构。
         std::vector<cv::DMatch> matches;
         matcher->match(fd.first.descriptors, fd.second.descriptors, matches);
 
@@ -114,11 +119,13 @@ bool BfMatcher::match(RegistrationContext& ctx) {
         return !md.filtered.empty();
     }
     case MatchMethod::KNN:
+        // k-NN 结果保留候选邻居排序信息，供 ratio test 等过滤器继续使用。
         matcher->knnMatch(fd.first.descriptors, fd.second.descriptors, md.raw_knn, _knnK);
         IR_LOG_INFO(
             "BFMatcher produced ", md.raw_knn.size(), " query rows (method=KNN, k=", _knnK, ")");
         return !md.raw_knn.empty();
     case MatchMethod::RADIUS:
+        // 半径搜索更适合保留局部邻域密度信息，后续阶段自行决定如何裁剪。
         matcher->radiusMatch(fd.first.descriptors, fd.second.descriptors, md.raw_knn, _radius);
         IR_LOG_INFO("BFMatcher produced ",
                     md.raw_knn.size(),

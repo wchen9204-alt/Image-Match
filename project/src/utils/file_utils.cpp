@@ -10,6 +10,7 @@ namespace ir {
 namespace file_utils {
 
 bool ensureDirectory(const fs::path& dir) {
+    // 目录创建使用 error_code 分支，避免把“目录已存在”等情况升级为异常。
     if (dir.empty())
         return false;
     std::error_code ec;
@@ -23,6 +24,7 @@ bool fileExists(const fs::path& path) {
 }
 
 std::string readWholeFile(const fs::path& path) {
+    // 文本整读主要服务于配置、报告和 CSV 这类中小型文件。
     std::ifstream f(path, std::ios::binary);
     if (!f)
         return {};
@@ -32,6 +34,7 @@ std::string readWholeFile(const fs::path& path) {
 }
 
 bool writeWholeFile(const fs::path& path, const std::string& content) {
+    // 写文件前自动补目录，减少调用方重复处理输出路径准备逻辑。
     if (path.has_parent_path())
         ensureDirectory(path.parent_path());
     std::ofstream f(path, std::ios::binary | std::ios::trunc);
@@ -42,6 +45,7 @@ bool writeWholeFile(const fs::path& path, const std::string& content) {
 }
 
 std::string csvEscape(const std::string& s) {
+    // 仅在必要时加引号，兼顾 CSV 合法性与结果文件可读性。
     bool needs_quote = false;
     for (char c : s) {
         if (c == ',' || c == '"' || c == '\n' || c == '\r') {
@@ -65,6 +69,7 @@ std::string csvEscape(const std::string& s) {
 }
 
 std::string makeStem(const std::string& sample, const std::string& pipeline) {
+    // 文件名前缀只保留安全字符，避免跨平台路径兼容问题。
     std::string out;
     out.reserve(sample.size() + pipeline.size() + 1);
     auto safe = [&out](const std::string& s) {
@@ -81,6 +86,7 @@ std::string makeStem(const std::string& sample, const std::string& pipeline) {
 }
 
 std::vector<fs::path> listSubdirectories(const fs::path& root) {
+    // 子目录列表统一排序，保证批处理扫描结果具有稳定顺序。
     std::vector<fs::path> out;
     std::error_code ec;
     if (!fs::exists(root, ec) || ec)

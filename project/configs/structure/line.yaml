@@ -1,0 +1,16 @@
+type: LINE
+
+params:
+  cannyThreshold1: 50.0
+  cannyThreshold2: 150.0
+  apertureSize: 3
+  rho: 1.0
+  thetaDegrees: 1.0
+  threshold: 40
+  minLineLength: 30.0
+  maxLineGap: 10.0
+  lineThickness: 2
+
+estimation:
+  responseThreshold: 0.01
+  phaseBlurKernel: 5

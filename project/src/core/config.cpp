@@ -30,19 +30,19 @@ fs::path Config::resolvePath(const fs::path& base_dir, const std::string& relati
     if (p.is_absolute() && fs::exists(p))
         return p;
 
-    // 候选 1：相对于 pipeline 文件所在目录。
+    // 候选 1：优先相对于 pipeline 文件所在目录解析，适配配置随工程移动的场景。
     if (!base_dir.empty()) {
         fs::path c1 = base_dir / p;
         if (fs::exists(c1))
             return fs::weakly_canonical(c1);
     }
 
-    // 候选 2：相对于当前工作目录。
+    // 候选 2：再退回当前工作目录，兼容从仓库根目录直接启动可执行程序。
     fs::path c2 = fs::current_path() / p;
     if (fs::exists(c2))
         return fs::weakly_canonical(c2);
 
-    // 候选 3：从 base_dir 向上查找，适配从 build/bin 启动的情况。
+    // 候选 3：从 base_dir 逐级向上查找，适配从 build/bin 等子目录启动的情况。
     fs::path walk = base_dir;
     for (int i = 0; i < 4 && !walk.empty(); ++i) {
         fs::path c3 = walk / p;
@@ -54,7 +54,7 @@ fs::path Config::resolvePath(const fs::path& base_dir, const std::string& relati
             break;
     }
 
-    // 最后返回基于 base_dir 的路径；输出目录等路径可能尚未存在。
+    // 最后返回基于 base_dir 的规范化路径，允许输出目录等目标稍后再创建。
     if (!base_dir.empty())
         return fs::weakly_canonical(base_dir / p);
     return fs::weakly_canonical(c2);
@@ -67,8 +67,9 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
     PipelineConfig cfg;
     cfg.name = yaml_utils::getString(node, "name", path.stem().string());
 
-    // 子模块 YAML。
+    // 子模块 YAML 统一在这里解析，调用方只消费已经展开好的绝对或规范化路径。
     cfg.feature_path = resolvePath(base, yaml_utils::getString(node, "feature"));
+    cfg.structure_path = resolvePath(base, yaml_utils::getString(node, "structure"));
     cfg.matcher_path = resolvePath(base, yaml_utils::getString(node, "matcher"));
     cfg.geometry_path = resolvePath(base, yaml_utils::getString(node, "geometry"));
 
@@ -79,7 +80,7 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
         }
     }
 
-    // 输入输出路径。
+    // 输入输出路径集中挂在 `io` 节点下，便于命令行层进行统一覆盖。
     if (node["io"] && node["io"].IsMap()) {
         const auto& io = node["io"];
         cfg.image1_path = resolvePath(base, yaml_utils::getString(io, "image1"));
@@ -87,7 +88,7 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
         cfg.output_dir = resolvePath(base, yaml_utils::getString(io, "output_dir", "outputs"));
     }
 
-    // 可视化选项。
+    // 可视化开关只影响展示与落盘，不改变配准主流程的算法行为。
     if (node["visualization"] && node["visualization"].IsMap()) {
         const auto& vis = node["visualization"];
         cfg.draw_keypoints = yaml_utils::getBool(vis, "draw_keypoints", false);
@@ -103,6 +104,7 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
 
     IR_LOG_INFO("Pipeline '", cfg.name, "' loaded from ", path.string());
     IR_LOG_INFO("  feature  : ", cfg.feature_path.string());
+    IR_LOG_INFO("  structure: ", cfg.structure_path.string());
     IR_LOG_INFO("  matcher  : ", cfg.matcher_path.string());
     for (const auto& f : cfg.filter_paths) {
         IR_LOG_INFO("  filter   : ", f.string());
