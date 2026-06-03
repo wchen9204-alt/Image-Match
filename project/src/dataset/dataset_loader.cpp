@@ -1,6 +1,7 @@
 ﻿#include "dataset/dataset_loader.h"
 
 #include <algorithm>
+#include <cctype>
 #include <fstream>
 
 #include "utils/file_utils.h"
@@ -9,6 +10,76 @@
 namespace fs = std::filesystem;
 
 namespace ir {
+
+namespace {
+
+// 自然排序比较器：把连续数字段按数值比较，保证 test2 排在 test10 前面。
+bool naturalLess(const std::string& a, const std::string& b) {
+    size_t i = 0;
+    size_t j = 0;
+    while (i < a.size() && j < b.size()) {
+        const unsigned char ca = static_cast<unsigned char>(a[i]);
+        const unsigned char cb = static_cast<unsigned char>(b[j]);
+
+        if (std::isdigit(ca) && std::isdigit(cb)) {
+            // 先跳过前导零，再比较数字有效长度和值；长度更短代表数值更小。
+            size_t ai = i;
+            size_t bj = j;
+            while (ai < a.size() && a[ai] == '0') {
+                ++ai;
+            }
+            while (bj < b.size() && b[bj] == '0') {
+                ++bj;
+            }
+
+            size_t ae = ai;
+            size_t be = bj;
+            while (ae < a.size() && std::isdigit(static_cast<unsigned char>(a[ae]))) {
+                ++ae;
+            }
+            while (be < b.size() && std::isdigit(static_cast<unsigned char>(b[be]))) {
+                ++be;
+            }
+
+            const size_t aDigits = ae - ai;
+            const size_t bDigits = be - bj;
+            if (aDigits != bDigits) {
+                return aDigits < bDigits;
+            }
+            for (size_t k = 0; k < aDigits; ++k) {
+                if (a[ai + k] != b[bj + k]) {
+                    return a[ai + k] < b[bj + k];
+                }
+            }
+
+            // 数值完全相同（如 test01/test1）时，用原数字段长度保持稳定次序。
+            const size_t aFullDigits = ae - i;
+            const size_t bFullDigits = be - j;
+            if (aFullDigits != bFullDigits) {
+                return aFullDigits < bFullDigits;
+            }
+
+            i = ae;
+            j = be;
+            continue;
+        }
+
+        // 非数字段按大小写不敏感比较；完全相同再回退到原字符保证确定性。
+        const char la = static_cast<char>(std::tolower(ca));
+        const char lb = static_cast<char>(std::tolower(cb));
+        if (la != lb) {
+            return la < lb;
+        }
+        if (a[i] != b[j]) {
+            return a[i] < b[j];
+        }
+        ++i;
+        ++j;
+    }
+    return a.size() < b.size();
+}
+
+} // namespace
 
 DatasetLoader::DatasetLoader(const Options& opt) : _opt(opt) {}
 
@@ -95,9 +166,10 @@ std::vector<Sample> DatasetLoader::load() const {
         out.push_back(std::move(s));
     }
 
-    // 4. 最终按样本名排序，保证批处理输出次序稳定。
-    std::sort(
-        out.begin(), out.end(), [](const Sample& a, const Sample& b) { return a.name < b.name; });
+    // 4. 最终按样本名自然排序，保证 test2 排在 test10 前面。
+    std::sort(out.begin(), out.end(), [](const Sample& a, const Sample& b) {
+        return naturalLess(a.name, b.name);
+    });
 
     IR_LOG_INFO("DatasetLoader: loaded ", out.size(), " samples from ", _opt.root.string());
     return out;

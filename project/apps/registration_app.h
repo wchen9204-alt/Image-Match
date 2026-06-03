@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <vector>
 
@@ -9,14 +9,15 @@
 
 #include "core/config.h"
 #include "core/result.h"
+#include "data/evaluation_data.h"
 #include "dataset/dataset_loader.h"
 
 namespace ir {
 
 /// 命令行应用入口。
 ///
-/// 负责解析单次配准与批量配准两类运行模式，组织 YAML 加载、参数覆盖、
-/// 批处理输出目录规划以及汇总结果写出。
+/// 负责解析单次配准与批处理两类运行模式，组织 YAML 加载、参数覆盖、
+/// 输出目录规划以及汇总结果写出。
 class RegistrationApp {
 public:
     /// 单次运行的命令行参数。
@@ -37,6 +38,12 @@ public:
     static void printUsage(const std::string& exe);
 
 private:
+    /// 输出模式，区分单次运行与批处理运行。
+    enum class OutputMode {
+        SINGLE,
+        BATCH
+    };
+
     /// 批量评测模式使用的配置快照。
     struct BatchConfig {
         std::string name;
@@ -59,14 +66,22 @@ private:
     /// 从 batch.yaml 中解析批处理配置。
     static BatchConfig loadBatchConfig(const std::filesystem::path& yaml_path);
 
-    /// 解析批处理输出根目录，兼容按 pipeline 名自动展开的写法。
+    /// 解析批处理输出根目录。
     static std::filesystem::path resolveBatchOutputRoot(const BatchConfig& batch,
                                                         const PipelineConfig& pipeline_cfg);
 
+    /// 生成统一的输出目录层级：single|batch / keypoint|structure / pipeline / sample。
+    static std::filesystem::path buildOutputDir(OutputMode mode,
+                                                const std::filesystem::path& base_root,
+                                                const PipelineConfig& cfg,
+                                                const std::string& sample_name);
+
     /// 将逐样本结果写出为 CSV，便于离线统计与复盘。
     static void writeSummaryCsv(const std::filesystem::path& csv_path,
+                                MethodFamily family,
                                 const std::vector<std::string>& sample_names,
-                                const std::vector<RegistrationResult>& results);
+                                const std::vector<RegistrationResult>& results,
+                                const std::vector<EvaluationData>& evaluations);
 };
 
 } // namespace ir

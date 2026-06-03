@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "core/types.h"
 
@@ -7,8 +7,8 @@ namespace ir {
 /// 变换类型枚举，描述当前图像配准模块支持的几何变换。
 enum class TransformType {
     UNKNOWN = 0,
-    PERSPECTIVE, // 3x3 单应矩阵。
-    AFFINE       // 2x3 仿射矩阵。
+    PERSPECTIVE,
+    AFFINE,
 };
 
 /// 将几何模型类型映射为变换类型。

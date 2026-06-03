@@ -9,7 +9,7 @@ type: BF
 
 params:
   # MATCH / KNN / RADIUS
-  method: knn
+  method: match
 
   # L2 / L1 / HAMMING / HAMMING2 / AUTO
   norm_type: AUTO

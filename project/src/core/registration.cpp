@@ -1,6 +1,6 @@
-ï»¿#include "core/registration.h"
+#include "core/registration.h"
 
-#include "pipeline/feature_pipeline.h"
+#include "pipeline/keypoint_pipeline.h"
 #include "pipeline/structure_pipeline.h"
 #include "utils/logger.h"
 
@@ -9,7 +9,7 @@ namespace ir {
 Registration::Registration(std::shared_ptr<IPipeline> pipeline) : _pipeline(std::move(pipeline)) {}
 
 std::string Registration::name() const {
-    // åç§°è§£æä¼˜å…ˆå°Šé‡å¤–éƒ¨é…ç½®ï¼Œå…¶æ¬¡é€€åŒ–ä¸ºåº•å±‚æµæ°´çº¿åï¼Œä¾¿äºæ—¥å¿—ä¿æŒç¨³å®šè¯­ä¹‰ã€‚
+    // Ãû³Æ½âÎöÓÅÏÈ×ğÖØÍâ²¿ÅäÖÃ£¬Æä´ÎÍË»¯Îªµ×²ãÁ÷Ë®ÏßÃû£¬±ãÓÚÈÕÖ¾±£³ÖÎÈ¶¨ÓïÒå¡£
     if (!_cfg.name.empty())
         return _cfg.name;
     if (_pipeline)
@@ -18,13 +18,13 @@ std::string Registration::name() const {
 }
 
 bool Registration::configure(const PipelineConfig& cfg) {
-    // å…è®¸åœ¨æœªæ˜¾å¼æ³¨å…¥æµæ°´çº¿å®ç°æ—¶è‡ªåŠ¨å›é€€åˆ°é»˜è®¤ç‰¹å¾é…å‡†æµæ°´çº¿ã€‚
+    // ÔÊĞíÔÚÎ´ÏÔÊ½×¢ÈëÁ÷Ë®ÏßÊµÏÖÊ±×Ô¶¯»ØÍËµ½Ä¬ÈÏÌØÕ÷Åä×¼Á÷Ë®Ïß¡£
     _cfg = cfg;
     if (!_pipeline) {
         if (!_cfg.structure_path.empty()) {
             _pipeline = std::make_shared<StructurePipeline>();
         } else {
-            _pipeline = std::make_shared<FeaturePipeline>();
+            _pipeline = std::make_shared<KeypointPipeline>();
         }
     }
     if (!_pipeline->configure(_cfg)) {
@@ -35,7 +35,7 @@ bool Registration::configure(const PipelineConfig& cfg) {
 }
 
 bool Registration::run(RegistrationContext& ctx) {
-    // Registration åªæ‰¿æ‹…é¡¶å±‚æ‰§è¡Œå…¥å£èŒè´£ï¼Œå…·ä½“é˜¶æ®µè°ƒåº¦å…¨éƒ¨ä¸‹æ²‰åˆ°æµæ°´çº¿å®ç°ã€‚
+    // Registration Ö»³Ğµ£¶¥²ãÖ´ĞĞÈë¿ÚÖ°Ôğ£¬¾ßÌå½×¶Îµ÷¶ÈÈ«²¿ÏÂ³Áµ½Á÷Ë®ÏßÊµÏÖ¡£
     if (!_pipeline) {
         IR_LOG_ERROR("Registration::run - pipeline not configured.");
         return false;

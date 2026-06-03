@@ -1,4 +1,4 @@
-ï»¿#include "filter/cross_check.h"
+#include "filter/cross_check.h"
 
 #include <opencv2/features2d.hpp>
 #include <unordered_map>
@@ -15,8 +15,8 @@ CrossCheckFilter::CrossCheckFilter(const YAML::Node& cfg) {
 }
 
 bool CrossCheckFilter::apply(RegistrationContext& ctx) {
-    auto& fd = ctx.feature_data;
-    auto& md = ctx.match_data;
+    auto& fd = ctx.keypoint_data;
+    auto& md = ctx.keypoint_match_data;
 
     if (!_enabled) {
         IR_LOG_INFO("CrossCheckFilter disabled - pass-through.");
@@ -36,7 +36,7 @@ bool CrossCheckFilter::apply(RegistrationContext& ctx) {
         return false;
     }
 
-    // åå‘ 1-NN æœç´¢ï¼šäº¤æ¢ä¸¤ä¾§æè¿°å­ã€‚
+    // ·´Ïò 1-NN ËÑË÷£º½»»»Á½²àÃèÊö×Ó¡£
     NormType norm = fd.norm_type;
     if (norm == NormType::UNKNOWN) {
         norm = (fd.first.descriptors.type() == CV_8U) ? NormType::HAMMING : NormType::L2;
@@ -47,18 +47,18 @@ bool CrossCheckFilter::apply(RegistrationContext& ctx) {
     std::vector<cv::DMatch> reverse;
     rev->match(fd.second.descriptors, fd.first.descriptors, reverse);
 
-    // å»ºç«‹åå‘ç´¢å¼•ï¼Œè®°å½•æ¯ä¸ª train æè¿°å­çš„æœ€è¿‘ query æè¿°å­ã€‚
+    // ½¨Á¢·´ÏòË÷Òı£¬¼ÇÂ¼Ã¿¸ö train ÃèÊö×ÓµÄ×î½ü query ÃèÊö×Ó¡£
     std::unordered_map<int, int> reverse_best;
     reverse_best.reserve(reverse.size());
     for (const auto& r : reverse) {
-        // åå‘æœç´¢ä¸­ query æ¥è‡ªç¬¬äºŒå¼ å›¾ï¼Œtrain æ¥è‡ªç¬¬ä¸€å¼ å›¾ã€‚
+        // ·´ÏòËÑË÷ÖĞ query À´×ÔµÚ¶şÕÅÍ¼£¬train À´×ÔµÚÒ»ÕÅÍ¼¡£
         reverse_best[r.queryIdx] = r.trainIdx;
     }
 
     std::vector<cv::DMatch> kept;
     kept.reserve(forward.size());
     for (const auto& m : forward) {
-        // æ­£å‘åŒ¹é…ä¸­ query æ¥è‡ªç¬¬ä¸€å¼ å›¾ï¼Œtrain æ¥è‡ªç¬¬äºŒå¼ å›¾ã€‚
+        // ÕıÏòÆ¥ÅäÖĞ query À´×ÔµÚÒ»ÕÅÍ¼£¬train À´×ÔµÚ¶şÕÅÍ¼¡£
         const auto it = reverse_best.find(m.trainIdx);
         if (it != reverse_best.end() && it->second == m.queryIdx) {
             kept.push_back(m);
@@ -71,3 +71,4 @@ bool CrossCheckFilter::apply(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

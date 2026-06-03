@@ -14,7 +14,7 @@ namespace ir {
 
 namespace {
 
-std::vector<cv::DMatch> collectInputMatches(const MatchData& md) {
+std::vector<cv::DMatch> collectInputMatches(const KeypointMatchData& md) {
     return md.filtered;
 }
 
@@ -37,7 +37,7 @@ MinDistanceFilter::MinDistanceFilter(const YAML::Node& cfg) {
 }
 
 bool MinDistanceFilter::apply(RegistrationContext& ctx) {
-    auto& md = ctx.match_data;
+    auto& md = ctx.keypoint_match_data;
     const std::vector<cv::DMatch> input = collectInputMatches(md);
     if (input.empty()) {
         IR_LOG_WARN("MinDistanceFilter: no matches available to filter.");
@@ -78,3 +78,5 @@ bool MinDistanceFilter::apply(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+
+

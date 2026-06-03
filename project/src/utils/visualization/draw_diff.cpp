@@ -8,7 +8,7 @@ namespace ir {
 
 cv::Mat DrawDiff::render(const RegistrationContext& ctx, const Options& opt) {
     const cv::Mat& warped = ctx.warped_image;
-    const cv::Mat& target = ctx.feature_data.second.image;
+    const cv::Mat& target = ctx.images.second;
 
     if (warped.empty() || target.empty()) {
         IR_LOG_WARN("DrawDiff: warped or target empty.");

@@ -1,6 +1,7 @@
-#include "geometry/similarity_estimator.h"
+﻿#include "geometry/similarity_estimator.h"
 
 #include <opencv2/calib3d.hpp>
+
 #include <string>
 #include <vector>
 
@@ -14,7 +15,7 @@ SimilarityEstimator::SimilarityEstimator(const YAML::Node& cfg) {
     const auto params = cfg["params"];
 
     const std::string method_str = yaml_utils::getString(params, "method", "RANSAC");
-    int m = robustMethodFromString(method_str);
+    const int m = robustMethodFromString(method_str);
     _method = (m < 0) ? cv::RANSAC : m;
 
     _ransacReprojThreshold = yaml_utils::getDouble(params, "ransacReprojThreshold", 3.0);
@@ -38,10 +39,9 @@ SimilarityEstimator::SimilarityEstimator(const YAML::Node& cfg) {
 }
 
 bool SimilarityEstimator::estimate(RegistrationContext& ctx) {
-    auto& md = ctx.match_data;
+    auto& md = ctx.keypoint_match_data;
     auto& gd = ctx.geometry_data;
 
-    // 1. 每次估计前清空旧几何结果，并声明当前模型类型。
     gd.clear();
     gd.type = GeometryType::SIMILARITY;
 
@@ -51,14 +51,15 @@ bool SimilarityEstimator::estimate(RegistrationContext& ctx) {
         return false;
     }
 
-    std::vector<cv::Point2f> pts1, pts2;
+    std::vector<cv::Point2f> pts1;
+    std::vector<cv::Point2f> pts2;
     partial_affine_utils::extractPoints(ctx, pts1, pts2);
 
-    // 2. 相似模型保留旋转、平移和统一缩放，适合处理比例变化但不允许剪切。
-    std::vector<unsigned char> mask;
+    // 相似变换保留旋转、平移和统一缩放，不允许剪切。
+    std::vector<unsigned char> inlier_mask;
     cv::Mat A = cv::estimateAffinePartial2D(pts1,
                                             pts2,
-                                            mask,
+                                            inlier_mask,
                                             _method,
                                             _ransacReprojThreshold,
                                             static_cast<size_t>(_maxIters),
@@ -71,10 +72,9 @@ bool SimilarityEstimator::estimate(RegistrationContext& ctx) {
         return false;
     }
 
-    partial_affine_utils::promoteInliers(ctx, mask);
+    partial_affine_utils::promoteInliers(ctx, inlier_mask);
     const int inliers = static_cast<int>(md.inliers.size());
 
-    // 3. 模型求解成功并不等于质量达标，仍需经过最小内点数门限筛选。
     gd.A = A;
     gd.num_inliers = inliers;
     gd.inlier_ratio = md.filtered.empty() ? 0.0 : static_cast<double>(inliers) / md.filtered.size();

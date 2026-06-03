@@ -1,0 +1,41 @@
+# ---------------------------------------------------------------------------
+# AKAZE 关键点与描述子配置
+# 参数对应 cv::AKAZE::create(...)
+# 注释中的“默认值”指 OpenCV 构造器的默认参数
+# ---------------------------------------------------------------------------
+type: AKAZE
+
+params:
+  # 默认值：5。描述子类型。
+  # 可选：
+  #   2 = DESCRIPTOR_KAZE_UPRIGHT
+  #   3 = DESCRIPTOR_KAZE
+  #   4 = DESCRIPTOR_MLDB_UPRIGHT
+  #   5 = DESCRIPTOR_MLDB
+  descriptor_type: 5
+
+  # 默认值：0。描述子位数；0 表示使用该类型的完整默认长度。
+  descriptor_size: 0
+
+  # 默认值：3。描述子通道数。
+  descriptor_channels: 3
+
+  # 默认值：0.001。关键点响应阈值；越小通常检测到的点越多。
+  threshold: 0.0001
+
+  # 默认值：4。尺度空间 octave 数量。
+  nOctaves: 4
+
+  # 默认值：4。每个 octave 内的层数。
+  nOctaveLayers: 4
+
+  # 默认值：1。扩散类型。
+  # 可选：
+  #   0 = DIFF_PM_G1
+  #   1 = DIFF_PM_G2
+  #   2 = DIFF_WEICKERT
+  #   3 = DIFF_CHARBONNIER
+  diffusivity: 1
+
+# AKAZE 默认常用 MLDB 二值描述子，匹配距离通常使用 HAMMING。
+descriptor_norm: HAMMING

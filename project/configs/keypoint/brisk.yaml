@@ -1,0 +1,19 @@
+# ---------------------------------------------------------------------------
+# BRISK 关键点与描述子配置
+# 参数对应 cv::BRISK::create(thresh, octaves, patternScale)
+# 注释中的“默认值”指 OpenCV 构造器的默认参数
+# ---------------------------------------------------------------------------
+type: BRISK
+
+params:
+  # 默认值：30。AGAST 角点检测阈值。
+  thresh: 30
+
+  # 默认值：3。尺度空间 octave 数量。
+  octaves: 3
+
+  # 默认值：1.0。描述子采样图样的缩放比例。
+  patternScale: 1.0
+
+# BRISK 使用二值描述子，匹配距离通常使用 HAMMING。
+descriptor_norm: HAMMING

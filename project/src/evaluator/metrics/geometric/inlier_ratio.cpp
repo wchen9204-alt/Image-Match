@@ -5,8 +5,8 @@ namespace ir {
 MetricResult InlierRatioMetric::compute(const RegistrationContext& ctx, const Sample& /*sample*/) {
     MetricResult r{name(), 0.0, false, ""};
 
-    const int filtered = static_cast<int>(ctx.match_data.filtered.size());
-    const int inliers = static_cast<int>(ctx.match_data.inliers.size());
+    const int filtered = static_cast<int>(ctx.keypoint_match_data.filtered.size());
+    const int inliers = static_cast<int>(ctx.keypoint_match_data.inliers.size());
 
     if (filtered <= 0) {
         r.note = "no filtered matches";
@@ -18,3 +18,4 @@ MetricResult InlierRatioMetric::compute(const RegistrationContext& ctx, const Sa
 }
 
 } // namespace ir
+

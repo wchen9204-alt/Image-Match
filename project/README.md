@@ -1,4 +1,4 @@
-# Image Registration Framework
+﻿# Image Registration Framework
 
 A modular, OpenCV-based feature registration playground for Windows + VSCode + CMake. The first slice covers the six classic point-feature methods (SIFT, SURF, ORB, BRISK, KAZE, AKAZE), full BFMatcher with norm auto-routing, RatioTest + CrossCheck filters, and the four staple geometric estimators (Homography, Affine2D, Rigid2D, Similarity2D), wrapped in a YAML-driven pipeline.
 
@@ -8,28 +8,28 @@ The architecture is intentionally interface-first so later phases (line / region
 
 ```
 project/
-├── CMakeLists.txt              modern CMake, OpenCV + yaml-cpp
-├── main.cpp                    thin entry point -> RegistrationApp
-├── apps/                       CLI driver (registration_app)
-├── configs/                    YAML for every component & pipeline
-│   ├── feature/                sift / surf / orb / brisk / kaze / akaze
-│   ├── matcher/                bf
-│   ├── filter/                 ratio_test / cross_check
-│   ├── geometry/               homography / affine / rigid / similarity
-│   └── pipeline/               sift_pipeline / orb_pipeline
-├── include/                    public headers
-│   ├── interfaces/             pure-virtual contracts
-│   ├── core/                   types, context, factory, config, result
-│   ├── data/                   FeatureData / MatchData / GeometryData
-│   ├── feature/                concrete extractors
-│   ├── matcher/                BFMatcher
-│   ├── filter/                 RatioTest / CrossCheck
-│   ├── geometry/               Homography / Affine / Rigid / Similarity
-│   ├── transform/              warpers
-│   ├── pipeline/               BasePipeline / FeaturePipeline
-│   └── utils/                  logger / timer / yaml_utils / draw_matches
-├── src/                        implementations mirrored from include/
-└── outputs/                    matches/ and warped/ are written here
+鈹溾攢鈹€ CMakeLists.txt              modern CMake, OpenCV + yaml-cpp
+鈹溾攢鈹€ main.cpp                    thin entry point -> RegistrationApp
+鈹溾攢鈹€ apps/                       CLI driver (registration_app)
+鈹溾攢鈹€ configs/                    YAML for every component & pipeline
+鈹?  鈹溾攢鈹€ feature/                sift / surf / orb / brisk / kaze / akaze
+鈹?  鈹溾攢鈹€ matcher/                bf
+鈹?  鈹溾攢鈹€ filter/                 ratio_test / cross_check
+鈹?  鈹溾攢鈹€ geometry/               homography / affine / rigid / similarity
+鈹?  鈹斺攢鈹€ pipeline/               sift_pipeline / orb_pipeline
+鈹溾攢鈹€ include/                    public headers
+鈹?  鈹溾攢鈹€ interfaces/             pure-virtual contracts
+鈹?  鈹溾攢鈹€ core/                   types, context, factory, config, result
+鈹?  鈹溾攢鈹€ data/                   KeypointData / KeypointMatchData / StructureMatchData / GeometryData
+鈹?  鈹溾攢鈹€ feature/                concrete extractors
+鈹?  鈹溾攢鈹€ matcher/                BFMatcher
+鈹?  鈹溾攢鈹€ filter/                 RatioTest / CrossCheck
+鈹?  鈹溾攢鈹€ geometry/               Homography / Affine / Rigid / Similarity
+鈹?  鈹溾攢鈹€ transform/              warpers
+鈹?  鈹溾攢鈹€ pipeline/               BasePipeline / KeypointPipeline
+鈹?  鈹斺攢鈹€ utils/                  logger / timer / yaml_utils / draw_matches
+鈹溾攢鈹€ src/                        implementations mirrored from include/
+鈹斺攢鈹€ outputs/                    matches/ and warped/ are written here
 ```
 
 ## Build (Windows / VSCode + CMake Tools)
@@ -71,23 +71,23 @@ The build copies `configs/` next to the produced `registration_app.exe` so the r
 
 ```powershell
 cd build\bin\Release
-.\registration_app.exe configs\pipeline\sift_pipeline.yaml path\to\imgA.jpg path\to\imgB.jpg
+.\registration_app.exe configs\pipeline\keypoint\sift_pipeline.yaml path\to\imgA.jpg path\to\imgB.jpg
 ```
 
 Or rely entirely on the YAML I/O block:
 
 ```powershell
-.\registration_app.exe configs\pipeline\orb_pipeline.yaml
+.\registration_app.exe configs\pipeline\keypoint\orb_pipeline.yaml
 ```
 
 Outputs land in `outputs/matches/` and `outputs/warped/`.
 
 ## Switching feature / geometry method
 
-Edit a pipeline YAML directly. For SIFT, switch the geometric model by modifying the `geometry` line inside `configs/pipeline/sift_pipeline.yaml`:
+Edit a pipeline YAML directly. For SIFT, switch the geometric model by modifying the `geometry` line inside `configs/pipeline/keypoint/sift_pipeline.yaml`:
 
 ```yaml
-feature:  configs/feature/akaze.yaml      # one of: sift, surf, orb, brisk, kaze, akaze
+keypoint: configs/keypoint/akaze.yaml      # one of: sift, surf, orb, brisk, kaze, akaze
 matcher:  configs/matcher/bf.yaml
 filters:
   - configs/filter/ratio_test.yaml
@@ -99,8 +99,9 @@ The `BFMatcher` reads `descriptor_norm` from the active feature YAML, so SIFT/SU
 
 ## Extending
 
-- Add a new extractor: derive from `IFeatureExtractor`, register a string in `Factory::createFeatureExtractor`, drop a YAML in `configs/feature/`.
+- Add a new extractor: derive from `IKeypointExtractor`, register a string in `Factory::createKeypointExtractor`, drop a YAML in `configs/keypoint/`.
 - Add a new filter / matcher / geometry: same recipe against the matching interface and factory branch.
 - Add a new pipeline variant: derive from `BasePipeline` (or implement `IPipeline`) and reuse `Config::loadPipeline`.
 
 The `RegistrationContext` is the single shared mutable state. Every stage receives it by reference and reads/writes the relevant `data/` struct in place, avoiding copy-by-value of large matrices.
+

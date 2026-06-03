@@ -15,7 +15,7 @@ public:
     /// 返回估计器名称。
     std::string name() const override { return "Similarity2D"; }
 
-    /// 返回当前估计器的几何类型。
+    /// 返回当前估计器对应的几何类型。
     GeometryType type() const override { return GeometryType::SIMILARITY; }
 
     /// 估计 2x3 相似变换矩阵并写入上下文。

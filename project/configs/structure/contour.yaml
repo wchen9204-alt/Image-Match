@@ -1,13 +1,51 @@
+# 结构类型可选：EDGE / LINE / CONTOUR。
 type: CONTOUR
 
-params:
-  cannyThreshold1: 50.0
-  cannyThreshold2: 150.0
-  apertureSize: 3
-  minArea: 20.0
-  maxContours: 1000
-  contourThickness: 1
+# 轮廓提取方法。
+# 当前已实现：CANNY_FIND_CONTOURS。
+# 当前已实现的通用结构关联方法：PHASE_CORRELATE / CHAMFER。
+# 后续轮廓关联方法计划支持：HU_MOMENTS / SHAPE_CONTEXT / FOURIER_SHAPE / HAUSDORFF / ICP。
+extractor:
+  # 默认值：CANNY_FIND_CONTOURS。当前流程为 Canny -> findContours。
+  method: CANNY_FIND_CONTOURS
+  params:
+    # 默认值：50.0。Canny 低阈值，用于先提取边缘。
+    cannyThreshold1: 50.0
+    # 默认值：150.0。Canny 高阈值，用于先提取边缘。
+    cannyThreshold2: 150.0
+    # 默认值：3。Canny Sobel 核大小，仅允许 3 / 5 / 7。
+    apertureSize: 3
+    # 默认值：20.0。最小轮廓面积，小于该值的轮廓会被丢弃。
+    minArea: 20.0
+    # 默认值：1000。最多保留的轮廓数量，<=0 表示不限制。
+    maxContours: 1000
+    # 默认值：1。将轮廓绘制回结构响应图时的线宽。
+    contourThickness: 1
+
+# 兼容说明：
+# 当前 ContourExtractor 仍接收旧的顶层 params 布局；
+# 新配置建议使用 extractor.method 和 extractor.params。
+association:
+  # 默认值：PHASE_CORRELATE。可选：PHASE_CORRELATE / CHAMFER。
+  method: PHASE_CORRELATE
+  params:
+    phase_correlate:
+      # 默认值：0.01。响应阈值，低于该值时认为关联不可靠。
+      responseThreshold: 0.01
+      # 默认值：5。phaseCorrelate 前使用的高斯模糊核大小。
+      phaseBlurKernel: 5
+    chamfer:
+      # 默认值：20。平移搜索半径。
+      searchRadius: 20
+      # 默认值：1。平移搜索步长。
+      step: 1
+      # 默认值：2000。最多采样的结构点数量。
+      maxPoints: 2000
+      # 默认值：0.25。平均距离阈值，低于该值时认为关联有效。
+      scoreThreshold: 0.25
+      # 默认值：true。是否同时计算正向和反向平均距离。
+      bidirectional: true
 
 estimation:
+  # 默认值：0.01。结构匹配结果的有效性阈值；当前平移模型直接复用关联结果。
   responseThreshold: 0.01
-  phaseBlurKernel: 5

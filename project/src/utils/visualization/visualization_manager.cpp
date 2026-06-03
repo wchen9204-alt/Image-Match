@@ -1,6 +1,7 @@
-#include "utils/visualization/visualization_manager.h"
+﻿#include "utils/visualization/visualization_manager.h"
 
 #include <filesystem>
+
 #include <opencv2/imgcodecs.hpp>
 
 #include "utils/file_utils.h"
@@ -18,8 +19,9 @@ namespace {
 
 // 统一封装落盘动作，避免各输出分支重复处理目录创建与空图保护。
 bool writeImage(const fs::path& path, const cv::Mat& img) {
-    if (img.empty())
+    if (img.empty()) {
         return false;
+    }
     file_utils::ensureDirectory(path.parent_path());
     return cv::imwrite(path.string(), img);
 }
@@ -37,56 +39,62 @@ bool VisualizationManager::saveAll(const RegistrationContext& ctx,
                                    const std::string& stem,
                                    const Options& opt) const {
     // 输出根目录和文件名前缀缺一不可，否则无法维持批处理结果的稳定组织结构。
-    if (output_root.empty() || stem.empty())
+    if (output_root.empty() || stem.empty()) {
         return false;
+    }
 
     if (opt.draw_matches) {
         // 匹配图保留全局对应关系，适合作为第一层人工诊断材料。
-        DrawMatches::Options m;
-        m.draw_inliers_only = false;
-        m.max_matches = opt.max_matches;
-        const cv::Mat img = DrawMatches::render(ctx, m);
-        const fs::path p = output_root / "matches" / (stem + "_matches.png");
-        if (writeImage(p, img))
-            IR_LOG_INFO("Saved ", p.string());
+        DrawMatches::Options match_opt;
+        match_opt.draw_inliers_only = false;
+        match_opt.max_matches = opt.max_matches;
+        const cv::Mat img = DrawMatches::render(ctx, match_opt);
+        const fs::path path = output_root / "all_match" / (stem + "_all_match.png");
+        if (writeImage(path, img)) {
+            IR_LOG_INFO("Saved ", path.string());
+        }
     }
 
-    if (opt.draw_inliers && !ctx.match_data.inliers.empty()) {
+    if (opt.draw_inliers && !ctx.keypoint_match_data.inliers.empty()) {
         // 内点图只展示几何模型接受的匹配，用于检查鲁棒估计质量。
-        DrawInliers::Options m;
-        m.max_inliers = opt.max_inliers;
-        m.draw_outliers = false;
-        const cv::Mat img = DrawInliers::render(ctx, m);
-        const fs::path p = output_root / "inliers" / (stem + "_inliers.png");
-        if (writeImage(p, img))
-            IR_LOG_INFO("Saved ", p.string());
+        DrawInliers::Options inlier_opt;
+        inlier_opt.max_inliers = opt.max_inliers;
+        inlier_opt.draw_outliers = false;
+        const cv::Mat img = DrawInliers::render(ctx, inlier_opt);
+        const fs::path path = output_root / "inlier_match" / (stem + "_inlier_match.png");
+        if (writeImage(path, img)) {
+            IR_LOG_INFO("Saved ", path.string());
+        }
     }
 
     if (opt.save_warped && !ctx.warped_image.empty()) {
         // 变换后图像是后续叠加图、差异图和图像指标计算的直接输入。
-        const fs::path p = output_root / "warped" / (stem + "_warped.png");
-        if (writeImage(p, ctx.warped_image))
-            IR_LOG_INFO("Saved ", p.string());
+        const fs::path path = output_root / "warped" / (stem + "_warped.png");
+        if (writeImage(path, ctx.warped_image)) {
+            IR_LOG_INFO("Saved ", path.string());
+        }
     }
 
     if (opt.draw_overlay && !ctx.warped_image.empty()) {
         // 叠加图适合快速观察结构是否对齐，但不强调误差大小。
-        DrawOverlay::Options m;
-        m.alpha = 0.5;
-        const cv::Mat img = DrawOverlay::render(ctx, m);
-        const fs::path p = output_root / "overlay" / (stem + "_overlay.png");
-        if (writeImage(p, img))
-            IR_LOG_INFO("Saved ", p.string());
+        DrawOverlay::Options overlay_opt;
+        overlay_opt.alpha = 0.5;
+        const cv::Mat img = DrawOverlay::render(ctx, overlay_opt);
+        const fs::path path = output_root / "overlay" / (stem + "_overlay.png");
+        if (writeImage(path, img)) {
+            IR_LOG_INFO("Saved ", path.string());
+        }
     }
 
     if (opt.draw_diff && !ctx.warped_image.empty()) {
-        // 差异图更强调局部残差分布，适合作为配准误差的直观补充。
-        DrawDiff::Options m;
-        m.heatmap = true;
-        const cv::Mat img = DrawDiff::render(ctx, m);
-        const fs::path p = output_root / "diff" / (stem + "_diff.png");
-        if (writeImage(p, img))
-            IR_LOG_INFO("Saved ", p.string());
+        // 差异图更强调局部残差分布，适合作为配准误差的直觉补充。
+        DrawDiff::Options diff_opt;
+        diff_opt.heatmap = true;
+        const cv::Mat img = DrawDiff::render(ctx, diff_opt);
+        const fs::path path = output_root / "diff" / (stem + "_diff.png");
+        if (writeImage(path, img)) {
+            IR_LOG_INFO("Saved ", path.string());
+        }
     }
 
     return true;

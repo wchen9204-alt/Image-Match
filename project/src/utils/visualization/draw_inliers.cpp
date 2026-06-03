@@ -1,6 +1,8 @@
-#include "utils/visualization/draw_inliers.h"
+﻿#include "utils/visualization/draw_inliers.h"
 
 #include <algorithm>
+#include <vector>
+
 #include <opencv2/features2d.hpp>
 
 #include "utils/logger.h"
@@ -8,15 +10,16 @@
 namespace ir {
 
 cv::Mat DrawInliers::render(const RegistrationContext& ctx, const Options& opt) {
-    const auto& fd = ctx.feature_data;
-    const auto& md = ctx.match_data;
+    const auto& fd = ctx.keypoint_data;
+    const auto& images = ctx.images;
+    const auto& md = ctx.keypoint_match_data;
 
-    if (fd.first.image.empty() || fd.second.image.empty()) {
+    if (images.first.empty() || images.second.empty()) {
         IR_LOG_WARN("DrawInliers: empty source images.");
         return {};
     }
-    if (md.inliers.empty() && md.filtered.empty()) {
-        IR_LOG_WARN("DrawInliers: no matches available.");
+    if (md.inliers.empty()) {
+        IR_LOG_WARN("DrawInliers: no inlier matches available.");
         return {};
     }
 
@@ -27,12 +30,14 @@ cv::Mat DrawInliers::render(const RegistrationContext& ctx, const Options& opt) 
         std::vector<cv::DMatch> outliers;
         outliers.reserve(md.filtered.size());
         for (size_t i = 0; i < md.filtered.size() && i < md.inlier_mask.size(); ++i) {
-            if (!md.inlier_mask[i])
+            if (!md.inlier_mask[i]) {
                 outliers.push_back(md.filtered[i]);
+            }
         }
-        cv::drawMatches(fd.first.image,
+
+        cv::drawMatches(images.first,
                         fd.first.keypoints,
-                        fd.second.image,
+                        images.second,
                         fd.second.keypoints,
                         outliers,
                         canvas,
@@ -45,18 +50,19 @@ cv::Mat DrawInliers::render(const RegistrationContext& ctx, const Options& opt) 
     std::vector<cv::DMatch> inliers = md.inliers;
     if (opt.max_inliers > 0 && static_cast<int>(inliers.size()) > opt.max_inliers) {
         // 内点数量过多时优先保留距离更小的匹配，避免可视化过于拥挤。
-        std::partial_sort(
-            inliers.begin(),
-            inliers.begin() + opt.max_inliers,
-            inliers.end(),
-            [](const cv::DMatch& a, const cv::DMatch& b) { return a.distance < b.distance; });
+        std::partial_sort(inliers.begin(),
+                          inliers.begin() + opt.max_inliers,
+                          inliers.end(),
+                          [](const cv::DMatch& a, const cv::DMatch& b) {
+                              return a.distance < b.distance;
+                          });
         inliers.resize(opt.max_inliers);
     }
 
     cv::Mat overlay;
-    cv::drawMatches(fd.first.image,
+    cv::drawMatches(images.first,
                     fd.first.keypoints,
-                    fd.second.image,
+                    images.second,
                     fd.second.keypoints,
                     inliers,
                     overlay,

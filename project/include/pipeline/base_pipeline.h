@@ -24,8 +24,11 @@ public:
     /// 执行完整配准流程，结果统一写入 `RegistrationContext`。
     bool run(RegistrationContext& ctx) override;
 
+    /// 按配置弹出调试窗口，便于交互式观察结果。
+    bool showWindows(RegistrationContext& ctx) override;
+
 protected:
-    /// 子类清空上一次配置产生的阶段组件。
+    /// 子类清空上一轮配置创建的阶段组件。
     virtual void resetStages() {}
 
     /// 子类根据配置创建本方法族需要的阶段组件。
@@ -46,11 +49,11 @@ protected:
     /// 在几何模型有效时生成配准后的图像结果。
     virtual bool runWarp(RegistrationContext& ctx);
 
+    /// 校验 warped source 与 target 的前景重合质量。
+    virtual bool validateWarpQuality(RegistrationContext& ctx);
+
     /// 保存通用输出，子类可扩展自己的阶段可视化。
     virtual bool saveOutputs(RegistrationContext& ctx);
-
-    /// 按配置弹出调试窗口，便于交互式观察结果。
-    virtual bool showWindows(RegistrationContext& ctx);
 
     /// 生成通用输出文件名前缀，子类可加入算法标签。
     virtual std::string buildOutputStem(const RegistrationContext& ctx) const;

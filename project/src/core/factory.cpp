@@ -1,21 +1,29 @@
 #include "core/factory.h"
 
+#include <algorithm>
+#include <cctype>
 #include <stdexcept>
 #include <string>
 
-#include "feature/akaze_extractor.h"
-#include "feature/brisk_extractor.h"
-#include "feature/kaze_extractor.h"
-#include "feature/orb_extractor.h"
-#include "feature/sift_extractor.h"
-#include "feature/surf_extractor.h"
+#include "keypoint/akaze_extractor.h"
+#include "keypoint/brisk_extractor.h"
+#include "keypoint/kaze_extractor.h"
+#include "keypoint/orb_extractor.h"
+#include "keypoint/sift_extractor.h"
+#include "keypoint/surf_extractor.h"
+
+#include "matcher/keypoint/bf_matcher.h"
+#include "matcher/keypoint/flann_matcher.h"
+#include "matcher/structure/chamfer_associator.h"
+#include "matcher/structure/hausdorff_associator.h"
+#include "matcher/structure/icp_associator.h"
+#include "matcher/structure/line_descriptor_associator.h"
+#include "matcher/structure/line_segment_associator.h"
+#include "matcher/structure/phase_correlate_associator.h"
 
 #include "structure/contour_extractor.h"
 #include "structure/edge_extractor.h"
 #include "structure/line_extractor.h"
-
-#include "matcher/bf_matcher.h"
-#include "matcher/flann_matcher.h"
 
 #include "filter/cross_check.h"
 #include "filter/distance_distribution_filter.h"
@@ -36,38 +44,56 @@ namespace ir {
 
 namespace {
 
-// 工厂统一从 `type` 字段分发具体实现，保持各模块 YAML 结构一致。
+// 工厂统一从 `type` 或 `method` 字段分发具体实现，保持各模块 YAML 结构一致。
 std::string typeOf(const YAML::Node& cfg) {
-    return yaml_utils::getString(cfg, "type", "");
+    const std::string type = yaml_utils::getString(cfg, "type", "");
+    if (!type.empty()) {
+        return type;
+    }
+    return yaml_utils::getString(cfg, "method", "");
+}
+
+// 将 YAML 中的方法名归一化为只含大写字母/数字的 key。
+// 这样 PHASE_CORRELATE / PhaseCorrelate / phase_correlate 可走同一分支。
+std::string methodKey(const std::string& value) {
+    std::string out;
+    out.reserve(value.size());
+    for (unsigned char c : value) {
+        if (std::isalnum(c)) {
+            out.push_back(static_cast<char>(std::toupper(c)));
+        }
+    }
+    return out;
 }
 
 } // namespace
 
-std::shared_ptr<IFeatureExtractor> Factory::createFeatureExtractor(const YAML::Node& cfg) {
+std::shared_ptr<IKeypointExtractor> Factory::createKeypointExtractor(const YAML::Node& cfg) {
     const std::string t = typeOf(cfg);
-    const FeatureType ft = featureTypeFromString(t);
-    // 特征提取器通过统一枚举做一次标准化，降低 YAML 别名差异。
+    const KeypointType ft = keypointTypeFromString(t);
+
     switch (ft) {
-    case FeatureType::SIFT:
+    case KeypointType::SIFT:
         return std::make_shared<SiftExtractor>(cfg);
-    case FeatureType::SURF:
+    case KeypointType::SURF:
         return std::make_shared<SurfExtractor>(cfg);
-    case FeatureType::ORB:
+    case KeypointType::ORB:
         return std::make_shared<OrbExtractor>(cfg);
-    case FeatureType::BRISK:
+    case KeypointType::BRISK:
         return std::make_shared<BriskExtractor>(cfg);
-    case FeatureType::KAZE:
+    case KeypointType::KAZE:
         return std::make_shared<KazeExtractor>(cfg);
-    case FeatureType::AKAZE:
+    case KeypointType::AKAZE:
         return std::make_shared<AkazeExtractor>(cfg);
     default:
-        throw std::runtime_error("Factory: unknown feature extractor type: " + t);
+        throw std::runtime_error("Factory: unknown keypoint extractor type: " + t);
     }
 }
 
 std::shared_ptr<IStructureExtractor> Factory::createStructureExtractor(const YAML::Node& cfg) {
     const std::string t = typeOf(cfg);
     const StructureType st = structureTypeFromString(t);
+
     switch (st) {
     case StructureType::EDGE:
         return std::make_shared<EdgeExtractor>(cfg);
@@ -80,9 +106,49 @@ std::shared_ptr<IStructureExtractor> Factory::createStructureExtractor(const YAM
     }
 }
 
+std::shared_ptr<IStructureAssociator> Factory::createStructureAssociator(const YAML::Node& cfg) {
+    const YAML::Node assoc_cfg = cfg["association"] ? cfg["association"] : cfg;
+    const std::string t = typeOf(assoc_cfg);
+    const std::string key = methodKey(t);
+    const YAML::Node all_params = assoc_cfg["params"];
+
+    if (key == "PHASECORRELATE") {
+        const YAML::Node params =
+            all_params && all_params["phase_correlate"] ? all_params["phase_correlate"]
+                                                         : assoc_cfg;
+        return std::make_shared<PhaseCorrelateAssociator>(params);
+    }
+    if (key == "CHAMFER") {
+        const YAML::Node params =
+            all_params && all_params["chamfer"] ? all_params["chamfer"] : assoc_cfg;
+        return std::make_shared<ChamferAssociator>(params);
+    }
+    if (key == "HAUSDORFF") {
+        const YAML::Node params =
+            all_params && all_params["hausdorff"] ? all_params["hausdorff"] : assoc_cfg;
+        return std::make_shared<HausdorffAssociator>(params);
+    }
+    if (key == "ICP") {
+        const YAML::Node params = all_params && all_params["icp"] ? all_params["icp"] : assoc_cfg;
+        return std::make_shared<IcpAssociator>(params);
+    }
+    if (key == "LINESEGMENT" || key == "LINESEGMENTS" || key == "LINESEGMENTMATCH") {
+        const YAML::Node params =
+            all_params && all_params["line_segment"] ? all_params["line_segment"] : assoc_cfg;
+        return std::make_shared<LineSegmentAssociator>(params);
+    }
+    if (key == "LINEDESCRIPTOR" || key == "LINEDESCRIPTORS" || key == "LBD") {
+        const YAML::Node params =
+            all_params && all_params["line_descriptor"] ? all_params["line_descriptor"]
+                                                         : assoc_cfg;
+        return std::make_shared<LineDescriptorAssociator>(params);
+    }
+    throw std::runtime_error("Factory: unknown structure associator type: " + t);
+}
+
 std::shared_ptr<IMatcher> Factory::createMatcher(const YAML::Node& cfg) {
     const std::string t = typeOf(cfg);
-    // 匹配器保留字符串别名兼容，便于与 OpenCV / 旧配置命名对齐。
+
     if (t == "BF" || t == "BFMatcher" || t == "BRUTE_FORCE") {
         return std::make_shared<BfMatcher>(cfg);
     }
@@ -94,7 +160,7 @@ std::shared_ptr<IMatcher> Factory::createMatcher(const YAML::Node& cfg) {
 
 std::shared_ptr<IFilter> Factory::createFilter(const YAML::Node& cfg) {
     const std::string t = typeOf(cfg);
-    // 过滤器链按声明顺序运行，因此这里仅负责单个过滤器实例化。
+
     if (t == "RATIO_TEST" || t == "RatioTest") {
         return std::make_shared<RatioTestFilter>(cfg);
     }
@@ -119,7 +185,7 @@ std::shared_ptr<IFilter> Factory::createFilter(const YAML::Node& cfg) {
 std::shared_ptr<IGeometryEstimator> Factory::createGeometryEstimator(const YAML::Node& cfg) {
     const std::string t = typeOf(cfg);
     const GeometryType gt = geometryTypeFromString(t);
-    // 几何估计器通过枚举映射统一管理，避免调用方关心具体类名。
+
     switch (gt) {
     case GeometryType::HOMOGRAPHY:
         return std::make_shared<HomographyEstimator>(cfg);

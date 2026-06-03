@@ -4,33 +4,37 @@
 
 #include <yaml-cpp/yaml.h>
 
-#include "interfaces/i_feature_extractor.h"
+#include "interfaces/i_keypoint_extractor.h"
 #include "interfaces/i_filter.h"
 #include "interfaces/i_geometry_estimator.h"
 #include "interfaces/i_matcher.h"
+#include "interfaces/i_structure_associator.h"
 #include "interfaces/i_structure_extractor.h"
 
 namespace ir {
 
-/// æ ¹æ® YAML é…ç½®åˆ›å»ºå…·ä½“çš„é…å‡†ç»„ä»¶ã€‚
+/// ¸ù¾İ YAML ÅäÖÃ´´½¨¾ßÌåµÄÅä×¼×é¼ş¡£
 ///
-/// Factory ç»Ÿä¸€ç®¡ç† YAML ä¸­ `type` å­—æ®µåˆ°å…·ä½“å®ç°çš„æ˜ å°„ï¼ŒåŒ…æ‹¬ç‚¹ç‰¹å¾æå–å™¨ã€
-/// ç»“æ„ç‰¹å¾æå–å™¨ã€åŒ¹é…å™¨ã€è¿‡æ»¤å™¨ä»¥åŠå‡ ä½•ä¼°è®¡å™¨ã€‚
+/// Factory Í³Ò»¹ÜÀí YAML ÖĞ `type` »ò `method` ×Ö¶Îµ½¾ßÌåÊµÏÖµÄÓ³Éä£¬
+/// °üÀ¨µãÌØÕ÷ÌáÈ¡Æ÷¡¢½á¹¹ÌØÕ÷ÌáÈ¡Æ÷¡¢½á¹¹¹ØÁªÆ÷¡¢Æ¥ÅäÆ÷¡¢¹ıÂËÆ÷ÒÔ¼°¼¸ºÎ¹À¼ÆÆ÷¡£
 class Factory {
 public:
-    /// åˆ›å»ºç‚¹ç‰¹å¾æå–å™¨ï¼Œä¾‹å¦‚ SIFTã€SURFã€ORBã€BRISKã€KAZE æˆ– AKAZEã€‚
-    static std::shared_ptr<IFeatureExtractor> createFeatureExtractor(const YAML::Node& cfg);
+    /// ´´½¨µãÌØÕ÷ÌáÈ¡Æ÷£¬ÀıÈç SIFT¡¢SURF¡¢ORB¡¢BRISK¡¢KAZE »ò AKAZE¡£
+    static std::shared_ptr<IKeypointExtractor> createKeypointExtractor(const YAML::Node& cfg);
 
-    /// åˆ›å»ºç»“æ„ç‰¹å¾æå–å™¨ï¼Œä¾‹å¦‚è¾¹ç¼˜ã€ç›´çº¿æˆ–è½®å»“ã€‚
+    /// ´´½¨½á¹¹ÌØÕ÷ÌáÈ¡Æ÷£¬ÀıÈç±ßÔµ¡¢Ö±Ïß»òÂÖÀªÌáÈ¡Æ÷¡£
     static std::shared_ptr<IStructureExtractor> createStructureExtractor(const YAML::Node& cfg);
 
-    /// åˆ›å»ºæè¿°å­åŒ¹é…å™¨ï¼Œä¾‹å¦‚ BFMatcher æˆ– FlannMatcherã€‚
+    /// ´´½¨½á¹¹¹ØÁª/Æ¥ÅäÆ÷£¬ÀıÈç PHASE_CORRELATE »ò CHAMFER¡£
+    static std::shared_ptr<IStructureAssociator> createStructureAssociator(const YAML::Node& cfg);
+
+    /// ´´½¨ÃèÊö×ÓÆ¥ÅäÆ÷£¬ÀıÈç BFMatcher »ò FlannMatcher¡£
     static std::shared_ptr<IMatcher> createMatcher(const YAML::Node& cfg);
 
-    /// åˆ›å»ºåŒ¹é…è¿‡æ»¤å™¨ï¼Œä¾‹å¦‚ ratio testã€cross-check æˆ– GMSã€‚
+    /// ´´½¨Æ¥Åä¹ıÂËÆ÷£¬ÀıÈç ratio test¡¢cross-check »ò GMS¡£
     static std::shared_ptr<IFilter> createFilter(const YAML::Node& cfg);
 
-    /// åˆ›å»ºå‡ ä½•ä¼°è®¡å™¨ï¼Œä¾‹å¦‚å•åº”ã€ä»¿å°„ã€åˆšä½“æˆ–ç›¸ä¼¼å˜æ¢ä¼°è®¡å™¨ã€‚
+    /// ´´½¨¼¸ºÎ¹À¼ÆÆ÷£¬ÀıÈçµ¥Ó¦¡¢·ÂÉä¡¢¸ÕÌå»òÏàËÆ±ä»»¹À¼ÆÆ÷¡£
     static std::shared_ptr<IGeometryEstimator> createGeometryEstimator(const YAML::Node& cfg);
 };
 

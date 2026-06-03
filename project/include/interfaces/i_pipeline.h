@@ -22,6 +22,9 @@ public:
 
     /// 执行完整的配准流程。
     virtual bool run(RegistrationContext& ctx) = 0;
+
+    /// 按配置显示调试窗口，便于在运行后观察结果。
+    virtual bool showWindows(RegistrationContext& ctx) = 0;
 };
 
 } // namespace ir

@@ -22,7 +22,7 @@ std::string toUpperAscii(std::string s) {
     return s;
 }
 
-std::vector<cv::DMatch> collectInputMatches(const MatchData& md) {
+std::vector<cv::DMatch> collectInputMatches(const KeypointMatchData& md) {
     return md.filtered;
 }
 
@@ -74,7 +74,7 @@ DistanceDistributionFilter::DistanceDistributionFilter(const YAML::Node& cfg) {
 }
 
 bool DistanceDistributionFilter::apply(RegistrationContext& ctx) {
-    auto& md = ctx.match_data;
+    auto& md = ctx.keypoint_match_data;
     const std::vector<cv::DMatch> input = collectInputMatches(md);
     if (input.empty()) {
         IR_LOG_WARN("DistanceDistributionFilter: no matches available to filter.");
@@ -124,3 +124,5 @@ bool DistanceDistributionFilter::apply(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+
+

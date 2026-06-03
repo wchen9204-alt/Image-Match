@@ -15,8 +15,11 @@ class IStructureExtractor {
 public:
     virtual ~IStructureExtractor() = default;
 
-    /// 返回提取器名称，用于日志、输出文件名和调试摘要。
+    /// 返回提取器名称，用于日志、摘要和通用输出命名。
     virtual std::string name() const = 0;
+
+    /// 返回更细粒度的输出标签；默认使用提取器名，具体实现可加入算子名等信息。
+    virtual std::string outputLabel() const { return name(); }
 
     /// 返回当前提取器对应的结构特征类型。
     virtual StructureType type() const = 0;

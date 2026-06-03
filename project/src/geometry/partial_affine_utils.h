@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <cmath>
 #include <string>
@@ -11,12 +11,12 @@
 
 namespace ir::partial_affine_utils {
 
-/// 从过滤后的匹配集中提取两组对应点，供相似/刚体估计复用。
+/// 从过滤后的匹配集合中提取两组对应点，供相似/刚体估计复用。
 inline void extractPoints(const RegistrationContext& ctx,
                           std::vector<cv::Point2f>& pts1,
                           std::vector<cv::Point2f>& pts2) {
-    const auto& fd = ctx.feature_data;
-    const auto& md = ctx.match_data;
+    const auto& fd = ctx.keypoint_data;
+    const auto& md = ctx.keypoint_match_data;
     pts1.clear();
     pts2.clear();
     pts1.reserve(md.filtered.size());
@@ -29,13 +29,14 @@ inline void extractPoints(const RegistrationContext& ctx,
 
 /// 将内点掩码回写到上下文，统一维护 `inlier_mask` 与 `inliers` 两份结果。
 inline void promoteInliers(RegistrationContext& ctx, const std::vector<unsigned char>& mask) {
-    auto& md = ctx.match_data;
+    auto& md = ctx.keypoint_match_data;
     md.inlier_mask = mask;
     md.inliers.clear();
     md.inliers.reserve(mask.size());
     for (size_t i = 0; i < md.filtered.size() && i < mask.size(); ++i) {
-        if (mask[i])
+        if (mask[i]) {
             md.inliers.push_back(md.filtered[i]);
+        }
     }
 }
 
@@ -43,8 +44,9 @@ inline void promoteInliers(RegistrationContext& ctx, const std::vector<unsigned 
 inline bool estimateRigid2D(const std::vector<cv::Point2f>& src,
                             const std::vector<cv::Point2f>& dst,
                             cv::Mat& A) {
-    if (src.size() != dst.size() || src.size() < 2)
+    if (src.size() != dst.size() || src.size() < 2) {
         return false;
+    }
 
     cv::Point2d c1(0.0, 0.0);
     cv::Point2d c2(0.0, 0.0);
@@ -94,8 +96,9 @@ inline std::vector<unsigned char> maskByReprojection(const std::vector<cv::Point
                                                      const cv::Mat& A,
                                                      double threshold) {
     std::vector<unsigned char> mask(src.size(), 0);
-    if (src.size() != dst.size() || A.empty())
+    if (src.size() != dst.size() || A.empty()) {
         return mask;
+    }
 
     const double thr2 = threshold * threshold;
     for (size_t i = 0; i < src.size(); ++i) {

@@ -19,7 +19,7 @@ int normalizeAperture(int value) {
 }
 
 bool extractContoursForImage(const cv::Mat& gray,
-                             cv::Mat& mask,
+                             cv::Mat& response,
                              std::vector<std::vector<cv::Point>>& contours,
                              double cannyThreshold1,
                              double cannyThreshold2,
@@ -49,15 +49,16 @@ bool extractContoursForImage(const cv::Mat& gray,
         }
     }
 
-    mask = cv::Mat::zeros(gray.size(), CV_8U);
-    cv::drawContours(mask, contours, -1, cv::Scalar(255), contourThickness);
+    response = cv::Mat::zeros(gray.size(), CV_8U);
+    cv::drawContours(response, contours, -1, cv::Scalar(255), contourThickness);
     return !contours.empty();
 }
 
 } // namespace
 
 ContourExtractor::ContourExtractor(const YAML::Node& cfg) {
-    const auto params = cfg["params"];
+    const YAML::Node extractor = cfg["extractor"];
+    const YAML::Node params = extractor && extractor["params"] ? extractor["params"] : cfg["params"];
     _cannyThreshold1 = yaml_utils::getDouble(params, "cannyThreshold1", 50.0);
     _cannyThreshold2 = yaml_utils::getDouble(params, "cannyThreshold2", 150.0);
     _apertureSize = normalizeAperture(yaml_utils::getInt(params, "apertureSize", 3));
@@ -75,17 +76,17 @@ ContourExtractor::ContourExtractor(const YAML::Node& cfg) {
 
 bool ContourExtractor::extract(RegistrationContext& ctx) {
     auto& sd = ctx.structure_data;
-    const auto& fd = ctx.feature_data;
+    const auto& images = ctx.images;
 
-    if (fd.first.gray.empty() || fd.second.gray.empty()) {
+    if (images.first_gray.empty() || images.second_gray.empty()) {
         IR_LOG_ERROR("ContourExtractor: input grayscale images are empty.");
         return false;
     }
 
     sd.clear();
     sd.type = StructureType::CONTOUR;
-    const bool ok1 = extractContoursForImage(fd.first.gray,
-                                             sd.first.mask,
+    const bool ok1 = extractContoursForImage(images.first_gray,
+                                             sd.first.response,
                                              sd.first.contours,
                                              _cannyThreshold1,
                                              _cannyThreshold2,
@@ -93,8 +94,8 @@ bool ContourExtractor::extract(RegistrationContext& ctx) {
                                              _minArea,
                                              _maxContours,
                                              _contourThickness);
-    const bool ok2 = extractContoursForImage(fd.second.gray,
-                                             sd.second.mask,
+    const bool ok2 = extractContoursForImage(images.second_gray,
+                                             sd.second.response,
                                              sd.second.contours,
                                              _cannyThreshold1,
                                              _cannyThreshold2,

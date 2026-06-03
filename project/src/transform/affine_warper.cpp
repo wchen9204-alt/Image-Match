@@ -7,10 +7,10 @@
 namespace ir {
 
 bool AffineWarper::warp(RegistrationContext& ctx) {
-    const auto& fd = ctx.feature_data;
+    const auto& images = ctx.images;
     const auto& gd = ctx.geometry_data;
 
-    if (fd.first.image.empty() || fd.second.image.empty()) {
+    if (images.first.empty() || images.second.empty()) {
         IR_LOG_ERROR("AffineWarper: source images empty.");
         return false;
     }
@@ -33,10 +33,10 @@ bool AffineWarper::warp(RegistrationContext& ctx) {
         return false;
     }
 
-    cv::warpAffine(fd.first.image,
+    cv::warpAffine(images.first,
                    ctx.warped_image,
                    A,
-                   fd.second.image.size(),
+                   images.second.size(),
                    cv::INTER_LINEAR,
                    cv::BORDER_CONSTANT,
                    cv::Scalar::all(0));

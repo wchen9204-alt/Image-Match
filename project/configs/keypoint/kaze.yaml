@@ -1,0 +1,35 @@
+# ---------------------------------------------------------------------------
+# KAZE 关键点与描述子配置
+# 参数对应 cv::KAZE::create(...)
+# 注释中的“默认值”指 OpenCV 构造器的默认参数
+# ---------------------------------------------------------------------------
+type: KAZE
+
+params:
+  # 默认值：false。是否输出扩展描述子：
+  # false 时通常为 64 维，true 时通常为 128 维。
+  extended: false
+
+  # 默认值：false。是否使用 upright 描述子；
+  # true 时不具备旋转不变性，但速度通常更快。
+  upright: false
+
+  # 默认值：0.001。关键点响应阈值；越小通常检测到的点越多。
+  threshold: 0.001
+
+  # 默认值：4。尺度空间 octave 数量。
+  nOctaves: 4
+
+  # 默认值：4。每个 octave 内的层数。
+  nOctaveLayers: 4
+
+  # 默认值：1。扩散类型。
+  # 可选：
+  #   0 = DIFF_PM_G1
+  #   1 = DIFF_PM_G2
+  #   2 = DIFF_WEICKERT
+  #   3 = DIFF_CHARBONNIER
+  diffusivity: 1
+
+# KAZE 使用浮点描述子，匹配距离通常使用 L2。
+descriptor_norm: L2

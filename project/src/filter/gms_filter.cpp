@@ -1,4 +1,4 @@
-ï»¿#include "filter/gms_filter.h"
+#include "filter/gms_filter.h"
 
 #include <opencv2/xfeatures2d.hpp>
 
@@ -22,10 +22,11 @@ GmsFilter::GmsFilter(const YAML::Node& cfg) {
 }
 
 bool GmsFilter::apply(RegistrationContext& ctx) {
-    const auto& fd = ctx.feature_data;
-    auto& md = ctx.match_data;
+    const auto& fd = ctx.keypoint_data;
+    const auto& images = ctx.images;
+    auto& md = ctx.keypoint_match_data;
 
-    if (fd.first.image.empty() || fd.second.image.empty()) {
+    if (images.first.empty() || images.second.empty()) {
         IR_LOG_ERROR("GMS: source images empty.");
         return false;
     }
@@ -36,10 +37,10 @@ bool GmsFilter::apply(RegistrationContext& ctx) {
         return false;
     }
 
-    // GMS åˆ©ç”¨ç½‘æ ¼ç»Ÿè®¡çº¦æŸè¿‡æ»¤å±€éƒ¨ä¸ä¸€è‡´åŒ¹é…ï¼Œé€‚åˆå¤§è§„æ¨¡ç¨ å¯†å€™é€‰åœºæ™¯ã€‚
+    // GMS ÀûÓÃÍø¸ñÍ³¼ÆÔ¼Êø¹ıÂË¾Ö²¿²»Ò»ÖÂÆ¥Åä£¬ÊÊºÏ´ó¹æÄ£³íÃÜºòÑ¡³¡¾°¡£
     std::vector<cv::DMatch> kept;
-    cv::xfeatures2d::matchGMS(fd.first.image.size(),
-                              fd.second.image.size(),
+    cv::xfeatures2d::matchGMS(images.first.size(),
+                              images.second.size(),
                               fd.first.keypoints,
                               fd.second.keypoints,
                               input,
@@ -54,3 +55,4 @@ bool GmsFilter::apply(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <cstdint>
 #include <string>
@@ -7,14 +7,14 @@
 
 namespace ir {
 
-/// 点特征提取器类型，对应 `feature/*.yaml` 中的 `type` 配置。
-enum class FeatureType { UNKNOWN = 0, SIFT, SURF, ORB, BRISK, KAZE, AKAZE };
+/// 点特征提取器类型，对应 `keypoint/*.yaml` 中的 `type` 配置。
+enum class KeypointType { UNKNOWN = 0, SIFT, SURF, ORB, BRISK, KAZE, AKAZE };
 
 /// 将点特征类型转换为字符串。
-std::string toString(FeatureType t);
+std::string toString(KeypointType t);
 
 /// 从字符串解析点特征类型。
-FeatureType featureTypeFromString(const std::string& s);
+KeypointType keypointTypeFromString(const std::string& s);
 
 /// 结构特征类型，对应 `structure/*.yaml` 中的 `type` 配置。
 enum class StructureType { UNKNOWN = 0, EDGE, LINE, CONTOUR };

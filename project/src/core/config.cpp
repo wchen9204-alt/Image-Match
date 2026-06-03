@@ -1,4 +1,4 @@
-#include "core/config.h"
+﻿#include "core/config.h"
 
 #include <fstream>
 #include <stdexcept>
@@ -30,19 +30,16 @@ fs::path Config::resolvePath(const fs::path& base_dir, const std::string& relati
     if (p.is_absolute() && fs::exists(p))
         return p;
 
-    // 候选 1：优先相对于 pipeline 文件所在目录解析，适配配置随工程移动的场景。
     if (!base_dir.empty()) {
         fs::path c1 = base_dir / p;
         if (fs::exists(c1))
             return fs::weakly_canonical(c1);
     }
 
-    // 候选 2：再退回当前工作目录，兼容从仓库根目录直接启动可执行程序。
     fs::path c2 = fs::current_path() / p;
     if (fs::exists(c2))
         return fs::weakly_canonical(c2);
 
-    // 候选 3：从 base_dir 逐级向上查找，适配从 build/bin 等子目录启动的情况。
     fs::path walk = base_dir;
     for (int i = 0; i < 4 && !walk.empty(); ++i) {
         fs::path c3 = walk / p;
@@ -54,7 +51,6 @@ fs::path Config::resolvePath(const fs::path& base_dir, const std::string& relati
             break;
     }
 
-    // 最后返回基于 base_dir 的规范化路径，允许输出目录等目标稍后再创建。
     if (!base_dir.empty())
         return fs::weakly_canonical(base_dir / p);
     return fs::weakly_canonical(c2);
@@ -67,8 +63,10 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
     PipelineConfig cfg;
     cfg.name = yaml_utils::getString(node, "name", path.stem().string());
 
-    // 子模块 YAML 统一在这里解析，调用方只消费已经展开好的绝对或规范化路径。
-    cfg.feature_path = resolvePath(base, yaml_utils::getString(node, "feature"));
+    // 兼容旧的 `feature` 键，同时优先支持新的 `keypoint` 键。
+    const std::string keypoint_entry = yaml_utils::getString(
+        node, "keypoint", yaml_utils::getString(node, "feature"));
+    cfg.keypoint_path = resolvePath(base, keypoint_entry);
     cfg.structure_path = resolvePath(base, yaml_utils::getString(node, "structure"));
     cfg.matcher_path = resolvePath(base, yaml_utils::getString(node, "matcher"));
     cfg.geometry_path = resolvePath(base, yaml_utils::getString(node, "geometry"));
@@ -80,7 +78,6 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
         }
     }
 
-    // 输入输出路径集中挂在 `io` 节点下，便于命令行层进行统一覆盖。
     if (node["io"] && node["io"].IsMap()) {
         const auto& io = node["io"];
         cfg.image1_path = resolvePath(base, yaml_utils::getString(io, "image1"));
@@ -88,12 +85,11 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
         cfg.output_dir = resolvePath(base, yaml_utils::getString(io, "output_dir", "outputs"));
     }
 
-    // 可视化开关只影响展示与落盘，不改变配准主流程的算法行为。
     if (node["visualization"] && node["visualization"].IsMap()) {
         const auto& vis = node["visualization"];
         cfg.draw_keypoints = yaml_utils::getBool(vis, "draw_keypoints", false);
         cfg.draw_matches = yaml_utils::getBool(vis, "draw_matches", true);
-        cfg.draw_inliers_only = yaml_utils::getBool(vis, "draw_inliers_only", true);
+        cfg.draw_inliers_only = yaml_utils::getBool(vis, "draw_inliers_only", false);
         cfg.max_matches_drawn = yaml_utils::getInt(vis, "max_matches_drawn", 100);
         cfg.warp = yaml_utils::getBool(vis, "warp", true);
         cfg.show_source_window = yaml_utils::getBool(vis, "show_source_window", false);
@@ -102,8 +98,17 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
         cfg.wait_key = yaml_utils::getInt(vis, "wait_key", 0);
     }
 
+    if (node["validation"] && node["validation"].IsMap()) {
+        const auto& validation = node["validation"];
+        const auto& overlap = validation["warp_overlap"];
+        cfg.validate_warp_overlap = yaml_utils::getBool(overlap, "enabled", false);
+        cfg.min_warp_overlap_iou = yaml_utils::getDouble(overlap, "min_iou", 0.20);
+        cfg.warp_overlap_foreground_threshold =
+            yaml_utils::getInt(overlap, "foreground_threshold", 10);
+    }
+
     IR_LOG_INFO("Pipeline '", cfg.name, "' loaded from ", path.string());
-    IR_LOG_INFO("  feature  : ", cfg.feature_path.string());
+    IR_LOG_INFO("  keypoint : ", cfg.keypoint_path.string());
     IR_LOG_INFO("  structure: ", cfg.structure_path.string());
     IR_LOG_INFO("  matcher  : ", cfg.matcher_path.string());
     for (const auto& f : cfg.filter_paths) {

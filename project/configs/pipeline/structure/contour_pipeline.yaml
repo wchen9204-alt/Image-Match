@@ -1,0 +1,24 @@
+﻿# ---------------------------------------------------------------------------
+# 轮廓结构配准流水线配置
+# 当前文件用于组织基于轮廓结构的配准流程。
+# ---------------------------------------------------------------------------
+name: contour_pipeline
+
+# 支持的结构方法：
+# edge / line / contour
+structure: ../../structure/contour.yaml
+
+io:
+  image1: ../../../datasets/test1/source.png
+  image2: ../../../datasets/test1/target.png
+  output_dir: ../../../outputs
+
+visualization:
+  draw_matches: false
+  draw_inliers_only: true
+  max_matches_drawn: 100
+  warp: true
+  show_source_window: false
+  show_target_window: false
+  show_warped_window: false
+  wait_key: 0

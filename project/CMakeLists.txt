@@ -35,11 +35,20 @@ find_package(OpenCV CONFIG REQUIRED
         highgui
         features2d
         xfeatures2d
+        ximgproc
         imgcodecs
         flann
         calib3d
+        video
+    OPTIONAL_COMPONENTS
+        line_descriptor
 )
 message(STATUS "OpenCV version: ${OpenCV_VERSION}")
+if(OpenCV_line_descriptor_FOUND)
+    message(STATUS "OpenCV line_descriptor module: FOUND")
+else()
+    message(STATUS "OpenCV line_descriptor module: NOT FOUND")
+endif()
 
 # ---------------------------------------------------------------------------
 # yaml-cpp configuration
@@ -82,6 +91,10 @@ target_link_libraries(ir_core
 )
 
 target_compile_features(ir_core PUBLIC cxx_std_17)
+
+if(OpenCV_line_descriptor_FOUND)
+    target_compile_definitions(ir_core PUBLIC IR_HAS_OPENCV_LINE_DESCRIPTOR=1)
+endif()
 
 # ---------------------------------------------------------------------------
 # Application executable

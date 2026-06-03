@@ -1,7 +1,11 @@
 #include "pipeline/structure_pipeline.h"
 
+#include <algorithm>
+#include <cmath>
 #include <filesystem>
+#include <limits>
 #include <string>
+#include <vector>
 
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
@@ -18,86 +22,376 @@ namespace ir {
 
 namespace {
 
-// 将结构响应图转换为相位相关估计可用的浮点图，并用轻微模糊降低稀疏噪声影响。
-bool preparePhaseImage(const cv::Mat& mask, cv::Mat& out, int blurKernel) {
-    // 1. 空响应图无法参与相位相关估计，直接判定失败。
-    if (mask.empty()) {
-        return false;
+// 将任意输入图像转为 BGR，便于在统一画布上叠加彩色结构连线。
+cv::Mat toBgr(const cv::Mat& image) {
+    if (image.empty()) {
+        return {};
+    }
+    if (image.channels() == 1) {
+        cv::Mat bgr;
+        cv::cvtColor(image, bgr, cv::COLOR_GRAY2BGR);
+        return bgr;
+    }
+    if (image.channels() == 4) {
+        cv::Mat bgr;
+        cv::cvtColor(image, bgr, cv::COLOR_BGRA2BGR);
+        return bgr;
+    }
+    return image.clone();
+}
+
+// 从结构响应图中收集非零点，作为结构匹配连线可视化的候选点。
+std::vector<cv::Point> collectResponsePoints(const cv::Mat& response) {
+    std::vector<cv::Point> points;
+    if (response.empty()) {
+        return points;
     }
 
-    // 2. 保证输入为单通道灰度响应图。
-    cv::Mat src;
-    if (mask.channels() == 1) {
-        src = mask;
+    cv::Mat gray;
+    if (response.channels() == 1) {
+        gray = response;
     } else {
-        cv::cvtColor(mask, src, cv::COLOR_BGR2GRAY);
+        cv::cvtColor(response, gray, cv::COLOR_BGR2GRAY);
     }
 
-    // 3. 全黑结构图没有可对齐信息，也直接判定失败。
-    if (cv::countNonZero(src) == 0) {
+    cv::Mat binary;
+    cv::threshold(gray, binary, 0.0, 255.0, cv::THRESH_BINARY);
+    if (binary.depth() != CV_8U) {
+        binary.convertTo(binary, CV_8U);
+    }
+    cv::findNonZero(binary, points);
+    return points;
+}
+
+// 在 target 响应图的局部窗口内寻找距离投影点最近的结构点。
+bool nearestResponsePoint(const cv::Mat& response,
+                          const cv::Point& center,
+                          int radius,
+                          cv::Point& nearest) {
+    if (response.empty()) {
         return false;
     }
 
-    // 4. 转为归一化浮点图，并按配置做轻微平滑。
-    src.convertTo(out, CV_32F, 1.0 / 255.0);
-    if (blurKernel >= 3) {
-        if (blurKernel % 2 == 0) {
-            ++blurKernel;
+    const int x0 = std::max(0, center.x - radius);
+    const int y0 = std::max(0, center.y - radius);
+    const int x1 = std::min(response.cols - 1, center.x + radius);
+    const int y1 = std::min(response.rows - 1, center.y + radius);
+    if (x0 > x1 || y0 > y1) {
+        return false;
+    }
+
+    // 局部邻域线性扫描足够直观，也避免为可视化阶段引入额外索引结构。
+    double bestDist2 = std::numeric_limits<double>::infinity();
+    bool found = false;
+    for (int y = y0; y <= y1; ++y) {
+        const uchar* row = response.ptr<uchar>(y);
+        for (int x = x0; x <= x1; ++x) {
+            if (row[x] == 0) {
+                continue;
+            }
+            const double dx = static_cast<double>(x - center.x);
+            const double dy = static_cast<double>(y - center.y);
+            const double d2 = dx * dx + dy * dy;
+            if (d2 < bestDist2) {
+                bestDist2 = d2;
+                nearest = cv::Point(x, y);
+                found = true;
+            }
         }
-        cv::GaussianBlur(out, out, cv::Size(blurKernel, blurKernel), 0.0);
+    }
+    return found;
+}
+
+// 渲染结构匹配连线图：
+// 1. 左右拼接 source / target 原图；
+// 2. 从 source 结构响应点中均匀抽样；
+// 3. 根据结构匹配得到的平移量投影到 target；
+// 4. 在投影点附近寻找最近 target 响应点并绘制连线。
+cv::Point lineMidpoint(const cv::Vec4i& line) {
+    return cv::Point((line[0] + line[2]) / 2, (line[1] + line[3]) / 2);
+}
+
+cv::Point2d applyAffinePoint(const cv::Mat& A, const cv::Point2d& p) {
+    return {A.at<double>(0, 0) * p.x + A.at<double>(0, 1) * p.y + A.at<double>(0, 2),
+            A.at<double>(1, 0) * p.x + A.at<double>(1, 1) * p.y + A.at<double>(1, 2)};
+}
+
+cv::Point2f linePoint1(const cv::Vec4i& line) {
+    return {static_cast<float>(line[0]), static_cast<float>(line[1])};
+}
+
+cv::Point2f linePoint2(const cv::Vec4i& line) {
+    return {static_cast<float>(line[2]), static_cast<float>(line[3])};
+}
+
+bool sameLineDirection(const cv::Vec4i& srcLine, const cv::Vec4i& dstLine) {
+    const cv::Point2f sv = linePoint2(srcLine) - linePoint1(srcLine);
+    const cv::Point2f dv = linePoint2(dstLine) - linePoint1(dstLine);
+    return sv.x * dv.x + sv.y * dv.y >= 0.0f;
+}
+
+bool prepareLineEndpointMatches(RegistrationContext& ctx) {
+    auto& md = ctx.structure_match_data;
+    const auto& srcLines = ctx.structure_data.first.lines;
+    const auto& dstLines = ctx.structure_data.second.lines;
+
+    ctx.keypoint_data.clear();
+    ctx.keypoint_match_data.clear();
+
+    if (md.line_matches.empty()) {
+        md.message = "no line matches for geometry estimation";
+        return false;
+    }
+
+    for (size_t lineMatchIdx = 0; lineMatchIdx < md.line_matches.size(); ++lineMatchIdx) {
+        const cv::DMatch& lm = md.line_matches[lineMatchIdx];
+        if (lm.queryIdx < 0 || lm.trainIdx < 0 ||
+            lm.queryIdx >= static_cast<int>(srcLines.size()) ||
+            lm.trainIdx >= static_cast<int>(dstLines.size())) {
+            continue;
+        }
+
+        const cv::Vec4i& srcLine = srcLines[static_cast<size_t>(lm.queryIdx)];
+        const cv::Vec4i& dstLine = dstLines[static_cast<size_t>(lm.trainIdx)];
+        const cv::Point2f sp1 = linePoint1(srcLine);
+        const cv::Point2f sp2 = linePoint2(srcLine);
+        cv::Point2f dp1 = linePoint1(dstLine);
+        cv::Point2f dp2 = linePoint2(dstLine);
+        if (!sameLineDirection(srcLine, dstLine)) {
+            std::swap(dp1, dp2);
+        }
+
+        const int srcBase = static_cast<int>(ctx.keypoint_data.first.keypoints.size());
+        const int dstBase = static_cast<int>(ctx.keypoint_data.second.keypoints.size());
+        ctx.keypoint_data.first.keypoints.emplace_back(sp1, 1.0f);
+        ctx.keypoint_data.first.keypoints.emplace_back(sp2, 1.0f);
+        ctx.keypoint_data.second.keypoints.emplace_back(dp1, 1.0f);
+        ctx.keypoint_data.second.keypoints.emplace_back(dp2, 1.0f);
+
+        ctx.keypoint_match_data.filtered.emplace_back(srcBase, dstBase, lm.distance);
+        ctx.keypoint_match_data.filtered.back().imgIdx = static_cast<int>(lineMatchIdx);
+        ctx.keypoint_match_data.filtered.emplace_back(srcBase + 1, dstBase + 1, lm.distance);
+        ctx.keypoint_match_data.filtered.back().imgIdx = static_cast<int>(lineMatchIdx);
+    }
+
+    if (ctx.keypoint_match_data.filtered.empty()) {
+        md.message = "no valid endpoint matches converted from line matches";
+        return false;
     }
     return true;
+}
+
+void promoteLineInliersFromEndpointMatches(RegistrationContext& ctx) {
+    const auto& endpointInliers = ctx.keypoint_match_data.inliers;
+    auto& md = ctx.structure_match_data;
+
+    std::vector<int> endpointCounts(md.line_matches.size(), 0);
+    for (const auto& m : endpointInliers) {
+        if (m.imgIdx >= 0 && m.imgIdx < static_cast<int>(endpointCounts.size())) {
+            ++endpointCounts[static_cast<size_t>(m.imgIdx)];
+        }
+    }
+
+    md.inlier_line_matches.clear();
+    for (size_t i = 0; i < endpointCounts.size(); ++i) {
+        if (endpointCounts[i] >= 2) {
+            md.inlier_line_matches.push_back(md.line_matches[i]);
+        }
+    }
+    md.score = md.line_matches.empty()
+                   ? 0.0
+                   : static_cast<double>(md.inlier_line_matches.size()) /
+                         static_cast<double>(md.line_matches.size());
+}
+
+cv::Mat renderLineSegmentMatches(const RegistrationContext& ctx,
+                                 const std::vector<cv::DMatch>& matches,
+                                 int maxMatches) {
+    if (matches.empty() || ctx.images.first.empty() || ctx.images.second.empty() ||
+        ctx.structure_data.first.lines.empty() || ctx.structure_data.second.lines.empty()) {
+        return {};
+    }
+
+    cv::Mat src = toBgr(ctx.images.first);
+    cv::Mat dst = toBgr(ctx.images.second);
+    if (src.empty() || dst.empty()) {
+        return {};
+    }
+
+    const int canvasRows = std::max(src.rows, dst.rows);
+    const int canvasCols = src.cols + dst.cols;
+    cv::Mat canvas(canvasRows, canvasCols, src.type(), cv::Scalar::all(0));
+    src.copyTo(canvas(cv::Rect(0, 0, src.cols, src.rows)));
+    dst.copyTo(canvas(cv::Rect(src.cols, 0, dst.cols, dst.rows)));
+
+    std::vector<cv::DMatch> draw = matches;
+    if (maxMatches > 0 && static_cast<int>(draw.size()) > maxMatches) {
+        std::partial_sort(draw.begin(),
+                          draw.begin() + maxMatches,
+                          draw.end(),
+                          [](const cv::DMatch& a, const cv::DMatch& b) {
+                              return a.distance < b.distance;
+                          });
+        draw.resize(maxMatches);
+    }
+
+    int drawn = 0;
+    for (const auto& m : draw) {
+        if (m.queryIdx < 0 || m.trainIdx < 0 ||
+            m.queryIdx >= static_cast<int>(ctx.structure_data.first.lines.size()) ||
+            m.trainIdx >= static_cast<int>(ctx.structure_data.second.lines.size())) {
+            continue;
+        }
+
+        const cv::Vec4i srcLine = ctx.structure_data.first.lines[static_cast<size_t>(m.queryIdx)];
+        const cv::Vec4i dstLine = ctx.structure_data.second.lines[static_cast<size_t>(m.trainIdx)];
+        const cv::Point dstMidRaw = lineMidpoint(dstLine);
+
+        const cv::Point srcP1(srcLine[0], srcLine[1]);
+        const cv::Point srcP2(srcLine[2], srcLine[3]);
+        const cv::Point dstP1(dstLine[0] + src.cols, dstLine[1]);
+        const cv::Point dstP2(dstLine[2] + src.cols, dstLine[3]);
+        const cv::Point srcMid = lineMidpoint(srcLine);
+        const cv::Point dstMid(dstMidRaw.x + src.cols, dstMidRaw.y);
+
+        const cv::Scalar srcColor(0, 180, 255);
+        const cv::Scalar dstColor(0, 255, 0);
+        const cv::Scalar matchColor(255, 180, 0);
+        cv::line(canvas, srcP1, srcP2, srcColor, 2, cv::LINE_AA);
+        cv::line(canvas, dstP1, dstP2, dstColor, 2, cv::LINE_AA);
+        cv::line(canvas, srcMid, dstMid, matchColor, 1, cv::LINE_AA);
+        cv::circle(canvas, srcMid, 2, srcColor, cv::FILLED, cv::LINE_AA);
+        cv::circle(canvas, dstMid, 2, dstColor, cv::FILLED, cv::LINE_AA);
+        ++drawn;
+    }
+
+    return drawn > 0 ? canvas : cv::Mat{};
+}
+
+cv::Mat renderStructureMatches(const RegistrationContext& ctx, int maxMatches) {
+    if (!ctx.structure_match_data.valid || ctx.images.first.empty() || ctx.images.second.empty() ||
+        ctx.structure_data.first.response.empty() || ctx.structure_data.second.response.empty()) {
+        return {};
+    }
+
+    cv::Mat src = toBgr(ctx.images.first);
+    cv::Mat dst = toBgr(ctx.images.second);
+    if (src.empty() || dst.empty()) {
+        return {};
+    }
+
+    cv::Mat dstResponseGray;
+    if (ctx.structure_data.second.response.channels() == 1) {
+        dstResponseGray = ctx.structure_data.second.response;
+    } else {
+        cv::cvtColor(ctx.structure_data.second.response, dstResponseGray, cv::COLOR_BGR2GRAY);
+    }
+    cv::Mat dstResponse;
+    cv::threshold(dstResponseGray, dstResponse, 0.0, 255.0, cv::THRESH_BINARY);
+    if (dstResponse.depth() != CV_8U) {
+        dstResponse.convertTo(dstResponse, CV_8U);
+    }
+
+    const std::vector<cv::Point> srcPoints =
+        collectResponsePoints(ctx.structure_data.first.response);
+    if (srcPoints.empty() || cv::countNonZero(dstResponse) == 0) {
+        return {};
+    }
+
+    // 左右拼接原图，保持和 keypoint drawMatches 类似的视觉布局。
+    const int canvasRows = std::max(src.rows, dst.rows);
+    const int canvasCols = src.cols + dst.cols;
+    cv::Mat canvas(canvasRows, canvasCols, src.type(), cv::Scalar::all(0));
+    src.copyTo(canvas(cv::Rect(0, 0, src.cols, src.rows)));
+    dst.copyTo(canvas(cv::Rect(src.cols, 0, dst.cols, dst.rows)));
+
+    const int limit = maxMatches > 0 ? maxMatches : 100;
+    const int candidateCount = std::max(limit * 20, limit);
+    const int stride =
+        std::max(1, static_cast<int>(srcPoints.size()) / std::max(1, candidateCount));
+    const int searchRadius = 10;
+    const cv::Point2d shift = ctx.structure_match_data.translation;
+    const cv::Mat& affine = ctx.structure_match_data.affine;
+    const bool hasAffine = !affine.empty() && affine.rows == 2 && affine.cols == 3 &&
+                           affine.type() == CV_64F;
+
+    // 均匀抽样 source 响应点，避免边缘点过密导致连线图不可读。
+    int drawn = 0;
+    for (size_t i = 0; i < srcPoints.size() && drawn < limit; i += static_cast<size_t>(stride)) {
+        const cv::Point& p = srcPoints[i];
+        const cv::Point2d projectedFloat =
+            hasAffine ? applyAffinePoint(affine, cv::Point2d(p)) : cv::Point2d(p) + shift;
+        const cv::Point projected(cvRound(projectedFloat.x), cvRound(projectedFloat.y));
+        if (projected.x < 0 || projected.y < 0 || projected.x >= dst.cols ||
+            projected.y >= dst.rows) {
+            continue;
+        }
+
+        cv::Point q;
+        if (!nearestResponsePoint(dstResponse, projected, searchRadius, q)) {
+            continue;
+        }
+
+        const cv::Point pCanvas = p;
+        const cv::Point qCanvas(q.x + src.cols, q.y);
+        const cv::Scalar color(0, 255, 255);
+        cv::line(canvas, pCanvas, qCanvas, color, 1, cv::LINE_AA);
+        cv::circle(canvas, pCanvas, 2, cv::Scalar(0, 180, 255), cv::FILLED, cv::LINE_AA);
+        cv::circle(canvas, qCanvas, 2, cv::Scalar(0, 255, 0), cv::FILLED, cv::LINE_AA);
+        ++drawn;
+    }
+
+    return drawn > 0 ? canvas : cv::Mat{};
 }
 
 } // namespace
 
 void StructurePipeline::resetStages() {
-    // 1. 释放结构提取器，避免下一次 configure 复用旧配置。
     _extractor.reset();
-
-    // 2. 恢复结构估计参数默认值。
-    _responseThreshold = 0.01;
-    _phaseBlurKernel = 5;
+    _associator.reset();
+    _geometry.reset();
 }
 
 bool StructurePipeline::configureStages(const PipelineConfig& cfg) {
-    // 1. 结构法必须提供 structure 子配置，否则无法确定使用边缘、直线还是轮廓。
+    // 1. 检查 structure YAML 路径，结构流水线依赖同一份配置创建提取器和关联器。
     if (cfg.structure_path.empty()) {
         IR_LOG_ERROR("StructurePipeline: missing structure config path.");
         return false;
     }
-
-    // 2. 加载 structure YAML，并根据 type 创建具体结构提取器。
+    // 2. 读取结构配置，并创建结构提取器、结构匹配器与通用几何估计器。
     const YAML::Node structureCfg = Config::load(cfg.structure_path);
     _extractor = Factory::createStructureExtractor(structureCfg);
+    _associator = Factory::createStructureAssociator(structureCfg);
+    if (!cfg.geometry_path.empty()) {
+        _geometry = Factory::createGeometryEstimator(Config::load(cfg.geometry_path));
+    } else {
+        IR_LOG_WARN("StructurePipeline: missing geometry config path; falling back to "
+                    "association transform when available.");
+    }
 
-    // 3. 读取结构响应图估计阶段的通用参数。
-    const YAML::Node estimation = structureCfg["estimation"];
-    _responseThreshold = yaml_utils::getDouble(estimation, "responseThreshold", 0.01);
-    _phaseBlurKernel = yaml_utils::getInt(estimation, "phaseBlurKernel", 5);
-
+    // 3. 输出当前结构方法组合，方便批量实验时核对配置是否生效。
     IR_LOG_INFO("StructurePipeline stages configured: extractor=",
                 _extractor->name(),
-                ", responseThreshold=",
-                _responseThreshold,
-                ", phaseBlurKernel=",
-                _phaseBlurKernel);
+                ", associator=",
+                _associator->name(),
+                ", geometry=",
+                (_geometry ? _geometry->name() : std::string("NONE")));
     return true;
 }
 
 bool StructurePipeline::runExtraction(RegistrationContext& ctx) {
     ScopedTimer st(ctx.result.t_extract_ms);
 
-    // 1. 检查结构提取器是否已由 configureStages 成功装配。
+    // 1. 检查结构提取器是否已经由 configureStages 创建。
     if (!_extractor) {
         IR_LOG_ERROR("StructurePipeline::runExtraction: no structure extractor configured.");
         return false;
     }
 
-    // 2. 调用具体结构提取器，结果写入 ctx.structure_data。
+    // 2. 执行结构响应提取，结果写入 ctx.structure_data。
     const bool ok = _extractor->extract(ctx);
 
-    // 3. 按结构类型统计数量，供终端摘要和汇总表使用。
+    // 3. 按当前结构类型统计 source / target 的结构数量。
     ctx.result.num_structures_first =
         ctx.structure_data.first.primitiveCount(ctx.structure_data.type);
     ctx.result.num_structures_second =
@@ -108,102 +402,181 @@ bool StructurePipeline::runExtraction(RegistrationContext& ctx) {
 bool StructurePipeline::runAssociation(RegistrationContext& ctx) {
     ScopedTimer st(ctx.result.t_match_ms);
 
-    // 1. 结构响应图为空时，后续估计没有任何输入依据。
+    // 1. 检查结构匹配器和结构响应数据是否可用。
+    if (!_associator) {
+        IR_LOG_ERROR("StructurePipeline::runAssociation: no structure associator configured.");
+        return false;
+    }
     if (ctx.structure_data.empty()) {
         IR_LOG_ERROR("StructurePipeline::runAssociation: structure data is empty.");
         return false;
     }
 
-    // 2. 当前最小可运行版本直接使用稠密结构响应图做估计，因此这里不再单独构造匹配器。
-    ctx.result.num_raw_matches = 0;
-    ctx.result.num_filtered_matches = 0;
-    return true;
+    // 2. 执行结构匹配，匹配器负责写入平移量、得分和有效性标记。
+    const bool ok = _associator->associate(ctx);
+
+    // 3. 结构法当前输出整体匹配结果，因此摘要中按 0/1 记录匹配是否成功。
+    if (!ctx.structure_match_data.line_matches.empty() ||
+        !ctx.structure_match_data.inlier_line_matches.empty()) {
+        ctx.result.num_raw_matches =
+            static_cast<int>(ctx.structure_match_data.line_matches.size());
+        ctx.result.num_filtered_matches =
+            static_cast<int>(ctx.structure_match_data.inlier_line_matches.size());
+    } else {
+        ctx.result.num_raw_matches = ok ? 1 : 0;
+        ctx.result.num_filtered_matches = ok ? 1 : 0;
+    }
+    return ok;
 }
 
 bool StructurePipeline::runEstimation(RegistrationContext& ctx) {
     ScopedTimer st(ctx.result.t_geometry_ms);
 
-    // 1. 将两张结构响应图转换为相位相关估计需要的浮点图。
-    cv::Mat src;
-    cv::Mat dst;
-    if (!preparePhaseImage(ctx.structure_data.first.mask, src, _phaseBlurKernel) ||
-        !preparePhaseImage(ctx.structure_data.second.mask, dst, _phaseBlurKernel)) {
-        ctx.geometry_data.message = "structure masks are empty";
-        IR_LOG_ERROR("StructurePipeline::runEstimation: structure masks are empty.");
-        return false;
-    }
-
-    // 2. 当前平移估计要求两张结构图尺寸一致。
-    if (src.size() != dst.size()) {
-        ctx.geometry_data.message = "structure masks have different sizes";
-        IR_LOG_ERROR("StructurePipeline::runEstimation: structure masks have different sizes.");
-        return false;
-    }
-
-    // 3. 使用相位相关估计平移量和响应强度。
-    double response = 0.0;
-    const cv::Point2d shift = cv::phaseCorrelate(src, dst, cv::noArray(), &response);
-
-    // 4. 将平移写成 2x3 仿射矩阵，复用后续通用 warp 流程。
+    // 1. 初始化几何结果；结构匹配结果会转成点对后交给通用 geometry estimator。
     auto& gd = ctx.geometry_data;
     gd.clear();
-    gd.type = GeometryType::AFFINE;
-    gd.A = (cv::Mat_<double>(2, 3) << 1.0, 0.0, shift.x, 0.0, 1.0, shift.y);
-    gd.num_inliers = ctx.result.num_structures_first;
-    gd.inlier_ratio = response;
-    gd.valid = response >= _responseThreshold;
 
-    // 5. 同步总结果统计字段，并在响应不足时记录失败原因。
-    ctx.result.num_inliers = gd.num_inliers;
-    ctx.result.inlier_ratio = gd.inlier_ratio;
-    if (!gd.valid) {
-        gd.message = "phase correlation response below threshold: " + std::to_string(response);
-        IR_LOG_WARN("StructurePipeline rejected transform: ", gd.message);
+    // 2. 检查结构匹配是否给出了有效结果，无效时保留失败原因。
+    if (!ctx.structure_match_data.valid) {
+        gd.message = ctx.structure_match_data.message.empty()
+                         ? "structure match result is invalid"
+                         : ctx.structure_match_data.message;
+        IR_LOG_WARN("StructurePipeline::runEstimation: ", gd.message);
+        return false;
     }
 
-    IR_LOG_INFO("StructurePipeline estimated translation dx=",
-                shift.x,
+    // 3. 线段匹配展开为端点点对，然后复用点特征几何估计器。
+    if (_geometry && !ctx.structure_match_data.line_matches.empty()) {
+        if (!prepareLineEndpointMatches(ctx)) {
+            gd.message = ctx.structure_match_data.message.empty()
+                             ? "failed to prepare endpoint matches"
+                             : ctx.structure_match_data.message;
+            IR_LOG_WARN("StructurePipeline::runEstimation: ", gd.message);
+            return false;
+        }
+
+        const bool ok = _geometry->estimate(ctx);
+        promoteLineInliersFromEndpointMatches(ctx);
+
+        ctx.structure_match_data.affine =
+            (ctx.geometry_data.A.empty() ? cv::Mat{} : ctx.geometry_data.A.clone());
+        if (!ctx.geometry_data.A.empty()) {
+            ctx.structure_match_data.translation =
+                {ctx.geometry_data.A.at<double>(0, 2), ctx.geometry_data.A.at<double>(1, 2)};
+        } else if (!ctx.geometry_data.H.empty()) {
+            ctx.structure_match_data.translation =
+                {ctx.geometry_data.H.at<double>(0, 2) / ctx.geometry_data.H.at<double>(2, 2),
+                 ctx.geometry_data.H.at<double>(1, 2) / ctx.geometry_data.H.at<double>(2, 2)};
+        }
+
+        ctx.result.num_inliers = static_cast<int>(ctx.structure_match_data.inlier_line_matches.size());
+        ctx.result.num_filtered_matches = ctx.result.num_inliers;
+        ctx.result.inlier_ratio = ctx.structure_match_data.score;
+        if (!ok) {
+            ctx.structure_match_data.message = ctx.geometry_data.message;
+            return false;
+        }
+
+        IR_LOG_INFO("StructurePipeline geometry estimated by ",
+                    _geometry->name(),
+                    ", endpoint_inliers=",
+                    ctx.keypoint_match_data.inliers.size(),
+                    ", line_inliers=",
+                    ctx.structure_match_data.inlier_line_matches.size(),
+                    ", score=",
+                    ctx.structure_match_data.score);
+        return true;
+    }
+
+    // 4. 兼容旧关联器：没有 geometry 配置时使用关联器直接给出的仿射/平移结果。
+    gd.type = GeometryType::AFFINE;
+    const cv::Point2d shift = ctx.structure_match_data.translation;
+    const cv::Mat& affine = ctx.structure_match_data.affine;
+    if (!affine.empty() && affine.rows == 2 && affine.cols == 3) {
+        affine.convertTo(gd.A, CV_64F);
+    } else {
+        gd.A = (cv::Mat_<double>(2, 3) << 1.0, 0.0, shift.x, 0.0, 1.0, shift.y);
+    }
+    gd.valid = true;
+
+    // 5. 同步内点数和得分到通用运行摘要。
+    gd.num_inliers = ctx.structure_match_data.inlier_line_matches.empty()
+                         ? ctx.result.num_structures_first
+                         : static_cast<int>(ctx.structure_match_data.inlier_line_matches.size());
+    gd.inlier_ratio = ctx.structure_match_data.score;
+    ctx.result.num_inliers = gd.num_inliers;
+    ctx.result.inlier_ratio = gd.inlier_ratio;
+
+    IR_LOG_INFO("StructurePipeline estimated affine dx=",
+                gd.A.at<double>(0, 2),
                 ", dy=",
-                shift.y,
-                ", response=",
-                response);
-    return gd.valid;
+                gd.A.at<double>(1, 2),
+                ", score=",
+                ctx.structure_match_data.score);
+    return true;
 }
 
 std::string StructurePipeline::buildOutputStem(const RegistrationContext& ctx) const {
-    // 1. 使用输入图像名作为基础前缀，便于追溯样本来源。
     const std::string sampleStem = ctx.image1_path.stem().string() + "_" +
                                    ctx.image2_path.stem().string();
-
-    // 2. 追加结构类型和当前估计策略，避免不同结构法输出互相覆盖。
     return sampleStem + "_" + (_extractor ? _extractor->name() : std::string("STRUCTURE")) +
-           "_TRANSLATION";
+           "_" + (_associator ? _associator->name() : std::string("MATCH"));
 }
 
 bool StructurePipeline::saveOutputs(RegistrationContext& ctx) {
-    // 1. 没有配置输出目录时直接跳过可视化落盘。
-    if (_config.output_dir.empty())
+    if (_config.output_dir.empty()) {
         return true;
+    }
 
-    // 2. 准备结构法专属输出目录。
+    // 1. 创建结构响应图和结构匹配图的输出目录。
     const fs::path structureDir = _config.output_dir / "structures";
+    const fs::path matchesDir = _config.output_dir / "matches";
     std::error_code ec;
     fs::create_directories(structureDir, ec);
+    fs::create_directories(matchesDir, ec);
 
-    // 3. 保存两张图像的结构响应图，便于检查提取质量。
     const std::string stem = buildOutputStem(ctx);
-    if (!ctx.structure_data.first.mask.empty()) {
-        const fs::path out = structureDir / (stem + "_source_structure.png");
-        cv::imwrite(out.string(), ctx.structure_data.first.mask);
+    const std::string sampleStem = ctx.image1_path.stem().string() + "_" +
+                                   ctx.image2_path.stem().string();
+    const std::string structureStem =
+        sampleStem + "_" + (_extractor ? _extractor->outputLabel() : std::string("STRUCTURE"));
+
+    // 2. 保存结构提取器生成的 source / target 响应图。
+    if (!ctx.structure_data.first.response.empty()) {
+        const fs::path out = structureDir / (structureStem + "_source_structure.png");
+        cv::imwrite(out.string(), ctx.structure_data.first.response);
         IR_LOG_INFO("Wrote source structure visualization: ", out.string());
     }
-    if (!ctx.structure_data.second.mask.empty()) {
-        const fs::path out = structureDir / (stem + "_target_structure.png");
-        cv::imwrite(out.string(), ctx.structure_data.second.mask);
+    if (!ctx.structure_data.second.response.empty()) {
+        const fs::path out = structureDir / (structureStem + "_target_structure.png");
+        cv::imwrite(out.string(), ctx.structure_data.second.response);
         IR_LOG_INFO("Wrote target structure visualization: ", out.string());
     }
 
-    // 4. 委托基类保存 warp 和 blend 等通用输出。
+    // 3. 按配置保存结构匹配连线图，便于和点特征 matches 输出对照。
+    if (_config.draw_matches) {
+        cv::Mat vis;
+        if (ctx.structure_match_data.valid &&
+            !ctx.structure_match_data.inlier_line_matches.empty()) {
+            vis = renderLineSegmentMatches(
+                ctx, ctx.structure_match_data.inlier_line_matches, _config.max_matches_drawn);
+        }
+        if (vis.empty()) {
+            vis = renderStructureMatches(ctx, _config.max_matches_drawn);
+        }
+        if (!vis.empty()) {
+            const fs::path out = matchesDir / (stem + "_structure_matches.png");
+            if (cv::imwrite(out.string(), vis)) {
+                IR_LOG_INFO("Wrote structure matches visualization: ", out.string());
+            } else {
+                IR_LOG_WARN("Failed to write structure matches visualization: ", out.string());
+            }
+        } else {
+            IR_LOG_WARN("Structure matches visualization skipped: no drawable correspondences.");
+        }
+    }
+
+    // 4. 委托基类保存 originals / warped / blend 等通用输出。
     return BasePipeline::saveOutputs(ctx);
 }
 

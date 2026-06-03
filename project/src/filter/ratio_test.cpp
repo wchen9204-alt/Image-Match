@@ -1,4 +1,4 @@
-ï»¿#include "filter/ratio_test.h"
+#include "filter/ratio_test.h"
 
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
@@ -12,7 +12,7 @@ RatioTestFilter::RatioTestFilter(const YAML::Node& cfg) {
 }
 
 bool RatioTestFilter::apply(RegistrationContext& ctx) {
-    auto& md = ctx.match_data;
+    auto& md = ctx.keypoint_match_data;
 
     if (md.raw_knn.empty()) {
         IR_LOG_WARN("RatioTestFilter: no raw_knn matches to filter.");
@@ -25,7 +25,7 @@ bool RatioTestFilter::apply(RegistrationContext& ctx) {
 
     for (const auto& neighbours : md.raw_knn) {
         if (neighbours.size() < 2) {
-            // k<2 æ—¶æ— æ³•åšæ¯”å€¼æ£€éªŒï¼Œä¿ç•™å½“å‰å•ä¸ªåŒ¹é…ã€‚
+            // k<2 Ê±ÎÞ·¨×ö±ÈÖµ¼ìÑé£¬±£Áôµ±Ç°µ¥¸öÆ¥Åä¡£
             if (!neighbours.empty())
                 kept.push_back(neighbours.front());
             continue;
@@ -43,3 +43,4 @@ bool RatioTestFilter::apply(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

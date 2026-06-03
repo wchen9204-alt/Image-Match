@@ -1,0 +1,18 @@
+# ---------------------------------------------------------------------------
+# 批处理任务配置
+# 当前文件定义批量样本的流水线入口、数据集位置和输出策略
+# ---------------------------------------------------------------------------
+name: batch_pipeline
+
+pipeline: ../structure/line_pipeline.yaml
+
+dataset:
+  root: ../../../datasets
+  pattern_source: source
+  pattern_target: target
+  include: []
+
+output:
+  root: ../../../outputs
+  save_visuals: true
+  summary_csv: true

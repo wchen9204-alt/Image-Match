@@ -13,12 +13,12 @@ dataset:
 
 # 待评测的 pipeline YAML 列表。
 pipelines:
-  - configs/pipeline/sift_pipeline.yaml
-  - configs/pipeline/surf_pipeline.yaml
-  - configs/pipeline/orb_pipeline.yaml
-  - configs/pipeline/brisk_pipeline.yaml
-  - configs/pipeline/kaze_pipeline.yaml
-  - configs/pipeline/akaze_pipeline.yaml
+  - configs/pipeline/keypoint/sift_pipeline.yaml
+  - configs/pipeline/keypoint/surf_pipeline.yaml
+  - configs/pipeline/keypoint/orb_pipeline.yaml
+  - configs/pipeline/keypoint/brisk_pipeline.yaml
+  - configs/pipeline/keypoint/kaze_pipeline.yaml
+  - configs/pipeline/keypoint/akaze_pipeline.yaml
 
 # 每次运行需要计算的指标。
 metrics: configs/evaluator/metrics.yaml

@@ -1,6 +1,7 @@
-#include "geometry/rigid_estimator.h"
+﻿#include "geometry/rigid_estimator.h"
 
 #include <opencv2/calib3d.hpp>
+
 #include <string>
 #include <vector>
 
@@ -10,33 +11,11 @@
 
 namespace ir {
 
-namespace {
-
-// 根据掩码抽取当前内点集合，为后续刚体闭式拟合提供输入。
-void collectMaskedPoints(const std::vector<cv::Point2f>& src,
-                         const std::vector<cv::Point2f>& dst,
-                         const std::vector<unsigned char>& mask,
-                         std::vector<cv::Point2f>& inlierSrc,
-                         std::vector<cv::Point2f>& inlierDst) {
-    inlierSrc.clear();
-    inlierDst.clear();
-    inlierSrc.reserve(src.size());
-    inlierDst.reserve(dst.size());
-    for (size_t i = 0; i < src.size() && i < mask.size(); ++i) {
-        if (!mask[i])
-            continue;
-        inlierSrc.push_back(src[i]);
-        inlierDst.push_back(dst[i]);
-    }
-}
-
-} // namespace
-
 RigidEstimator::RigidEstimator(const YAML::Node& cfg) {
     const auto params = cfg["params"];
 
     const std::string method_str = yaml_utils::getString(params, "method", "RANSAC");
-    int m = robustMethodFromString(method_str);
+    const int m = robustMethodFromString(method_str);
     _method = (m < 0) ? cv::RANSAC : m;
 
     _ransacReprojThreshold = yaml_utils::getDouble(params, "ransacReprojThreshold", 3.0);
@@ -60,10 +39,9 @@ RigidEstimator::RigidEstimator(const YAML::Node& cfg) {
 }
 
 bool RigidEstimator::estimate(RegistrationContext& ctx) {
-    auto& md = ctx.match_data;
+    auto& md = ctx.keypoint_match_data;
     auto& gd = ctx.geometry_data;
 
-    // 1. 每次估计前清空旧几何结果，并声明当前模型类型。
     gd.clear();
     gd.type = GeometryType::RIGID;
 
@@ -73,10 +51,10 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
         return false;
     }
 
-    std::vector<cv::Point2f> pts1, pts2;
+    std::vector<cv::Point2f> pts1;
+    std::vector<cv::Point2f> pts2;
     partial_affine_utils::extractPoints(ctx, pts1, pts2);
 
-    // 2. 先用相似变换鲁棒估计拿到初始内点，再收缩到无尺度自由度的刚体模型。
     std::vector<unsigned char> initialMask;
     cv::Mat similarityA = cv::estimateAffinePartial2D(pts1,
                                                       pts2,
@@ -93,8 +71,15 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
         return false;
     }
 
-    std::vector<cv::Point2f> inlierPts1, inlierPts2;
-    collectMaskedPoints(pts1, pts2, initialMask, inlierPts1, inlierPts2);
+    std::vector<cv::Point2f> inlierPts1;
+    std::vector<cv::Point2f> inlierPts2;
+    for (size_t i = 0; i < pts1.size() && i < initialMask.size(); ++i) {
+        if (!initialMask[i]) {
+            continue;
+        }
+        inlierPts1.push_back(pts1[i]);
+        inlierPts2.push_back(pts2[i]);
+    }
     if (inlierPts1.size() < 2) {
         gd.message = "rigid refinement needs at least 2 initial inliers, got " +
                      std::to_string(inlierPts1.size());
@@ -110,11 +95,18 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
         return false;
     }
 
-    // 3. 用刚体模型重新计算全量重投影误差掩码，再做一次内点自洽收缩。
     std::vector<unsigned char> mask =
         partial_affine_utils::maskByReprojection(pts1, pts2, A, _ransacReprojThreshold);
 
-    collectMaskedPoints(pts1, pts2, mask, inlierPts1, inlierPts2);
+    inlierPts1.clear();
+    inlierPts2.clear();
+    for (size_t i = 0; i < pts1.size() && i < mask.size(); ++i) {
+        if (!mask[i]) {
+            continue;
+        }
+        inlierPts1.push_back(pts1[i]);
+        inlierPts2.push_back(pts2[i]);
+    }
     if (inlierPts1.size() >= 2 &&
         partial_affine_utils::estimateRigid2D(inlierPts1, inlierPts2, A)) {
         mask = partial_affine_utils::maskByReprojection(pts1, pts2, A, _ransacReprojThreshold);
@@ -123,7 +115,6 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
     partial_affine_utils::promoteInliers(ctx, mask);
     const int inliers = static_cast<int>(md.inliers.size());
 
-    // 4. 最终仍需通过最小内点数门限，避免由局部偶然对齐触发伪成功。
     gd.A = A;
     gd.num_inliers = inliers;
     gd.inlier_ratio = md.filtered.empty() ? 0.0 : static_cast<double>(inliers) / md.filtered.size();

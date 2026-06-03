@@ -1,0 +1,13 @@
+* text=auto
+
+*.md text working-tree-encoding=UTF-8
+*.txt text working-tree-encoding=UTF-8
+*.yaml text working-tree-encoding=UTF-8
+*.yml text working-tree-encoding=UTF-8
+*.c text working-tree-encoding=UTF-8
+*.cc text working-tree-encoding=UTF-8
+*.cpp text working-tree-encoding=UTF-8
+*.cxx text working-tree-encoding=UTF-8
+*.h text working-tree-encoding=UTF-8
+*.hpp text working-tree-encoding=UTF-8
+*.hh text working-tree-encoding=UTF-8

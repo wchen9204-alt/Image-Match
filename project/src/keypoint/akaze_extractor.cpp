@@ -1,0 +1,92 @@
+#include "keypoint/akaze_extractor.h"
+
+#include <opencv2/imgproc.hpp>
+
+#include "utils/logger.h"
+#include "utils/yaml_utils.h"
+
+namespace ir {
+
+AkazeExtractor::AkazeExtractor(const YAML::Node& cfg) {
+    const auto params = cfg["params"];
+
+    _descriptorType =
+        yaml_utils::getInt(params, "descriptor_type", static_cast<int>(cv::AKAZE::DESCRIPTOR_MLDB));
+    _descriptorSize = yaml_utils::getInt(params, "descriptor_size", 0);
+    _descriptorChannels = yaml_utils::getInt(params, "descriptor_channels", 3);
+    _threshold = yaml_utils::getFloat(params, "threshold", 0.001f);
+    _nOctaves = yaml_utils::getInt(params, "nOctaves", 4);
+    _nOctaveLayers = yaml_utils::getInt(params, "nOctaveLayers", 4);
+    _diffusivity =
+        yaml_utils::getInt(params, "diffusivity", static_cast<int>(cv::KAZE::DIFF_PM_G2));
+
+    // KAZE 系描述子为浮点型，MLDB 系描述子为二进制。
+    const auto dtype = static_cast<cv::AKAZE::DescriptorType>(_descriptorType);
+    if (dtype == cv::AKAZE::DESCRIPTOR_KAZE || dtype == cv::AKAZE::DESCRIPTOR_KAZE_UPRIGHT) {
+        _norm = NormType::L2;
+    } else {
+        _norm = NormType::HAMMING;
+    }
+
+    _impl = cv::AKAZE::create(dtype,
+                              _descriptorSize,
+                              _descriptorChannels,
+                              _threshold,
+                              _nOctaves,
+                              _nOctaveLayers,
+                              static_cast<cv::KAZE::DiffusivityType>(_diffusivity));
+
+    IR_LOG_INFO("AKAZE created: descriptor_type=",
+                _descriptorType,
+                ", size=",
+                _descriptorSize,
+                ", channels=",
+                _descriptorChannels,
+                ", threshold=",
+                _threshold,
+                ", nOctaves=",
+                _nOctaves,
+                ", nOctaveLayers=",
+                _nOctaveLayers,
+                ", diffusivity=",
+                _diffusivity,
+                ", norm=",
+                toString(_norm));
+}
+
+bool AkazeExtractor::extract(RegistrationContext& ctx) {
+    if (!_impl) {
+        IR_LOG_ERROR("AKAZE extractor not constructed.");
+        return false;
+    }
+
+    auto& fd = ctx.keypoint_data;
+    auto& images = ctx.images;
+    fd.type = KeypointType::AKAZE;
+    fd.norm_type = _norm;
+
+    if (images.first.empty() || images.second.empty()) {
+        IR_LOG_ERROR("AKAZE::extract - source images are empty.");
+        return false;
+    }
+    if (images.first_gray.empty()) {
+        cv::cvtColor(images.first, images.first_gray, cv::COLOR_BGR2GRAY);
+    }
+    if (images.second_gray.empty()) {
+        cv::cvtColor(images.second, images.second_gray, cv::COLOR_BGR2GRAY);
+    }
+
+    _impl->detectAndCompute(
+        images.first_gray, cv::noArray(), fd.first.keypoints, fd.first.descriptors);
+    _impl->detectAndCompute(
+        images.second_gray, cv::noArray(), fd.second.keypoints, fd.second.descriptors);
+
+    IR_LOG_INFO("AKAZE extracted ",
+                fd.first.keypoints.size(),
+                " / ",
+                fd.second.keypoints.size(),
+                " keypoints");
+    return !fd.empty();
+}
+
+} // namespace ir

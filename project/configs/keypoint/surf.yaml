@@ -1,0 +1,28 @@
+# ---------------------------------------------------------------------------
+# SURF 关键点与描述子配置
+# 参数对应 cv::xfeatures2d::SURF::create(...)
+# 注释中的“默认值”指 OpenCV 构造器的默认参数
+# 需要启用包含 xfeatures2d / non-free 的 OpenCV
+# ---------------------------------------------------------------------------
+type: SURF
+
+params:
+  # 默认值：100.0。Hessian 阈值；越大通常检测到的特征越少。
+  hessianThreshold: 400.0
+
+  # 默认值：4。尺度空间 octave 数量。
+  nOctaves: 4
+
+  # 默认值：3。每个 octave 内的层数。
+  nOctaveLayers: 3
+
+  # 默认值：false。是否输出 128 维扩展描述子；
+  # false 时通常为 64 维。
+  extended: false
+
+  # 默认值：false。是否使用 upright 描述子；
+  # true 时不估计主方向，速度通常更快，但不具备旋转不变性。
+  upright: false
+
+# SURF 使用浮点描述子，匹配距离通常使用 L2。
+descriptor_norm: L2
