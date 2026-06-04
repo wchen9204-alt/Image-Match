@@ -29,6 +29,9 @@ private:
     double _minLineLength = 30.0;
     double _maxLineGap = 10.0;
     int _lineThickness = 2;
+    bool _deduplicateLines = true;
+    double _duplicateAngleDeg = 3.0;
+    double _duplicateDistance = 8.0;
 
     int _lsdRefine = 1;
     double _lsdScale = 0.8;
@@ -38,6 +41,8 @@ private:
     double _lsdLogEps = 0.0;
     double _lsdDensityTh = 0.7;
     int _lsdNBins = 1024;
+    int _lsdDetectorScale = 2;
+    int _lsdDetectorNumOctaves = 2;
 
     int _fldLengthThreshold = 10;
     double _fldDistanceThreshold = 1.414213562;

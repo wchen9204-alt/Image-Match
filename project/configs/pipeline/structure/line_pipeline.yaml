@@ -8,7 +8,7 @@ name: line_pipeline
 # edge / line / contour
 structure: ../../structure/line.yaml
 
-# 线段匹配会转换为端点点对，再交给通用几何估计器做 RANSAC。
+# 线段关联器优先直接输出基于线段中心一致性的仿射结果；缺少仿射时再回退到端点几何估计。
 geometry: ../../geometry/rigid.yaml
 
 io:

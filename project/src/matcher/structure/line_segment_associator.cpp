@@ -30,19 +30,18 @@ struct LineInfo {
 LineInfo describeLine(const cv::Vec4i& line) {
     const cv::Point2d p1(static_cast<double>(line[0]), static_cast<double>(line[1]));
     const cv::Point2d p2(static_cast<double>(line[2]), static_cast<double>(line[3]));
-    const double dx = p2.x - p1.x;
-    const double dy = p2.y - p1.y;
+    const cv::Point2d delta = p2 - p1;
 
     LineInfo out;
     out.center = (p1 + p2) * 0.5;
-    out.angle = std::atan2(dy, dx);
+    out.angle = std::atan2(delta.y, delta.x);
     if (out.angle < 0.0) {
         out.angle += kPi;
     }
     if (out.angle >= kPi) {
         out.angle -= kPi;
     }
-    out.length = std::sqrt(dx * dx + dy * dy);
+    out.length = cv::norm(delta);
     return out;
 }
 
@@ -50,11 +49,6 @@ LineInfo describeLine(const cv::Vec4i& line) {
 double angleDistance(double a, double b) {
     const double d = std::abs(a - b);
     return std::min(d, kPi - d);
-}
-
-/// 二维向量的欧氏长度。
-double norm2(const cv::Point2d& p) {
-    return std::sqrt(p.x * p.x + p.y * p.y);
 }
 
 cv::Point2d matchShift(const std::vector<LineInfo>& src,
@@ -78,7 +72,7 @@ std::vector<cv::DMatch> selectConsistentUniqueMatches(const std::vector<cv::DMat
         int count = 0;
         double cost = 0.0;
         for (const auto& m : candidates) {
-            const double error = norm2(matchShift(src, dst, m) - shift);
+            const double error = cv::norm(matchShift(src, dst, m) - shift);
             if (error <= threshold) {
                 ++count;
                 cost += error;
@@ -95,7 +89,7 @@ std::vector<cv::DMatch> selectConsistentUniqueMatches(const std::vector<cv::DMat
     std::vector<cv::DMatch> compatible;
     compatible.reserve(candidates.size());
     for (const auto& m : candidates) {
-        if (norm2(matchShift(src, dst, m) - bestShift) <= threshold) {
+        if (cv::norm(matchShift(src, dst, m) - bestShift) <= threshold) {
             compatible.push_back(m);
         }
     }
@@ -123,6 +117,21 @@ std::vector<cv::DMatch> selectConsistentUniqueMatches(const std::vector<cv::DMat
         selected.push_back(m);
     }
     return selected;
+}
+
+cv::Point2d averageShift(const std::vector<cv::DMatch>& matches,
+                         const std::vector<LineInfo>& src,
+                         const std::vector<LineInfo>& dst) {
+    if (matches.empty()) {
+        return cv::Point2d(0.0, 0.0);
+    }
+
+    cv::Point2d sum(0.0, 0.0);
+    for (const auto& m : matches) {
+        sum += matchShift(src, dst, m);
+    }
+    const double inv = 1.0 / static_cast<double>(matches.size());
+    return cv::Point2d(sum.x * inv, sum.y * inv);
 }
 
 } // namespace
@@ -200,7 +209,7 @@ bool LineSegmentAssociator::associate(RegistrationContext& ctx) {
             }
 
             const cv::Point2d shift = dst[j].center - src[i].center;
-            const double shiftDistance = norm2(shift);
+            const double shiftDistance = cv::norm(shift);
             if (shiftDistance > _maxShiftDistance) {
                 continue;
             }
@@ -237,14 +246,23 @@ bool LineSegmentAssociator::associate(RegistrationContext& ctx) {
         return false;
     }
 
-    // 5. 当前关联器只作为线段几何 baseline 输出候选匹配；最终 RANSAC 几何模型由
-    // StructurePipeline 的 geometry estimator 统一负责。
+    // 5. 线段几何 baseline 输出候选匹配；最终几何模型由 StructurePipeline 的
+    // geometry estimator（由 YAML 配置决定）统一负责。
+    md.translation = averageShift(md.line_matches, src, dst);
+    md.inlier_line_matches = md.line_matches;
     md.valid = true;
-    md.score = 1.0;
+    md.score = candidates.empty()
+                   ? 0.0
+                   : static_cast<double>(md.line_matches.size()) /
+                         static_cast<double>(candidates.size());
     IR_LOG_INFO("LineSegmentAssociator produced baseline matches: ",
                 md.line_matches.size(),
                 " / ",
-                candidates.size());
+                candidates.size(),
+                ", dx=",
+                md.translation.x,
+                ", dy=",
+                md.translation.y);
     return true;
 }
 

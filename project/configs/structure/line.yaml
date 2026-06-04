@@ -12,7 +12,7 @@ extractor:
   #   HOUGH_LINES    标准霍夫直线检测，会把无限直线裁剪到图像边界。
   #   LSD            OpenCV Line Segment Detector，直接输出线段。
   #   FLD            Fast Line Detector，需要 OpenCV ximgproc。
-  method: HOUGH_LINES_P
+  method: LSD
 
   params:
     # 默认值：50.0。Canny 低阈值，HOUGH_LINES / HOUGH_LINES_P 会先用 Canny 提取边缘。
@@ -36,7 +36,10 @@ extractor:
     # 默认值：10.0。HOUGH_LINES_P 中允许连接为同一线段的最大间隔。
     maxLineGap: 10.0
     # 默认值：2。将线段绘制回结构响应图时的线宽。
-    lineThickness: 2
+    lineThickness: 1
+    deduplicateLines: true
+    duplicateAngleDeg: 3.0
+    duplicateDistance: 8.0
 
     # LSD 参数；仅当 extractor.method: LSD 时使用。
     lsd:
@@ -56,6 +59,8 @@ extractor:
       densityTh: 0.7
       # 默认值：1024。方向直方图 bin 数。
       nBins: 1024
+      detectorScale: 2
+      detectorNumOctaves: 2
 
     # FLD 参数；仅当 extractor.method: FLD 时使用。
     fld:
@@ -78,24 +83,32 @@ association:
   #   LINE_SEGMENT     基于角度/长度/中心位移的几何 baseline 匹配。
   #   LINE_DESCRIPTOR  基于线描述子的匹配入口，当前优先支持 LBD。
   #   PHASE_CORRELATE / CHAMFER / HAUSDORFF / ICP  结构响应图平移关联。
-  method: LINE_SEGMENT
+  method: line_descriptor
   params:
+    line_descriptor:
+      # 当前实现优先支持 LBD；需要 OpenCV contrib line_descriptor 模块。
+      descriptor: LBD
+      # KNN ratio test 阈值。
+      ratio: 1.0
+      # LBD 复用上方 extractor 输出的线段，只负责计算线描述子并匹配。
+      knnK: 8
+      # 描述子匹配后的线段方向差阈值，单位为度。
+      angleThresholdDeg: 30.0
+      # 描述子匹配后的线段长度比例下限。
+      minLengthRatio: 0.30
+      # 描述子匹配后的线段中点最大位移，默认近似不限制。
+      maxShiftDistance: 100000.0
+      # 描述子匹配后的中点位移一致性阈值，单位为像素。
+      shiftConsistencyThreshold: 30.0
+      # 进入几何估计前要求的最少线段描述子匹配数。
+      minMatches: 2
     line_segment:
       angleThresholdDeg: 10.0
       minLengthRatio: 0.60
       maxShiftDistance: 100000.0
-      shiftConsistencyThreshold: 8.0
-      minMatches: 4
+      shiftConsistencyThreshold: 20.0
+      minMatches: 2
       maxCandidatesPerLine: 5
-    line_descriptor:
-      # 当前实现优先支持 LBD；需要 OpenCV contrib line_descriptor 模块。
-      descriptor: LBD
-      # LBD 是二进制描述子，默认使用 BF/Hamming。
-      matcher: BF
-      # KNN ratio test 阈值。
-      ratio: 0.75
-      # 进入几何估计前要求的最少线段描述子匹配数。
-      minMatches: 4
     phase_correlate:
       # 默认值：0.01。相位相关响应阈值，低于该值时认为关联不可靠。
       responseThreshold: 0.01

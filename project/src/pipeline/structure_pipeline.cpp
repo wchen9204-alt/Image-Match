@@ -10,6 +10,10 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
+#ifdef IR_HAS_OPENCV_LINE_DESCRIPTOR
+#include <opencv2/line_descriptor.hpp>
+#endif
+
 #include "core/config.h"
 #include "core/factory.h"
 #include "utils/logger.h"
@@ -124,6 +128,43 @@ cv::Point2f linePoint2(const cv::Vec4i& line) {
     return {static_cast<float>(line[2]), static_cast<float>(line[3])};
 }
 
+#ifdef IR_HAS_OPENCV_LINE_DESCRIPTOR
+cv::line_descriptor::KeyLine toDrawableKeyLine(const cv::Vec4i& line, int classId) {
+    const cv::Point2f p1 = linePoint1(line);
+    const cv::Point2f p2 = linePoint2(line);
+    const cv::Point2f delta = p2 - p1;
+
+    cv::line_descriptor::KeyLine keyLine;
+    keyLine.startPointX = p1.x;
+    keyLine.startPointY = p1.y;
+    keyLine.endPointX = p2.x;
+    keyLine.endPointY = p2.y;
+    keyLine.sPointInOctaveX = p1.x;
+    keyLine.sPointInOctaveY = p1.y;
+    keyLine.ePointInOctaveX = p2.x;
+    keyLine.ePointInOctaveY = p2.y;
+    keyLine.lineLength = cv::norm(delta);
+    keyLine.angle = std::atan2(delta.y, delta.x);
+    keyLine.class_id = classId;
+    keyLine.octave = 0;
+    keyLine.numOfPixels = static_cast<int>(std::max(1.0f, keyLine.lineLength));
+    keyLine.response = keyLine.lineLength;
+    keyLine.size = keyLine.lineLength;
+    keyLine.pt = (p1 + p2) * 0.5f;
+    return keyLine;
+}
+
+std::vector<cv::line_descriptor::KeyLine> toDrawableKeyLines(
+    const std::vector<cv::Vec4i>& lines) {
+    std::vector<cv::line_descriptor::KeyLine> out;
+    out.reserve(lines.size());
+    for (size_t i = 0; i < lines.size(); ++i) {
+        out.push_back(toDrawableKeyLine(lines[i], static_cast<int>(i)));
+    }
+    return out;
+}
+#endif
+
 bool sameLineDirection(const cv::Vec4i& srcLine, const cv::Vec4i& dstLine) {
     const cv::Point2f sv = linePoint2(srcLine) - linePoint1(srcLine);
     const cv::Point2f dv = linePoint2(dstLine) - linePoint1(dstLine);
@@ -218,12 +259,6 @@ cv::Mat renderLineSegmentMatches(const RegistrationContext& ctx,
         return {};
     }
 
-    const int canvasRows = std::max(src.rows, dst.rows);
-    const int canvasCols = src.cols + dst.cols;
-    cv::Mat canvas(canvasRows, canvasCols, src.type(), cv::Scalar::all(0));
-    src.copyTo(canvas(cv::Rect(0, 0, src.cols, src.rows)));
-    dst.copyTo(canvas(cv::Rect(src.cols, 0, dst.cols, dst.rows)));
-
     std::vector<cv::DMatch> draw = matches;
     if (maxMatches > 0 && static_cast<int>(draw.size()) > maxMatches) {
         std::partial_sort(draw.begin(),
@@ -234,6 +269,38 @@ cv::Mat renderLineSegmentMatches(const RegistrationContext& ctx,
                           });
         draw.resize(maxMatches);
     }
+
+#ifdef IR_HAS_OPENCV_LINE_DESCRIPTOR
+    const std::vector<cv::line_descriptor::KeyLine> srcKeyLines =
+        toDrawableKeyLines(ctx.structure_data.first.lines);
+    const std::vector<cv::line_descriptor::KeyLine> dstKeyLines =
+        toDrawableKeyLines(ctx.structure_data.second.lines);
+
+    try {
+        cv::Mat lineMatches;
+        const std::vector<char> matchesMask(draw.size(), 1);
+        cv::line_descriptor::drawLineMatches(src,
+                                             srcKeyLines,
+                                             dst,
+                                             dstKeyLines,
+                                             draw,
+                                             lineMatches,
+                                             cv::Scalar(255, 180, 0),
+                                             cv::Scalar(0, 220, 255),
+                                             matchesMask);
+        if (!lineMatches.empty()) {
+            return lineMatches;
+        }
+    } catch (const cv::Exception& e) {
+        IR_LOG_WARN("drawLineMatches failed; falling back to manual line rendering: ", e.what());
+    }
+#endif
+
+    const int canvasRows = std::max(src.rows, dst.rows);
+    const int canvasCols = src.cols + dst.cols;
+    cv::Mat canvas(canvasRows, canvasCols, src.type(), cv::Scalar::all(0));
+    src.copyTo(canvas(cv::Rect(0, 0, src.cols, src.rows)));
+    dst.copyTo(canvas(cv::Rect(src.cols, 0, dst.cols, dst.rows)));
 
     int drawn = 0;
     for (const auto& m : draw) {
@@ -363,7 +430,8 @@ bool StructurePipeline::configureStages(const PipelineConfig& cfg) {
     _extractor = Factory::createStructureExtractor(structureCfg);
     _associator = Factory::createStructureAssociator(structureCfg);
     if (!cfg.geometry_path.empty()) {
-        _geometry = Factory::createGeometryEstimator(Config::load(cfg.geometry_path));
+        const YAML::Node geometryCfg = Config::load(cfg.geometry_path);
+        _geometry = Factory::createGeometryEstimator(geometryCfg);
     } else {
         IR_LOG_WARN("StructurePipeline: missing geometry config path; falling back to "
                     "association transform when available.");
@@ -432,7 +500,7 @@ bool StructurePipeline::runAssociation(RegistrationContext& ctx) {
 bool StructurePipeline::runEstimation(RegistrationContext& ctx) {
     ScopedTimer st(ctx.result.t_geometry_ms);
 
-    // 1. 初始化几何结果；结构匹配结果会转成点对后交给通用 geometry estimator。
+    // 1. 初始化几何结果。
     auto& gd = ctx.geometry_data;
     gd.clear();
 
@@ -445,7 +513,8 @@ bool StructurePipeline::runEstimation(RegistrationContext& ctx) {
         return false;
     }
 
-    // 3. 线段匹配展开为端点点对，然后复用点特征几何估计器。
+    // 3. 有线段匹配时，展开为端点点对并交由 YAML 配置的几何估计器做 RANSAC。
+    //    几何模型由用户配置决定（Rigid / Affine / Similarity / Homography），
     if (_geometry && !ctx.structure_match_data.line_matches.empty()) {
         if (!prepareLineEndpointMatches(ctx)) {
             gd.message = ctx.structure_match_data.message.empty()
@@ -488,7 +557,9 @@ bool StructurePipeline::runEstimation(RegistrationContext& ctx) {
         return true;
     }
 
-    // 4. 兼容旧关联器：没有 geometry 配置时使用关联器直接给出的仿射/平移结果。
+    // 4. 无几何估计器或无线段匹配时的回退路径：
+    //    响应图关联器（PhaseCorrelate / Chamfer / Hausdorff / ICP）直接给出平移，
+    //    线段关联器在无 geometry 配置时也以平均平移作为兜底。
     gd.type = GeometryType::AFFINE;
     const cv::Point2d shift = ctx.structure_match_data.translation;
     const cv::Mat& affine = ctx.structure_match_data.affine;
@@ -507,7 +578,7 @@ bool StructurePipeline::runEstimation(RegistrationContext& ctx) {
     ctx.result.num_inliers = gd.num_inliers;
     ctx.result.inlier_ratio = gd.inlier_ratio;
 
-    IR_LOG_INFO("StructurePipeline estimated affine dx=",
+    IR_LOG_INFO("StructurePipeline fallback affine dx=",
                 gd.A.at<double>(0, 2),
                 ", dy=",
                 gd.A.at<double>(1, 2),
