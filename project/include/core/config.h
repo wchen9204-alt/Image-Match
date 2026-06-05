@@ -8,32 +8,54 @@
 
 namespace ir {
 
-/// 配准方法族，用于区分点特征法与结构法的输出和摘要组织。
+/// 配准方法族，用于区分点特征法、结构法、直接法等的输出和摘要组织。
 enum class MethodFamily {
     KEYPOINT,
-    STRUCTURE
+    STRUCTURE,
+    DIRECT
 };
+
+/// 将 MethodFamily 枚举转为输出目录名。
+inline const char* methodFamilyDir(MethodFamily f) {
+    switch (f) {
+    case MethodFamily::KEYPOINT:  return "keypoint";
+    case MethodFamily::STRUCTURE: return "structure";
+    case MethodFamily::DIRECT:    return "direct";
+    default:                      return "unknown";
+    }
+}
+
+/// 将 MethodFamily 枚举转为人类可读标签。
+inline const char* methodFamilyLabel(MethodFamily f) {
+    switch (f) {
+    case MethodFamily::KEYPOINT:  return "KeypointPipeline";
+    case MethodFamily::STRUCTURE: return "StructurePipeline";
+    case MethodFamily::DIRECT:    return "DirectPipeline";
+    default:                      return "UnknownPipeline";
+    }
+}
 
 /// 单个 pipeline 配置解析后的结果。
 struct PipelineConfig {
-    /// 实验或 pipeline 的名称。
     std::string name;
 
-    /// 点特征、结构特征、匹配器与几何估计器的配置文件路径。
+    /// 显式声明的方法族，由 YAML 中 method_family 字段指定。
+    MethodFamily method_family = MethodFamily::KEYPOINT;
+
+    /// 各方法族的配置文件路径（按需填写）。
     std::filesystem::path keypoint_path;
     std::filesystem::path structure_path;
+    std::filesystem::path direct_path;
     std::filesystem::path matcher_path;
     std::filesystem::path geometry_path;
 
-    /// 过滤器配置文件路径，按顺序依次执行。
     std::vector<std::filesystem::path> filter_paths;
+    std::filesystem::path evaluator_path;
 
-    /// 输入图像与输出目录。
     std::filesystem::path image1_path;
     std::filesystem::path image2_path;
     std::filesystem::path output_dir;
 
-    /// 可视化与输出控制选项。
     bool draw_keypoints = false;
     bool draw_matches = true;
     bool draw_inliers_only = false;
@@ -44,20 +66,14 @@ struct PipelineConfig {
     bool show_warped_window = false;
     int wait_key = 0;
 
-    /// 结果有效性校验：根据 warped source 与 target 的前景 IoU 判断是否真正重合。
     bool validate_warp_overlap = false;
     double min_warp_overlap_iou = 0.20;
     int warp_overlap_foreground_threshold = 10;
 
-    /// 结果有效性校验：根据 warped source 与 target 重叠区域的光度差判断配准质量。
     bool validate_warp_photometric = false;
-    /// 重叠区域 NMAD（归一化平均绝对差）上限，归一化到 [0, 1]。
     double max_warp_photometric_error = 0.15;
 
-    /// 根据是否配置结构提取器判断当前 pipeline 所属的方法族。
-    MethodFamily methodFamily() const {
-        return structure_path.empty() ? MethodFamily::KEYPOINT : MethodFamily::STRUCTURE;
-    }
+    MethodFamily methodFamily() const { return method_family; }
 };
 
 /// 配置文件加载与路径解析工具。

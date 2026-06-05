@@ -27,8 +27,8 @@ filters:
 geometry: ../../geometry/rigid.yaml
 
 io:
-  image1: ../../../datasets/test1/source.png
-  image2: ../../../datasets/test1/target.png
+  image1: ../../../datasets/Test01/source.png
+  image2: ../../../datasets/Test01/target.png
   output_dir: ../../../outputs
 
 visualization:

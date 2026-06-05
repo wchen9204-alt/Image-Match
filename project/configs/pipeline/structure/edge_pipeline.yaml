@@ -3,14 +3,17 @@
 # 当前文件用于组织基于边缘响应的结构配准流程。
 # ---------------------------------------------------------------------------
 name: edge_pipeline
+method_family: structure
 
 # 支持的结构方法：
 # edge / line / contour
 structure: ../../structure/edge.yaml
 
+evaluator: ../../evaluator/metrics.yaml
+
 io:
-  image1: ../../../datasets/test1/source.png
-  image2: ../../../datasets/test1/target.png
+  image1: ../../../datasets/Test01/source.png
+  image2: ../../../datasets/Test01/target.png
   output_dir: ../../../outputs
 
 visualization:

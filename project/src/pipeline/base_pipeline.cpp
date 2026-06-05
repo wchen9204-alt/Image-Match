@@ -155,6 +155,39 @@ bool buildForegroundMask(const cv::Mat& image, int thresholdValue, cv::Mat& mask
     return true;
 }
 
+/// 计算 warped 与 target 在 overlapMask 区域内的归一化平均绝对差 (NMAD)。
+/// 返回值归一化到 [0, 1]；0 = 完全相同，1 = 完全不同。
+/// 若 overlapMask 无前景像素则返回 -1.0。
+double computePhotometricError(const cv::Mat& warped,
+                                const cv::Mat& target,
+                                const cv::Mat& overlapMask) {
+    if (overlapMask.empty() || cv::countNonZero(overlapMask) == 0) {
+        return -1.0;
+    }
+
+    cv::Mat warpedGray, targetGray;
+    if (warped.channels() == 1) {
+        warpedGray = warped;
+    } else {
+        cv::cvtColor(warped, warpedGray, cv::COLOR_BGR2GRAY);
+    }
+    if (target.channels() == 1) {
+        targetGray = target;
+    } else {
+        cv::cvtColor(target, targetGray, cv::COLOR_BGR2GRAY);
+    }
+
+    cv::Mat warpedFloat, targetFloat;
+    warpedGray.convertTo(warpedFloat, CV_32F, 1.0 / 255.0);
+    targetGray.convertTo(targetFloat, CV_32F, 1.0 / 255.0);
+
+    cv::Mat diff;
+    cv::absdiff(warpedFloat, targetFloat, diff);
+
+    const cv::Scalar meanDiff = cv::mean(diff, overlapMask);
+    return meanDiff[0];
+}
+
 double computeMaskIou(const cv::Mat& a, const cv::Mat& b) {
     if (a.empty() || b.empty() || a.size() != b.size()) {
         return -1.0;
@@ -195,6 +228,13 @@ bool BasePipeline::configure(const PipelineConfig& cfg) {
 
     // 3. 创建通用 warp 组件；仿射族矩阵会在 warper 内部扩展为 3x3。
     _warper = std::make_shared<PerspectiveWarper>();
+
+    // 4. 加载评测指标（可选）。
+    _evaluator.clear();
+    if (!cfg.evaluator_path.empty()) {
+        _evaluator.loadFromYaml(cfg.evaluator_path);
+    }
+
     IR_LOG_INFO(name(), " configured.");
     return true;
 }
@@ -260,46 +300,79 @@ bool BasePipeline::runWarp(RegistrationContext& ctx) {
 
 bool BasePipeline::validateWarpQuality(RegistrationContext& ctx) {
     ctx.result.warp_overlap_iou = -1.0;
-    if (!_config.validate_warp_overlap) {
+    ctx.result.warp_photometric_error = -1.0;
+
+    // 1. 若两项验证均未开启，直接通过，兼容旧配置。
+    if (!_config.validate_warp_overlap && !_config.validate_warp_photometric) {
         return true;
     }
 
+    // 2. 公共前置检查：warp 图像是否有效，尺寸是否与 target 一致。
     if (!_config.warp || ctx.warped_image.empty()) {
-        ctx.result.message = "warp overlap validation failed: warped image is empty";
+        ctx.result.message = "warp validation failed: warped image is empty";
         IR_LOG_WARN(ctx.result.message);
         return false;
     }
     if (ctx.images.second.empty() || ctx.warped_image.size() != ctx.images.second.size()) {
         ctx.result.message =
-            "warp overlap validation failed: warped image and target have different sizes";
+            "warp validation failed: warped image and target have different sizes";
         IR_LOG_WARN(ctx.result.message);
         return false;
     }
 
+    // 3. 构建前景 mask，IoU 和光度差检查共用。
     cv::Mat warpedMask;
     cv::Mat targetMask;
     const int thresholdValue = _config.warp_overlap_foreground_threshold;
     if (!buildForegroundMask(ctx.warped_image, thresholdValue, warpedMask) ||
         !buildForegroundMask(ctx.images.second, thresholdValue, targetMask)) {
-        ctx.result.message = "warp overlap validation failed: cannot build foreground masks";
+        ctx.result.message = "warp validation failed: cannot build foreground masks";
         IR_LOG_WARN(ctx.result.message);
         return false;
     }
 
-    const double iou = computeMaskIou(warpedMask, targetMask);
-    ctx.result.warp_overlap_iou = iou;
-    if (iou < 0.0) {
-        ctx.result.message = "warp overlap validation failed: empty foreground union";
-        IR_LOG_WARN(ctx.result.message);
-        return false;
+    // 4. 前景 IoU 检查。
+    if (_config.validate_warp_overlap) {
+        const double iou = computeMaskIou(warpedMask, targetMask);
+        ctx.result.warp_overlap_iou = iou;
+        if (iou < 0.0) {
+            ctx.result.message = "warp overlap IoU failed: empty foreground union";
+            IR_LOG_WARN(ctx.result.message);
+            return false;
+        }
+
+        IR_LOG_INFO("Warp overlap IoU=", iou, ", min=", _config.min_warp_overlap_iou);
+        if (iou < _config.min_warp_overlap_iou) {
+            ctx.result.message = "warp overlap IoU below threshold: " + std::to_string(iou) +
+                                 " < " + std::to_string(_config.min_warp_overlap_iou);
+            IR_LOG_WARN(ctx.result.message);
+            return false;
+        }
     }
 
-    IR_LOG_INFO("Warp overlap IoU=", iou, ", min=", _config.min_warp_overlap_iou);
-    if (iou < _config.min_warp_overlap_iou) {
-        ctx.result.message = "warp overlap IoU below threshold: " + std::to_string(iou) +
-                             " < " + std::to_string(_config.min_warp_overlap_iou);
-        IR_LOG_WARN(ctx.result.message);
-        return false;
+    // 5. 重叠区域光度差检查（NMAD）。
+    if (_config.validate_warp_photometric) {
+        cv::Mat overlapMask;
+        cv::bitwise_and(warpedMask, targetMask, overlapMask);
+        const double nmad =
+            computePhotometricError(ctx.warped_image, ctx.images.second, overlapMask);
+        ctx.result.warp_photometric_error = nmad;
+        if (nmad < 0.0) {
+            ctx.result.message = "warp photometric validation failed: empty overlap";
+            IR_LOG_WARN(ctx.result.message);
+            return false;
+        }
+        IR_LOG_INFO("Warp photometric NMAD=",
+                    nmad,
+                    ", max=",
+                    _config.max_warp_photometric_error);
+        if (nmad > _config.max_warp_photometric_error) {
+            ctx.result.message = "warp photometric error above threshold: " +
+                                 std::to_string(nmad) +
+                                 " > " + std::to_string(_config.max_warp_photometric_error);
+            IR_LOG_WARN(ctx.result.message);
+            return false;
+        }
     }
 
     return true;
@@ -443,6 +516,13 @@ bool BasePipeline::run(RegistrationContext& ctx) {
     if (!validateWarpQuality(ctx)) {
         return fail(ctx.result.message.empty() ? "warp validation failed" : ctx.result.message);
     }
+
+    // 运行评测指标（仅成功时计算）
+    if (!_evaluator.metrics().empty()) {
+        Sample dummySample;
+        _evaluator.evaluate(ctx, dummySample);
+    }
+
     saveOutputs(ctx);
     // 3. 所有阶段完成后记录总耗时和成功状态。
     ctx.result.success = true;

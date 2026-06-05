@@ -27,8 +27,8 @@ filters:
 geometry: ../../geometry/similarity.yaml
 
 io:
-  image1: ../../../datasets/test10/source.png
-  image2: ../../../datasets/test10/target.png
+  image1: ../../../datasets/Test01/source.png
+  image2: ../../../datasets/Test01/target.png
   output_dir: ../../../outputs
 
 visualization:

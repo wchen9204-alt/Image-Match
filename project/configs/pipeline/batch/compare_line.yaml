@@ -1,0 +1,41 @@
+# ---------------------------------------------------------------------------
+# 线方法对比配置：遍历 (检测器 × 描述子) 组合，批量跑完输出总表
+# ---------------------------------------------------------------------------
+name: compare_line_methods
+
+# 基础配置模板
+base_pipeline: ../structure/line_pipeline.yaml
+base_structure: ../../structure/line.yaml
+
+# 待对比的检测器与描述子组合
+combinations:
+  - extractor: LSD
+    descriptor: LBD
+  - extractor: LSD
+    descriptor: MSLD
+  - extractor: LSD
+    descriptor: LINE_SIFT
+  - extractor: FLD
+    descriptor: LBD
+  - extractor: FLD
+    descriptor: MSLD
+  - extractor: FLD
+    descriptor: LINE_SIFT
+  - extractor: HOUGH_LINES_P
+    descriptor: LBD
+  - extractor: HOUGH_LINES_P
+    descriptor: MSLD
+  - extractor: HOUGH_LINES_P
+    descriptor: LINE_SIFT
+
+# 数据集与输出
+dataset:
+  root: ../../../datasets
+  pattern_source: source
+  pattern_target: target
+  include: []
+
+output:
+  root: ../../../outputs/compare
+  save_visuals: false
+  summary_csv: true

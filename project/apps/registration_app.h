@@ -63,6 +63,12 @@ private:
     /// 判断 YAML 是否符合批处理配置结构。
     static bool isBatchYaml(const YAML::Node& node);
 
+    /// 判断 YAML 是否符合对比配置结构。
+    static bool isCompareYaml(const YAML::Node& node);
+
+    /// 执行对比任务，遍历 (检测器 × 描述子) 组合输出总表。
+    static int runCompare(const std::filesystem::path& compare_yaml);
+
     /// 从 batch.yaml 中解析批处理配置。
     static BatchConfig loadBatchConfig(const std::filesystem::path& yaml_path);
 

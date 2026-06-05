@@ -9,7 +9,7 @@ namespace ir {
 Registration::Registration(std::shared_ptr<IPipeline> pipeline) : _pipeline(std::move(pipeline)) {}
 
 std::string Registration::name() const {
-    // Ãû³Æ½âÎöÓÅÏÈ×ğÖØÍâ²¿ÅäÖÃ£¬Æä´ÎÍË»¯Îªµ×²ãÁ÷Ë®ÏßÃû£¬±ãÓÚÈÕÖ¾±£³ÖÎÈ¶¨ÓïÒå¡£
+    // ï¿½ï¿½ï¿½Æ½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½â²¿ï¿½ï¿½ï¿½Ã£ï¿½ï¿½ï¿½ï¿½ï¿½Ë»ï¿½Îªï¿½×²ï¿½ï¿½ï¿½Ë®ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¾ï¿½ï¿½ï¿½ï¿½ï¿½È¶ï¿½ï¿½ï¿½ï¿½å¡£
     if (!_cfg.name.empty())
         return _cfg.name;
     if (_pipeline)
@@ -18,13 +18,19 @@ std::string Registration::name() const {
 }
 
 bool Registration::configure(const PipelineConfig& cfg) {
-    // ÔÊĞíÔÚÎ´ÏÔÊ½×¢ÈëÁ÷Ë®ÏßÊµÏÖÊ±×Ô¶¯»ØÍËµ½Ä¬ÈÏÌØÕ÷Åä×¼Á÷Ë®Ïß¡£
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½Ê½×¢ï¿½ï¿½ï¿½ï¿½Ë®ï¿½ï¿½Êµï¿½ï¿½Ê±ï¿½Ô¶ï¿½ï¿½ï¿½ï¿½Ëµï¿½Ä¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×¼ï¿½ï¿½Ë®ï¿½ß¡ï¿½
     _cfg = cfg;
     if (!_pipeline) {
-        if (!_cfg.structure_path.empty()) {
+        switch (_cfg.method_family) {
+        case MethodFamily::STRUCTURE:
             _pipeline = std::make_shared<StructurePipeline>();
-        } else {
+            break;
+        case MethodFamily::DIRECT:
+            // TODO: _pipeline = std::make_shared<DirectPipeline>();
+        case MethodFamily::KEYPOINT:
+        default:
             _pipeline = std::make_shared<KeypointPipeline>();
+            break;
         }
     }
     if (!_pipeline->configure(_cfg)) {
@@ -35,7 +41,7 @@ bool Registration::configure(const PipelineConfig& cfg) {
 }
 
 bool Registration::run(RegistrationContext& ctx) {
-    // Registration Ö»³Ğµ£¶¥²ãÖ´ĞĞÈë¿ÚÖ°Ôğ£¬¾ßÌå½×¶Îµ÷¶ÈÈ«²¿ÏÂ³Áµ½Á÷Ë®ÏßÊµÏÖ¡£
+    // Registration Ö»ï¿½Ğµï¿½ï¿½ï¿½ï¿½ï¿½Ö´ï¿½ï¿½ï¿½ï¿½ï¿½Ö°ï¿½ğ£¬¾ï¿½ï¿½ï¿½×¶Îµï¿½ï¿½ï¿½È«ï¿½ï¿½ï¿½Â³ï¿½ï¿½ï¿½ï¿½ï¿½Ë®ï¿½ï¿½Êµï¿½Ö¡ï¿½
     if (!_pipeline) {
         IR_LOG_ERROR("Registration::run - pipeline not configured.");
         return false;

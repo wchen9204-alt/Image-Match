@@ -417,6 +417,7 @@ void StructurePipeline::resetStages() {
     _extractor.reset();
     _associator.reset();
     _geometry.reset();
+    _filters.clear();
 }
 
 bool StructurePipeline::configureStages(const PipelineConfig& cfg) {
@@ -437,13 +438,21 @@ bool StructurePipeline::configureStages(const PipelineConfig& cfg) {
                     "association transform when available.");
     }
 
-    // 3. 输出当前结构方法组合，方便批量实验时核对配置是否生效。
+    // 3. 从 pipeline YAML 的 filters: 列表加载过滤链（与 KeypointPipeline 一致）。
+    _filters.clear();
+    for (const auto& fp : cfg.filter_paths) {
+        _filters.push_back(Factory::createFilter(Config::load(fp)));
+    }
+
+    // 4. 输出当前结构方法组合，方便批量实验时核对配置是否生效。
     IR_LOG_INFO("StructurePipeline stages configured: extractor=",
                 _extractor->name(),
                 ", associator=",
                 _associator->name(),
                 ", geometry=",
-                (_geometry ? _geometry->name() : std::string("NONE")));
+                (_geometry ? _geometry->name() : std::string("NONE")),
+                ", filters=",
+                _filters.size());
     return true;
 }
 
@@ -480,21 +489,59 @@ bool StructurePipeline::runAssociation(RegistrationContext& ctx) {
         return false;
     }
 
-    // 2. 执行结构匹配，匹配器负责写入平移量、得分和有效性标记。
+    // 2. 执行结构匹配，关联器负责写入 raw_matches_knn / filtered_matches 等。
     const bool ok = _associator->associate(ctx);
+    if (!ok) {
+        return false;
+    }
 
-    // 3. 结构法当前输出整体匹配结果，因此摘要中按 0/1 记录匹配是否成功。
+    // 3. 对有线匹配数据的关联器，执行过滤链。
+    if (!_filters.empty() && !ctx.structure_match_data.raw_matches_knn.empty()) {
+        if (!runFilters(ctx)) {
+            IR_LOG_WARN("StructurePipeline::runAssociation: filter chain rejected all matches.");
+            return false;
+        }
+    }
+
+    // 4. 同步匹配计数到运行摘要。
     if (!ctx.structure_match_data.line_matches.empty() ||
         !ctx.structure_match_data.inlier_line_matches.empty()) {
         ctx.result.num_raw_matches =
-            static_cast<int>(ctx.structure_match_data.line_matches.size());
+            static_cast<int>(ctx.structure_match_data.raw_matches_knn.size());
         ctx.result.num_filtered_matches =
-            static_cast<int>(ctx.structure_match_data.inlier_line_matches.size());
+            static_cast<int>(ctx.structure_match_data.line_matches.size());
     } else {
         ctx.result.num_raw_matches = ok ? 1 : 0;
         ctx.result.num_filtered_matches = ok ? 1 : 0;
     }
     return ok;
+}
+
+bool StructurePipeline::runFilters(RegistrationContext& ctx) {
+    auto& md = ctx.structure_match_data;
+
+    // 1. 关联器已种子 filtered_matches（top-1），直接交给过滤链逐级处理。
+    //    RatioTest 等需要 KNN 的过滤器会从 raw_matches_knn 重新计算。
+    for (const auto& f : _filters) {
+        if (!f) {
+            continue;
+        }
+        if (!f->apply(ctx)) {
+            IR_LOG_WARN("StructurePipeline filter ", f->name(), " returned false");
+        }
+    }
+
+    // 2. 过滤完成后同步 filtered_matches → line_matches。
+    md.line_matches = md.filtered_matches;
+    md.inlier_line_matches = md.line_matches;
+    md.valid = !md.line_matches.empty();
+
+    IR_LOG_INFO("StructurePipeline filters done: ",
+                md.line_matches.size(),
+                " / ",
+                md.raw_matches_knn.size(),
+                " line matches after filtering");
+    return md.valid;
 }
 
 bool StructurePipeline::runEstimation(RegistrationContext& ctx) {

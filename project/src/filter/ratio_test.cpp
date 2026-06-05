@@ -12,6 +12,33 @@ RatioTestFilter::RatioTestFilter(const YAML::Node& cfg) {
 }
 
 bool RatioTestFilter::apply(RegistrationContext& ctx) {
+    // --- ç»“æ„æ³•è·¯å¾„ï¼šä» structure_match_data è¯»å– KNN ---
+    auto& smd = ctx.structure_match_data;
+    if (!smd.raw_matches_knn.empty()) {
+        std::vector<cv::DMatch> kept;
+        kept.reserve(smd.raw_matches_knn.size());
+        for (const auto& neighbours : smd.raw_matches_knn) {
+            if (neighbours.size() < 2) {
+                if (!neighbours.empty())
+                    kept.push_back(neighbours.front());
+                continue;
+            }
+            const cv::DMatch& m1 = neighbours[0];
+            const cv::DMatch& m2 = neighbours[1];
+            if (m2.distance > 0.0f && (m1.distance / m2.distance) < _ratio) {
+                kept.push_back(m1);
+            }
+        }
+        smd.filtered_matches = std::move(kept);
+        IR_LOG_INFO("RatioTestFilter [structure] kept ",
+                    smd.filtered_matches.size(),
+                    " / ",
+                    smd.raw_matches_knn.size(),
+                    " matches");
+        return true;
+    }
+
+    // --- ç‚¹ç‰¹å¾è·¯å¾„ï¼ˆåŸæœ‰é€»è¾‘ï¼‰ ---
     auto& md = ctx.keypoint_match_data;
 
     if (md.raw_knn.empty()) {
@@ -25,7 +52,6 @@ bool RatioTestFilter::apply(RegistrationContext& ctx) {
 
     for (const auto& neighbours : md.raw_knn) {
         if (neighbours.size() < 2) {
-            // k<2 Ê±ÎŞ·¨×ö±ÈÖµ¼ìÑé£¬±£Áôµ±Ç°µ¥¸öÆ¥Åä¡£
             if (!neighbours.empty())
                 kept.push_back(neighbours.front());
             continue;
@@ -38,7 +64,11 @@ bool RatioTestFilter::apply(RegistrationContext& ctx) {
     }
 
     md.filtered = std::move(kept);
-    IR_LOG_INFO("RatioTestFilter kept ", md.filtered.size(), " / ", md.raw_knn.size(), " matches");
+    IR_LOG_INFO("RatioTestFilter [keypoint] kept ",
+                md.filtered.size(),
+                " / ",
+                md.raw_knn.size(),
+                " matches");
     return true;
 }
 

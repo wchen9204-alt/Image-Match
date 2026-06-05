@@ -28,6 +28,27 @@ DistanceThresholdFilter::DistanceThresholdFilter(const YAML::Node& cfg) {
 }
 
 bool DistanceThresholdFilter::apply(RegistrationContext& ctx) {
+    // --- 结构法路径 ---
+    auto& smd = ctx.structure_match_data;
+    if (!smd.filtered_matches.empty() || !smd.raw_matches_knn.empty()) {
+        const std::vector<cv::DMatch>& input = smd.filtered_matches;
+        if (input.empty()) {
+            IR_LOG_WARN("DistanceThresholdFilter [structure]: no matches available.");
+            return false;
+        }
+        std::vector<cv::DMatch> kept;
+        kept.reserve(input.size());
+        for (const auto& match : input) {
+            if (match.distance <= _maxDistance)
+                kept.push_back(match);
+        }
+        smd.filtered_matches = std::move(kept);
+        IR_LOG_INFO("DistanceThresholdFilter [structure] kept ",
+                    smd.filtered_matches.size(), " / ", input.size());
+        return true;
+    }
+
+    // --- 点特征路径（原有逻辑） ---
     auto& md = ctx.keypoint_match_data;
     const std::vector<cv::DMatch> input = collectInputMatches(md);
     if (input.empty()) {
@@ -44,13 +65,9 @@ bool DistanceThresholdFilter::apply(RegistrationContext& ctx) {
         }
     }
 
-    IR_LOG_INFO("DistanceThresholdFilter kept ",
-                kept.size(),
-                " / ",
-                input.size(),
-                " matches (max_distance=",
-                _maxDistance,
-                ")");
+    IR_LOG_INFO("DistanceThresholdFilter [keypoint] kept ",
+                kept.size(), " / ", input.size(),
+                " matches (max_distance=", _maxDistance, ")");
     md.filtered = std::move(kept);
     return true;
 }

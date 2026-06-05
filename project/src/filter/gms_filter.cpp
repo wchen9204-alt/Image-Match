@@ -22,6 +22,13 @@ GmsFilter::GmsFilter(const YAML::Node& cfg) {
 }
 
 bool GmsFilter::apply(RegistrationContext& ctx) {
+    // --- ç»“æ„æ³•è·¯å¾„ï¼šGMS éœ€è¦ KeyPoint ç©ºé—´åæ ‡ï¼Œçº¿åŒ¹é…å½“å‰ä¸æ”¯æŒ ---
+    if (!ctx.structure_match_data.raw_matches_knn.empty() ||
+        !ctx.structure_match_data.filtered_matches.empty()) {
+        IR_LOG_WARN("GmsFilter [structure]: not supported for line matches, pass-through.");
+        return true;
+    }
+
     const auto& fd = ctx.keypoint_data;
     const auto& images = ctx.images;
     auto& md = ctx.keypoint_match_data;
@@ -37,7 +44,7 @@ bool GmsFilter::apply(RegistrationContext& ctx) {
         return false;
     }
 
-    // GMS ÀûÓÃÍø¸ñÍ³¼ÆÔ¼Êø¹ıÂË¾Ö²¿²»Ò»ÖÂÆ¥Åä£¬ÊÊºÏ´ó¹æÄ£³íÃÜºòÑ¡³¡¾°¡£
+    // GMS ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í³ï¿½ï¿½Ô¼ï¿½ï¿½ï¿½ï¿½ï¿½Ë¾Ö²ï¿½ï¿½ï¿½Ò»ï¿½ï¿½Æ¥ï¿½ä£¬ï¿½ÊºÏ´ï¿½ï¿½Ä£ï¿½ï¿½ï¿½Üºï¿½Ñ¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     std::vector<cv::DMatch> kept;
     cv::xfeatures2d::matchGMS(images.first.size(),
                               images.second.size(),

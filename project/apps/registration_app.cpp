@@ -385,6 +385,129 @@ bool RegistrationApp::isBatchYaml(const YAML::Node& node) {
     return node && node.IsMap() && node["pipeline"] && node["dataset"];
 }
 
+bool RegistrationApp::isCompareYaml(const YAML::Node& node) {
+    return node && node.IsMap() && node["base_pipeline"] && node["combinations"];
+}
+
+int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
+    const YAML::Node cfg = Config::load(compare_yaml);
+    const auto baseDir = compare_yaml.parent_path();
+
+    // 1. 加载基础配置模板
+    const auto pipeline_yaml = Config::resolvePath(baseDir,
+        yaml_utils::getString(cfg, "base_pipeline"));
+    const auto structure_yaml = Config::resolvePath(baseDir,
+        yaml_utils::getString(cfg, "base_structure"));
+    YAML::Node structureNode = Config::load(structure_yaml);
+
+    // 2. 数据集
+    DatasetLoader::Options datasetOpts;
+    const YAML::Node ds = cfg["dataset"];
+    datasetOpts.root = Config::resolvePath(baseDir, yaml_utils::getString(ds, "root"));
+    datasetOpts.pattern_source = yaml_utils::getString(ds, "pattern_source", "source");
+    datasetOpts.pattern_target = yaml_utils::getString(ds, "pattern_target", "target");
+    datasetOpts.include = yaml_utils::getVec<std::string>(ds, "include", {});
+
+    // 3. 输出根目录
+    const auto outputRoot = Config::resolvePath(baseDir,
+        yaml_utils::getString(cfg["output"], "root", "../../outputs/compare"));
+    std::error_code ec;
+    fs::create_directories(outputRoot / "tmp", ec);
+
+    // 4. 遍历组合
+    const YAML::Node combos = cfg["combinations"];
+    std::vector<std::string> labels;
+    std::vector<int> successCounts;
+    std::vector<int> totalCounts;
+    std::vector<double> avgIous;
+    std::vector<double> avgPsnrs;
+
+    for (const auto& combo : combos) {
+        const std::string extractor = yaml_utils::getString(combo, "extractor", "LSD");
+        const std::string descriptor = yaml_utils::getString(combo, "descriptor", "LBD");
+        const std::string label = extractor + "+" + descriptor;
+
+        // 修改结构 YAML 节点
+        structureNode["extractor"]["method"] = extractor;
+        structureNode["association"]["params"]["line_descriptor"]["descriptor"] = descriptor;
+        structureNode["association"]["params"]["line_descriptor"]["geometric_filter"] = true;
+
+        // 写临时文件
+        const auto tmpYaml = outputRoot / "tmp" / (label + ".yaml");
+        std::ofstream fout(tmpYaml.string());
+        fout << structureNode;
+        fout.close();
+
+        // 加载 pipeline 配置并执行批量
+        PipelineConfig pipelineCfg = Config::loadPipeline(pipeline_yaml);
+        pipelineCfg.structure_path = tmpYaml;
+        pipelineCfg.output_dir = outputRoot / label;
+        pipelineCfg.draw_matches = false;
+        pipelineCfg.warp = true;
+
+        DatasetLoader loader(datasetOpts);
+        const auto samples = loader.load();
+        if (samples.empty()) {
+            std::cerr << "Compare: no samples for " << label << "\n";
+            continue;
+        }
+
+        int okCount = 0;
+        double iouSum = 0.0, psnrSum = 0.0;
+        int iouValid = 0, psnrValid = 0;
+
+        for (const auto& sample : samples) {
+            auto pCfg = pipelineCfg;
+            pCfg.image1_path = sample.source_path;
+            pCfg.image2_path = sample.target_path;
+            pCfg.output_dir = pCfg.output_dir / sample.name;
+
+            auto pipeline = createPipelineForConfig(pCfg);
+            if (!pipeline->configure(pCfg)) continue;
+
+            RegistrationContext ctx;
+            if (pipeline->run(ctx)) ++okCount;
+
+            if (ctx.result.warp_overlap_iou >= 0.0) {
+                iouSum += ctx.result.warp_overlap_iou;
+                ++iouValid;
+            }
+            // 从 evaluation 中取 PSNR
+            if (const auto* m = ctx.evaluation.find("PSNR"); m && m->valid) {
+                psnrSum += m->value;
+                ++psnrValid;
+            }
+        }
+
+        labels.push_back(label);
+        successCounts.push_back(okCount);
+        totalCounts.push_back(static_cast<int>(samples.size()));
+        avgIous.push_back(iouValid > 0 ? iouSum / iouValid : -1.0);
+        avgPsnrs.push_back(psnrValid > 0 ? psnrSum / psnrValid : -1.0);
+
+        std::cout << "  " << label << ": " << okCount << " / " << samples.size()
+                  << " succeeded\n";
+    }
+
+    // 5. 写对比总表
+    const auto csvPath = outputRoot / "comparison.csv";
+    std::ostringstream oss;
+    oss << "method,succeeded,total,success_rate,avg_iou,avg_psnr\n";
+    for (size_t i = 0; i < labels.size(); ++i) {
+        oss << labels[i] << ","
+            << successCounts[i] << ","
+            << totalCounts[i] << ","
+            << (totalCounts[i] > 0
+                    ? static_cast<double>(successCounts[i]) / totalCounts[i]
+                    : 0.0) << ","
+            << avgIous[i] << ","
+            << avgPsnrs[i] << "\n";
+    }
+    file_utils::writeWholeFile(csvPath, oss.str());
+    std::cout << "\nWrote comparison table: " << csvPath.string() << "\n";
+    return 0;
+}
+
 RegistrationApp::BatchConfig RegistrationApp::loadBatchConfig(const std::filesystem::path& yaml_path) {
     // 批处理配置以 batch.yaml 所在目录为基准解析相对路径，便于配置整体迁移。
     const YAML::Node node = Config::load(yaml_path);
@@ -589,6 +712,9 @@ int RegistrationApp::run(const Args& args) {
 
     try {
         const YAML::Node node = Config::load(args.pipeline_yaml);
+        if (isCompareYaml(node)) {
+            return RegistrationApp::runCompare(args.pipeline_yaml);
+        }
         if (isBatchYaml(node)) {
             return RegistrationApp::runBatch(args.pipeline_yaml);
         }

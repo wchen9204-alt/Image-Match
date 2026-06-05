@@ -3,6 +3,7 @@
 # 当前文件用于组织基于直线结构的配准流程。
 # ---------------------------------------------------------------------------
 name: line_pipeline
+method_family: structure
 
 # 支持的结构方法：
 # edge / line / contour
@@ -12,8 +13,8 @@ structure: ../../structure/line.yaml
 geometry: ../../geometry/rigid.yaml
 
 io:
-  image1: ../../../datasets/test1/source.png
-  image2: ../../../datasets/test1/target.png
+  image1: ../../../datasets/Test01/source.png
+  image2: ../../../datasets/Test01/target.png
   output_dir: ../../../outputs
 
 visualization:
@@ -28,9 +29,15 @@ visualization:
 
 validation:
   warp_overlap:
-    enabled: false
+    enabled: true
     min_iou: 0.20
     foreground_threshold: 10
   photometric:
     enabled: false
     max_nmad: 0.15
+
+evaluator: ../../evaluator/metrics.yaml
+
+filters:
+ # - ../../filter/ratio_test.yaml
+ # - ../../filter/distance_threshold.yaml

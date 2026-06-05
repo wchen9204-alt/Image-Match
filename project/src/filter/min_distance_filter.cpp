@@ -37,6 +37,35 @@ MinDistanceFilter::MinDistanceFilter(const YAML::Node& cfg) {
 }
 
 bool MinDistanceFilter::apply(RegistrationContext& ctx) {
+    // --- 结构法路径 ---
+    auto& smd = ctx.structure_match_data;
+    if (!smd.filtered_matches.empty() || !smd.raw_matches_knn.empty()) {
+        const std::vector<cv::DMatch>& input = smd.filtered_matches;
+        if (input.empty()) {
+            IR_LOG_WARN("MinDistanceFilter [structure]: no matches available.");
+            return false;
+        }
+        float minDistance = std::numeric_limits<float>::max();
+        for (const auto& match : input)
+            minDistance = std::min(minDistance, match.distance);
+        if (!std::isfinite(minDistance)) {
+            smd.filtered_matches.clear();
+            return false;
+        }
+        const float threshold = std::max(_multiplier * minDistance, _minCutoff);
+        std::vector<cv::DMatch> kept;
+        kept.reserve(input.size());
+        for (const auto& match : input) {
+            if (match.distance <= threshold)
+                kept.push_back(match);
+        }
+        smd.filtered_matches = std::move(kept);
+        IR_LOG_INFO("MinDistanceFilter [structure] kept ",
+                    smd.filtered_matches.size(), " / ", input.size());
+        return true;
+    }
+
+    // --- 点特征路径（原有逻辑） ---
     auto& md = ctx.keypoint_match_data;
     const std::vector<cv::DMatch> input = collectInputMatches(md);
     if (input.empty()) {
@@ -64,15 +93,10 @@ bool MinDistanceFilter::apply(RegistrationContext& ctx) {
         }
     }
 
-    IR_LOG_INFO("MinDistanceFilter kept ",
-                kept.size(),
-                " / ",
-                input.size(),
-                " matches (min_dist=",
-                minDistance,
-                ", threshold=",
-                threshold,
-                ")");
+    IR_LOG_INFO("MinDistanceFilter [keypoint] kept ",
+                kept.size(), " / ", input.size(),
+                " matches (min_dist=", minDistance,
+                ", threshold=", threshold, ")");
     md.filtered = std::move(kept);
     return true;
 }

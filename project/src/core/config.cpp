@@ -63,12 +63,26 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
     PipelineConfig cfg;
     cfg.name = yaml_utils::getString(node, "name", path.stem().string());
 
-    // 兼容旧的 `feature` 键，同时优先支持新的 `keypoint` 键。
+    // 方法族：显式声明优先，否则从配置路径推断（兼容旧 YAML）
+    const std::string familyStr = yaml_utils::getString(node, "method_family");
+    if (!familyStr.empty()) {
+        const std::string key = familyStr;
+        if (key == "keypoint" || key == "KEYPOINT")       cfg.method_family = MethodFamily::KEYPOINT;
+        else if (key == "structure" || key == "STRUCTURE") cfg.method_family = MethodFamily::STRUCTURE;
+        else if (key == "direct" || key == "DIRECT")       cfg.method_family = MethodFamily::DIRECT;
+    } else {
+        // 向后兼容：无 method_family 时从路径推断
+        if (!yaml_utils::getString(node, "structure").empty())
+            cfg.method_family = MethodFamily::STRUCTURE;
+    }
+
+    // 各方法族配置文件路径
     const std::string keypoint_entry = yaml_utils::getString(
         node, "keypoint", yaml_utils::getString(node, "feature"));
     cfg.keypoint_path = resolvePath(base, keypoint_entry);
     cfg.structure_path = resolvePath(base, yaml_utils::getString(node, "structure"));
-    cfg.matcher_path = resolvePath(base, yaml_utils::getString(node, "matcher"));
+    cfg.direct_path   = resolvePath(base, yaml_utils::getString(node, "direct"));
+    cfg.matcher_path  = resolvePath(base, yaml_utils::getString(node, "matcher"));
     cfg.geometry_path = resolvePath(base, yaml_utils::getString(node, "geometry"));
 
     cfg.filter_paths.clear();
@@ -77,6 +91,8 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
             cfg.filter_paths.push_back(resolvePath(base, f.as<std::string>()));
         }
     }
+
+    cfg.evaluator_path = resolvePath(base, yaml_utils::getString(node, "evaluator"));
 
     if (node["io"] && node["io"].IsMap()) {
         const auto& io = node["io"];

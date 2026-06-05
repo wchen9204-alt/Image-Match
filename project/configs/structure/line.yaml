@@ -37,7 +37,7 @@ extractor:
     maxLineGap: 10.0
     # 默认值：2。将线段绘制回结构响应图时的线宽。
     lineThickness: 1
-    deduplicateLines: true
+    deduplicateLines: false
     duplicateAngleDeg: 3.0
     duplicateDistance: 8.0
 
@@ -86,17 +86,30 @@ association:
   method: line_descriptor
   params:
     line_descriptor:
-      # 当前实现优先支持 LBD；需要 OpenCV contrib line_descriptor 模块。
-      descriptor: LBD
+      # 线描述子类型，可选 LBD / MSLD / LINE_SIFT。
+      #   LBD:      二进制描述子，依赖 OpenCV contrib line_descriptor 模块。
+      #   MSLD:     浮点描述子（72维），纯 OpenCV 基础操作。
+      #   LINE_SIFT: 浮点描述子（128维），SIFT 梯度直方图 + 高斯加权。
+      descriptor: LINE_SIFT
+      # 匹配器类型，可选 BF / FLANN（仅 float 描述子支持 FLANN）。
+      matcher: BF
       # KNN 邻居数量。
       knn_k: 8
       # 进入后续阶段前要求的最少匹配数。
       min_matches: 2
       # 几何一致性筛选（线匹配特有，在线段空间做方向/长度/位移投票）。
-      geometric_filter: false
+      geometric_filter: true
       angle_threshold_deg: 30.0
       min_length_ratio: 0.30
       shift_consistency_threshold: 30.0
+      # MSLD 参数（仅 descriptor: MSLD 时使用）。
+      msld_band_width: 12
+      msld_strips: 9
+      # line-SIFT 参数（仅 descriptor: LINE_SIFT 时使用）。
+      linesift_band_width: 20
+      linesift_strips: 4
+      linesift_bands: 4
+      linesift_bins: 8
     line_segment:
       angleThresholdDeg: 10.0
       minLengthRatio: 0.60
@@ -152,11 +165,3 @@ association:
 estimation:
   # 默认值：0.01。结构匹配结果有效性阈值；当前平移模型直接复用关联结果。
   responseThreshold: 0.01
-
-# ---------------------------------------------------------------------------
-# 过滤链：关联器输出原始匹配后，依次执行以下过滤器。
-# 与点特征流水线的 filters 格式兼容，可自由组合排序。
-# ---------------------------------------------------------------------------
-filters:
- # - ../../filter/ratio_test.yaml
- # - ../../filter/distance_threshold.yaml
