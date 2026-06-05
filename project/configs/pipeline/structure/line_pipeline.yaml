@@ -25,3 +25,12 @@ visualization:
   show_target_window: false
   show_warped_window: false
   wait_key: 0
+
+validation:
+  warp_overlap:
+    enabled: false
+    min_iou: 0.20
+    foreground_threshold: 10
+  photometric:
+    enabled: false
+    max_nmad: 0.15

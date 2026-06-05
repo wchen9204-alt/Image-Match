@@ -88,20 +88,15 @@ association:
     line_descriptor:
       # 当前实现优先支持 LBD；需要 OpenCV contrib line_descriptor 模块。
       descriptor: LBD
-      # KNN ratio test 阈值。
-      ratio: 1.0
-      # LBD 复用上方 extractor 输出的线段，只负责计算线描述子并匹配。
-      knnK: 8
-      # 描述子匹配后的线段方向差阈值，单位为度。
-      angleThresholdDeg: 30.0
-      # 描述子匹配后的线段长度比例下限。
-      minLengthRatio: 0.30
-      # 描述子匹配后的线段中点最大位移，默认近似不限制。
-      maxShiftDistance: 100000.0
-      # 描述子匹配后的中点位移一致性阈值，单位为像素。
-      shiftConsistencyThreshold: 30.0
-      # 进入几何估计前要求的最少线段描述子匹配数。
-      minMatches: 2
+      # KNN 邻居数量。
+      knn_k: 8
+      # 进入后续阶段前要求的最少匹配数。
+      min_matches: 2
+      # 几何一致性筛选（线匹配特有，在线段空间做方向/长度/位移投票）。
+      geometric_filter: false
+      angle_threshold_deg: 30.0
+      min_length_ratio: 0.30
+      shift_consistency_threshold: 30.0
     line_segment:
       angleThresholdDeg: 10.0
       minLengthRatio: 0.60
@@ -157,3 +152,11 @@ association:
 estimation:
   # 默认值：0.01。结构匹配结果有效性阈值；当前平移模型直接复用关联结果。
   responseThreshold: 0.01
+
+# ---------------------------------------------------------------------------
+# 过滤链：关联器输出原始匹配后，依次执行以下过滤器。
+# 与点特征流水线的 filters 格式兼容，可自由组合排序。
+# ---------------------------------------------------------------------------
+filters:
+ # - ../../filter/ratio_test.yaml
+ # - ../../filter/distance_threshold.yaml

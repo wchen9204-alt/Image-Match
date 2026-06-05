@@ -49,6 +49,11 @@ struct PipelineConfig {
     double min_warp_overlap_iou = 0.20;
     int warp_overlap_foreground_threshold = 10;
 
+    /// 结果有效性校验：根据 warped source 与 target 重叠区域的光度差判断配准质量。
+    bool validate_warp_photometric = false;
+    /// 重叠区域 NMAD（归一化平均绝对差）上限，归一化到 [0, 1]。
+    double max_warp_photometric_error = 0.15;
+
     /// 根据是否配置结构提取器判断当前 pipeline 所属的方法族。
     MethodFamily methodFamily() const {
         return structure_path.empty() ? MethodFamily::KEYPOINT : MethodFamily::STRUCTURE;

@@ -27,6 +27,12 @@ struct StructureMatchData {
     /// 结构关联阶段的详细状态信息。
     std::string message;
 
+    /// 关联器输出的原始 KNN 匹配（每行的邻居列表）；供 RatioTest 等过滤器使用。
+    std::vector<std::vector<cv::DMatch>> raw_matches_knn;
+
+    /// 过滤链的工作输出；管道运行时由 filtered_matches 同步回 line_matches。
+    std::vector<cv::DMatch> filtered_matches;
+
     /// 线段级候选匹配，queryIdx 对应 source lines，trainIdx 对应 target lines。
     std::vector<cv::DMatch> line_matches;
 
@@ -41,6 +47,8 @@ struct StructureMatchData {
         score = 0.0;
         valid = false;
         message.clear();
+        raw_matches_knn.clear();
+        filtered_matches.clear();
         line_matches.clear();
         inlier_line_matches.clear();
     }

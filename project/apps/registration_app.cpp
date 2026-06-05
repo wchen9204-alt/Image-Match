@@ -109,6 +109,10 @@ std::string buildKeypointSummaryText(const RegistrationContext& ctx) {
         oss << "  warp IoU      : " << std::fixed << std::setprecision(3)
             << r.warp_overlap_iou << "\n";
     }
+    if (r.warp_photometric_error >= 0.0) {
+        oss << "  warp NMAD      : " << std::fixed << std::setprecision(4)
+            << r.warp_photometric_error << "\n";
+    }
     appendTimingSummary(oss, r);
     appendEvaluationSummary(oss, ctx.evaluation);
     oss << "==============================================================\n";
@@ -135,34 +139,38 @@ std::string buildStructureSummaryText(const RegistrationContext& ctx) {
         oss << "  warp IoU      : " << std::fixed << std::setprecision(3)
             << r.warp_overlap_iou << "\n";
     }
+    if (r.warp_photometric_error >= 0.0) {
+        oss << "  warp NMAD      : " << std::fixed << std::setprecision(4)
+            << r.warp_photometric_error << "\n";
+    }
     appendTimingSummary(oss, r);
     appendEvaluationSummary(oss, ctx.evaluation);
     oss << "================================================================\n";
     return oss.str();
 }
 
-// 根据 pipeline 类型选择摘要格式，避免两类方法的统计字段混在一起。
-std::string buildSummaryText(const RegistrationContext& ctx, bool structurePipeline) {
-    if (structurePipeline) {
+// 根据方法族选择摘要格式。
+std::string buildSummaryText(const RegistrationContext& ctx, MethodFamily family) {
+    if (family == MethodFamily::STRUCTURE)
         return buildStructureSummaryText(ctx);
-    }
-    return buildKeypointSummaryText(ctx);
+    return buildKeypointSummaryText(ctx);  // KEYPOINT / DIRECT 暂用点特征格式
 }
 
-void printSummary(const RegistrationContext& ctx, bool structurePipeline) {
-    std::cout << buildSummaryText(ctx, structurePipeline);
+void printSummary(const RegistrationContext& ctx, MethodFamily family) {
+    std::cout << buildSummaryText(ctx, family);
 }
 
-// 当前用是否配置 structure 子项来区分点特征法和结构法。
+// 根据 method_family 显式字段选择 pipeline 类型，直接法后续在此扩展。
 std::shared_ptr<IPipeline> createPipelineForConfig(const PipelineConfig& cfg) {
-    if (!cfg.structure_path.empty()) {
+    switch (cfg.method_family) {
+    case MethodFamily::STRUCTURE:
         return std::make_shared<StructurePipeline>();
+    case MethodFamily::DIRECT:
+        // TODO: return std::make_shared<DirectPipeline>();
+    case MethodFamily::KEYPOINT:
+    default:
+        return std::make_shared<KeypointPipeline>();
     }
-    return std::make_shared<KeypointPipeline>();
-}
-
-std::string methodFamilyDir(MethodFamily family) {
-    return family == MethodFamily::STRUCTURE ? "structure" : "keypoint";
 }
 
 std::string sampleStemFromPaths(const fs::path& image1, const fs::path& image2) {
@@ -185,18 +193,19 @@ std::string buildSummaryJson(const RegistrationContext& ctx,
                              const PipelineConfig& cfg,
                              const std::string& sample_name) {
     const auto& r = ctx.result;
-    const bool structure_pipeline = cfg.methodFamily() == MethodFamily::STRUCTURE;
+    const auto family = cfg.methodFamily();
+    const bool isStructure = (family == MethodFamily::STRUCTURE);
     std::ostringstream oss;
     oss << "{\n";
     oss << "  \"pipeline_name\": \"" << jsonEscape(cfg.name) << "\",\n";
-    oss << "  \"method_family\": \"" << methodFamilyDir(cfg.methodFamily()) << "\",\n";
+    oss << "  \"method_family\": \"" << methodFamilyDir(family) << "\",\n";
     oss << "  \"sample_name\": \"" << jsonEscape(sample_name) << "\",\n";
     oss << "  \"status\": \"" << (r.success ? "OK" : "FAILED") << "\",\n";
     oss << "  \"message\": \"" << jsonEscape(r.message) << "\",\n";
     oss << "  \"image1_path\": \"" << jsonEscape(ctx.image1_path.string()) << "\",\n";
     oss << "  \"image2_path\": \"" << jsonEscape(ctx.image2_path.string()) << "\",\n";
     oss << "  \"counts\": {\n";
-    if (structure_pipeline) {
+    if (isStructure) {
         oss << "    \"num_structures_first\": " << r.num_structures_first << ",\n";
         oss << "    \"num_structures_second\": " << r.num_structures_second << ",\n";
     } else {
@@ -212,7 +221,7 @@ std::string buildSummaryJson(const RegistrationContext& ctx,
     oss << "    \"mean_reproj_error\": " << r.mean_reproj_error << ",\n";
     oss << "    \"warp_overlap_iou\": " << r.warp_overlap_iou << "\n";
     oss << "  },\n";
-    if (structure_pipeline && !ctx.geometry_data.A.empty() && ctx.geometry_data.A.rows >= 2 &&
+    if (isStructure && !ctx.geometry_data.A.empty() && ctx.geometry_data.A.rows >= 2 &&
         ctx.geometry_data.A.cols >= 3) {
         oss << "  \"translation\": {\n";
         oss << "    \"dx\": " << ctx.geometry_data.A.at<double>(0, 2) << ",\n";
@@ -254,8 +263,8 @@ void writeRunSummaryFiles(const RegistrationContext& ctx,
         return;
     }
 
-    const bool structure_pipeline = cfg.methodFamily() == MethodFamily::STRUCTURE;
-    const std::string summary_text = buildSummaryText(ctx, structure_pipeline);
+    const auto family = cfg.methodFamily();
+    const std::string summary_text = buildSummaryText(ctx, family);
     const std::string summary_json = buildSummaryJson(ctx, cfg, sample_name);
 
     const fs::path txt_path = ctx.output_dir / "run_summary.txt";
@@ -367,8 +376,8 @@ int RegistrationApp::runSingle(const Args& args) {
                     std::vector<EvaluationData>{ctx.evaluation});
     pipeline->showWindows(ctx);
 
-    // 9. 根据 pipeline 类型输出不同摘要，避免 keypoint 和 structure 字段混杂。
-    printSummary(ctx, cfg.methodFamily() == MethodFamily::STRUCTURE);
+    // 9. 根据方法族输出对应摘要。
+    printSummary(ctx, cfg.methodFamily());
     return ok ? 0 : 1;
 }
 
@@ -376,8 +385,7 @@ bool RegistrationApp::isBatchYaml(const YAML::Node& node) {
     return node && node.IsMap() && node["pipeline"] && node["dataset"];
 }
 
-RegistrationApp::BatchConfig
-RegistrationApp::loadBatchConfig(const std::filesystem::path& yaml_path) {
+RegistrationApp::BatchConfig RegistrationApp::loadBatchConfig(const std::filesystem::path& yaml_path) {
     // 批处理配置以 batch.yaml 所在目录为基准解析相对路径，便于配置整体迁移。
     const YAML::Node node = Config::load(yaml_path);
     BatchConfig cfg;
@@ -436,7 +444,7 @@ void RegistrationApp::writeSummaryCsv(const std::filesystem::path& csv_path,
         oss << "num_keypoints_first,num_keypoints_second,";
     }
     oss << "num_raw_matches,num_filtered_matches,num_inliers,"
-        << "inlier_ratio,mean_reproj_error,warp_overlap_iou,"
+        << "inlier_ratio,mean_reproj_error,warp_overlap_iou,warp_photometric_error,"
         << "t_load_ms,t_extract_ms,t_match_ms,t_filter_ms,t_geometry_ms,t_warp_ms,t_total_ms";
     for (const auto& metric_name : metric_columns) {
         oss << "," << metric_name;
@@ -454,6 +462,7 @@ void RegistrationApp::writeSummaryCsv(const std::filesystem::path& csv_path,
         }
         oss << r.num_raw_matches << "," << r.num_filtered_matches << "," << r.num_inliers << ","
             << r.inlier_ratio << "," << r.mean_reproj_error << "," << r.warp_overlap_iou << ","
+            << r.warp_photometric_error << ","
             << r.t_load_ms << "," << r.t_extract_ms << "," << r.t_match_ms << ","
             << r.t_filter_ms << "," << r.t_geometry_ms << "," << r.t_warp_ms << ","
             << r.t_total_ms;
@@ -535,7 +544,7 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
         RegistrationContext ctx;
         const bool ok = pipeline->run(ctx);
         writeRunSummaryFiles(ctx, cfg, sample.name);
-        printSummary(ctx, cfg.methodFamily() == MethodFamily::STRUCTURE);
+        printSummary(ctx, cfg.methodFamily());
         sample_names.push_back(sample.name);
         results.push_back(ctx.result);
         evaluations.push_back(ctx.evaluation);

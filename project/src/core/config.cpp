@@ -100,11 +100,20 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
 
     if (node["validation"] && node["validation"].IsMap()) {
         const auto& validation = node["validation"];
-        const auto& overlap = validation["warp_overlap"];
-        cfg.validate_warp_overlap = yaml_utils::getBool(overlap, "enabled", false);
-        cfg.min_warp_overlap_iou = yaml_utils::getDouble(overlap, "min_iou", 0.20);
-        cfg.warp_overlap_foreground_threshold =
-            yaml_utils::getInt(overlap, "foreground_threshold", 10);
+        if (validation["warp_overlap"] && validation["warp_overlap"].IsMap()) {
+            const auto& overlap = validation["warp_overlap"];
+            cfg.validate_warp_overlap = yaml_utils::getBool(overlap, "enabled", false);
+            cfg.min_warp_overlap_iou = yaml_utils::getDouble(overlap, "min_iou", 0.20);
+            cfg.warp_overlap_foreground_threshold =
+                yaml_utils::getInt(overlap, "foreground_threshold", 10);
+        }
+        if (validation["photometric"] && validation["photometric"].IsMap()) {
+            const auto& photometric = validation["photometric"];
+            cfg.validate_warp_photometric =
+                yaml_utils::getBool(photometric, "enabled", false);
+            cfg.max_warp_photometric_error =
+                yaml_utils::getDouble(photometric, "max_nmad", 0.15);
+        }
     }
 
     IR_LOG_INFO("Pipeline '", cfg.name, "' loaded from ", path.string());

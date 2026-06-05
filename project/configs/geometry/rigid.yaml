@@ -12,12 +12,13 @@ params:
   # 本项目默认值: RANSAC
   method: RANSAC
   # 判定内点的最大重投影误差，单位像素，OpenCV 原始默认值: 3.0
-  ransacReprojThreshold: 3.0
+  # 本项目默认值: 8.0（放宽以适应线端点等非点特征的定位精度）
+  ransacReprojThreshold: 8.0
   # 最大迭代次数，OpenCV 原始默认值: 2000
   maxIters: 2000
   # 置信度，OpenCV 原始默认值: 0.99
   confidence: 0.99
-  # 判定估计有效所需的最少内点数，本项目默认值: 3
-  minInliers: 3
+  # 判定估计有效所需的最少内点数，本项目默认值: 2（降低以适应线匹配数量较少的情况）
+  minInliers: 2
   # 初始相似模型的细化迭代次数，OpenCV 原始默认值: 10
   refineIters: 10

@@ -15,6 +15,13 @@ CrossCheckFilter::CrossCheckFilter(const YAML::Node& cfg) {
 }
 
 bool CrossCheckFilter::apply(RegistrationContext& ctx) {
+    // --- ç»“æ„æ³•è·¯å¾„ï¼šCrossCheck éœ€è¦æè¿°å­çŸ©é˜µåšåå‘åŒ¹é…ï¼Œçº¿åŒ¹é…å½“å‰ä¸æ”¯æŒ ---
+    if (!ctx.structure_match_data.raw_matches_knn.empty() ||
+        !ctx.structure_match_data.filtered_matches.empty()) {
+        IR_LOG_WARN("CrossCheckFilter [structure]: not supported for line matches, pass-through.");
+        return true;
+    }
+
     auto& fd = ctx.keypoint_data;
     auto& md = ctx.keypoint_match_data;
 
@@ -36,7 +43,7 @@ bool CrossCheckFilter::apply(RegistrationContext& ctx) {
         return false;
     }
 
-    // ·´Ïò 1-NN ËÑË÷£º½»»»Á½²àÃèÊö×Ó¡£
+    // ï¿½ï¿½ï¿½ï¿½ 1-NN ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó¡ï¿½
     NormType norm = fd.norm_type;
     if (norm == NormType::UNKNOWN) {
         norm = (fd.first.descriptors.type() == CV_8U) ? NormType::HAMMING : NormType::L2;
@@ -47,18 +54,18 @@ bool CrossCheckFilter::apply(RegistrationContext& ctx) {
     std::vector<cv::DMatch> reverse;
     rev->match(fd.second.descriptors, fd.first.descriptors, reverse);
 
-    // ½¨Á¢·´ÏòË÷Òı£¬¼ÇÂ¼Ã¿¸ö train ÃèÊö×ÓµÄ×î½ü query ÃèÊö×Ó¡£
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¼Ã¿ï¿½ï¿½ train ï¿½ï¿½ï¿½ï¿½ï¿½Óµï¿½ï¿½ï¿½ï¿½ query ï¿½ï¿½ï¿½ï¿½ï¿½Ó¡ï¿½
     std::unordered_map<int, int> reverse_best;
     reverse_best.reserve(reverse.size());
     for (const auto& r : reverse) {
-        // ·´ÏòËÑË÷ÖĞ query À´×ÔµÚ¶şÕÅÍ¼£¬train À´×ÔµÚÒ»ÕÅÍ¼¡£
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ query ï¿½ï¿½ï¿½ÔµÚ¶ï¿½ï¿½ï¿½Í¼ï¿½ï¿½train ï¿½ï¿½ï¿½Ôµï¿½Ò»ï¿½ï¿½Í¼ï¿½ï¿½
         reverse_best[r.queryIdx] = r.trainIdx;
     }
 
     std::vector<cv::DMatch> kept;
     kept.reserve(forward.size());
     for (const auto& m : forward) {
-        // ÕıÏòÆ¥ÅäÖĞ query À´×ÔµÚÒ»ÕÅÍ¼£¬train À´×ÔµÚ¶şÕÅÍ¼¡£
+        // ï¿½ï¿½ï¿½ï¿½Æ¥ï¿½ï¿½ï¿½ï¿½ query ï¿½ï¿½ï¿½Ôµï¿½Ò»ï¿½ï¿½Í¼ï¿½ï¿½train ï¿½ï¿½ï¿½ÔµÚ¶ï¿½ï¿½ï¿½Í¼ï¿½ï¿½
         const auto it = reverse_best.find(m.trainIdx);
         if (it != reverse_best.end() && it->second == m.queryIdx) {
             kept.push_back(m);
