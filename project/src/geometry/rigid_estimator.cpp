@@ -5,7 +5,8 @@
 #include <string>
 #include <vector>
 
-#include "partial_affine_utils.h"
+#include "data/correspondence_view.h"
+#include "geometry/partial_affine_utils.h"
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
 
@@ -39,93 +40,69 @@ RigidEstimator::RigidEstimator(const YAML::Node& cfg) {
 }
 
 bool RigidEstimator::estimate(RegistrationContext& ctx) {
-    auto& md = ctx.keypoint_match_data;
     auto& gd = ctx.geometry_data;
 
     gd.clear();
     gd.type = GeometryType::RIGID;
 
-    if (md.filtered.size() < 2) {
-        gd.message = "need at least 2 matches, got " + std::to_string(md.filtered.size());
-        IR_LOG_ERROR("RigidEstimator: need at least 2 matches, got ", md.filtered.size());
+    const CorrespondenceSource source = correspondenceSourceFromContext(ctx);
+    const CorrespondenceView view =
+        source == CorrespondenceSource::NONE ? buildBestCorrespondenceView(ctx)
+                                             : buildCorrespondenceView(ctx, source);
+    if (view.filtered.size() < 2) {
+        gd.message = "need at least 2 correspondences, got " + std::to_string(view.filtered.size());
+        IR_LOG_ERROR("RigidEstimator: need at least 2 correspondences, got ", view.filtered.size());
         return false;
     }
 
     std::vector<cv::Point2f> pts1;
     std::vector<cv::Point2f> pts2;
-    partial_affine_utils::extractPoints(ctx, pts1, pts2);
+    partial_affine_utils::extractPoints(view, pts1, pts2);
 
-    std::vector<unsigned char> initialMask;
-    cv::Mat similarityA = cv::estimateAffinePartial2D(pts1,
-                                                      pts2,
-                                                      initialMask,
-                                                      _method,
-                                                      _ransacReprojThreshold,
-                                                      static_cast<size_t>(_maxIters),
-                                                      _confidence,
-                                                      static_cast<size_t>(_refineIters));
+    std::vector<unsigned char> mask;
+    cv::Mat A = cv::estimateAffinePartial2D(pts1,
+                                            pts2,
+                                            mask,
+                                            _method,
+                                            _ransacReprojThreshold,
+                                            static_cast<size_t>(_maxIters),
+                                            _confidence,
+                                            static_cast<size_t>(_refineIters));
 
-    if (similarityA.empty()) {
+    if (A.empty()) {
         gd.message = "estimateAffinePartial2D returned an empty matrix";
         IR_LOG_ERROR("estimateAffinePartial2D returned an empty matrix.");
         return false;
     }
 
-    std::vector<cv::Point2f> inlierPts1;
-    std::vector<cv::Point2f> inlierPts2;
-    for (size_t i = 0; i < pts1.size() && i < initialMask.size(); ++i) {
-        if (!initialMask[i]) {
-            continue;
-        }
-        inlierPts1.push_back(pts1[i]);
-        inlierPts2.push_back(pts2[i]);
-    }
-    if (inlierPts1.size() < 2) {
-        gd.message = "rigid refinement needs at least 2 initial inliers, got " +
-                     std::to_string(inlierPts1.size());
-        IR_LOG_ERROR("RigidEstimator: rigid refinement needs at least 2 initial inliers, got ",
-                     inlierPts1.size());
+    // OpenCV partial affine 负责鲁棒内点筛选；最终矩阵回归为无缩放刚体，符合平移+旋转场景。
+    if (!partial_affine_utils::refineRigidFromMask(pts1, pts2, _ransacReprojThreshold, mask, A)) {
+        gd.message = "failed to refine rigid transform from OpenCV RANSAC inliers";
+        IR_LOG_ERROR("RigidEstimator: failed to refine rigid transform from OpenCV RANSAC inliers.");
         return false;
     }
 
-    cv::Mat A;
-    if (!partial_affine_utils::estimateRigid2D(inlierPts1, inlierPts2, A)) {
-        gd.message = "failed to fit rigid transform from inliers";
-        IR_LOG_ERROR("RigidEstimator: failed to fit rigid transform from inliers.");
-        return false;
-    }
-
-    std::vector<unsigned char> mask =
-        partial_affine_utils::maskByReprojection(pts1, pts2, A, _ransacReprojThreshold);
-
-    inlierPts1.clear();
-    inlierPts2.clear();
-    for (size_t i = 0; i < pts1.size() && i < mask.size(); ++i) {
-        if (!mask[i]) {
-            continue;
-        }
-        inlierPts1.push_back(pts1[i]);
-        inlierPts2.push_back(pts2[i]);
-    }
-    if (inlierPts1.size() >= 2 &&
-        partial_affine_utils::estimateRigid2D(inlierPts1, inlierPts2, A)) {
-        mask = partial_affine_utils::maskByReprojection(pts1, pts2, A, _ransacReprojThreshold);
-    }
-
-    partial_affine_utils::promoteInliers(ctx, mask);
-    const int inliers = static_cast<int>(md.inliers.size());
+    partial_affine_utils::promoteInliers(ctx, view, mask);
+    const int inliers = partial_affine_utils::countInliers(mask);
 
     gd.A = A;
     gd.num_inliers = inliers;
-    gd.inlier_ratio = md.filtered.empty() ? 0.0 : static_cast<double>(inliers) / md.filtered.size();
+    gd.inlier_ratio = view.filtered.empty() ? 0.0 : static_cast<double>(inliers) / view.filtered.size();
     gd.valid = inliers >= _minInliers;
     if (!gd.valid) {
         gd.message = partial_affine_utils::rejectMessage("rigid transform", inliers, _minInliers);
         IR_LOG_WARN("RigidEstimator rejected model: ", gd.message);
     }
 
-    IR_LOG_INFO(
-        "Rigid2D inliers=", inliers, " / ", md.filtered.size(), " (ratio=", gd.inlier_ratio, ")");
+    IR_LOG_INFO("Rigid2D inliers=",
+                inliers,
+                " / ",
+                view.filtered.size(),
+                " (ratio=",
+                gd.inlier_ratio,
+                ", source=",
+                view.source_name,
+                ")");
     return gd.valid;
 }
 

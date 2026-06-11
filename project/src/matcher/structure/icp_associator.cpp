@@ -1,7 +1,6 @@
 #include "matcher/structure/icp_associator.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <limits>
 #include <string>
@@ -9,6 +8,7 @@
 
 #include "matcher/structure/structure_point_set.h"
 #include "utils/logger.h"
+#include "utils/string_utils.h"
 #include "utils/yaml_utils.h"
 
 namespace ir {
@@ -39,14 +39,6 @@ NearestPoint findNearest(const cv::Point2f& query, const std::vector<cv::Point2f
     return best;
 }
 
-// 统一 YAML 枚举值大小写，便于兼容 CENTROID / centroid 等写法。
-std::string upper(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-        return static_cast<char>(std::toupper(c));
-    });
-    return s;
-}
-
 } // namespace
 
 IcpAssociator::IcpAssociator(const YAML::Node& cfg) {
@@ -58,7 +50,8 @@ IcpAssociator::IcpAssociator(const YAML::Node& cfg) {
         yaml_utils::getDouble(params, "maxCorrespondenceDistance", 10.0);
     _tolerance = yaml_utils::getDouble(params, "tolerance", 0.01);
     _scoreThreshold = yaml_utils::getDouble(params, "scoreThreshold", 2.0);
-    _initialization = upper(yaml_utils::getString(params, "initialization", "CENTROID"));
+    _initialization =
+        string_utils::toUpperAscii(yaml_utils::getString(params, "initialization", "CENTROID"));
 }
 
 bool IcpAssociator::associate(RegistrationContext& ctx) {

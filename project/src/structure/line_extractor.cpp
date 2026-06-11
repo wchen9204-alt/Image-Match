@@ -1,7 +1,6 @@
 #include "structure/line_extractor.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -14,25 +13,16 @@
 #endif
 
 #include "utils/logger.h"
+#include "utils/image_utils.h"
+#include "utils/string_utils.h"
 #include "utils/yaml_utils.h"
 
 namespace ir {
 
 namespace {
 
-std::string methodKey(std::string s) {
-    std::string out;
-    out.reserve(s.size());
-    for (unsigned char c : s) {
-        if (std::isalnum(c)) {
-            out.push_back(static_cast<char>(std::toupper(c)));
-        }
-    }
-    return out;
-}
-
 LineDetectorType lineDetectorTypeFromString(const std::string& raw) {
-    const std::string key = methodKey(raw);
+    const std::string key = string_utils::normalizedKey(raw);
     if (key == "HOUGHLINES" || key == "HOUGH" || key == "STANDARDHOUGH") {
         return LineDetectorType::HOUGH_LINES;
     }
@@ -62,13 +52,6 @@ const char* toString(LineDetectorType t) {
     default:
         return "HOUGH_LINES_P";
     }
-}
-
-int normalizeAperture(int value) {
-    if (value != 3 && value != 5 && value != 7) {
-        return 3;
-    }
-    return value;
 }
 
 double lineLength(const cv::Vec4i& line) {
@@ -287,6 +270,8 @@ bool extractLsdLines(const cv::Mat& gray,
                      int detectorNumOctaves,
                      std::vector<cv::Vec4i>& lines) {
 #ifdef IR_HAS_OPENCV_LINE_DESCRIPTOR
+    // 主路径：使用 line_descriptor::LSDDetector，和 LBD 保持同一套 KeyLine 生态，
+    // 避免后续再走一遍独立的线段检测流程。
     cv::Ptr<cv::line_descriptor::LSDDetector> lbdDetector =
         cv::line_descriptor::LSDDetector::createLSDDetector();
     if (lbdDetector) {
@@ -312,9 +297,11 @@ bool extractLsdLines(const cv::Mat& gray,
         return !lines.empty();
     }
 
+    // 兼容回退：如果专用检测器在运行时创建失败，则退回到经典 LSD 行为。
     IR_LOG_WARN("LineExtractor: failed to create line_descriptor LSDDetector; falling back to "
                 "cv::LineSegmentDetector.");
 #else
+    // 构建期回退：如果没有 line_descriptor 模块，只能使用经典 OpenCV LSD。
     IR_LOG_WARN("LineExtractor: OpenCV line_descriptor is not available; LSD uses "
                 "cv::LineSegmentDetector fallback.");
 #endif
@@ -500,7 +487,8 @@ LineExtractor::LineExtractor(const YAML::Node& cfg) {
         lineDetectorTypeFromString(yaml_utils::getString(extractor, "method", "HOUGH_LINES_P"));
     _cannyThreshold1 = yaml_utils::getDouble(params, "cannyThreshold1", 50.0);
     _cannyThreshold2 = yaml_utils::getDouble(params, "cannyThreshold2", 150.0);
-    _apertureSize = normalizeAperture(yaml_utils::getInt(params, "apertureSize", 3));
+    _apertureSize =
+        image_utils::normalizedCannyAperture(yaml_utils::getInt(params, "apertureSize", 3));
     _rho = yaml_utils::getDouble(params, "rho", 1.0);
     _thetaDegrees = yaml_utils::getDouble(params, "thetaDegrees", 1.0);
     _threshold = yaml_utils::getInt(params, "threshold", 50);
@@ -530,7 +518,7 @@ LineExtractor::LineExtractor(const YAML::Node& cfg) {
     _fldCannyThreshold1 = yaml_utils::getDouble(fld, "cannyThreshold1", 50.0);
     _fldCannyThreshold2 = yaml_utils::getDouble(fld, "cannyThreshold2", 50.0);
     _fldCannyApertureSize =
-        normalizeAperture(yaml_utils::getInt(fld, "cannyApertureSize", 3));
+        image_utils::normalizedCannyAperture(yaml_utils::getInt(fld, "cannyApertureSize", 3));
     _fldDoMerge = yaml_utils::getBool(fld, "doMerge", false);
 
     IR_LOG_INFO("LineExtractor: method=",

@@ -11,7 +11,7 @@ keypoint:  ../../keypoint/sift.yaml
 
 # 支持的匹配器：
 # bf / flann
-matcher:  ../../matcher/flann.yaml
+matcher:  ../../matcher/bf.yaml
 
 # 支持的过滤器：
 # ratio_test / cross_check / distance_distribution /
@@ -24,7 +24,7 @@ filters:
 
 # 支持的几何模型：
 # rigid / similarity / affine / homography
-geometry: ../../geometry/similarity.yaml
+geometry: ../../geometry/rigid.yaml
 
 io:
   image1: ../../../datasets/Test01/source.png

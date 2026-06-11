@@ -1,0 +1,30 @@
+# ---------------------------------------------------------------------------
+# SuperPoint + SuperGlue 深度学习匹配器配置
+# 用途：C++ 调用 Python 推理脚本，读取统一 matches JSON 后进入几何估计。
+# ---------------------------------------------------------------------------
+# 方法名；默认：SUPERPOINT_SUPERGLUE；可选：SUPERPOINT_SUPERGLUE。
+method: SUPERPOINT_SUPERGLUE
+# 后端类型；默认：PYTHON；第一版仅支持 PYTHON。
+backend: PYTHON
+# Python 可执行文件；默认：C:/Users/wangchenyu/AppData/Local/Python/bin/python.exe；用于避开 WindowsApps 的 python 占位别名。
+python: C:/Users/wangchenyu/AppData/Local/Python/bin/python.exe
+# 推理 backend 脚本路径；默认：../../tools/deep/learning_backend.py；相对本配置文件解析。
+script: ../../tools/deep/learning_backend.py
+
+# backend 执行模式；默认：worker；可选：single / worker。
+# single 每个样本启动一次 Python；worker 在批处理中复用常驻模型进程。
+mode: worker
+
+# SuperGlue 权重预设；默认：outdoor；可选：outdoor / indoor。
+# 说明：脚本会优先从 project/third_party/SuperGluePretrainedNetwork 或 PYTHONPATH 中寻找 models.matching。
+weights: outdoor
+
+params:
+  # 最小匹配置信度；默认：0.20；范围：0.0~1.0，越大越保守。
+  min_confidence: 0.20
+  # 最大保留匹配数；默认：5000；同时作为 SuperPoint 最大关键点数上限。
+  max_matches: 5000
+  # 推理前长边缩放尺寸；默认：840；小于等于 0 表示按原图推理。
+  resize: 840
+  # worker 请求超时；默认：600000；单位：毫秒，防止 Python worker 异常时 C++ 无限等待。
+  worker_timeout_ms: 600000

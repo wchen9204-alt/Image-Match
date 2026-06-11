@@ -1,27 +1,21 @@
 #include "structure/edge_extractor.h"
 
 #include <algorithm>
-#include <cctype>
 #include <string>
 
 #include <opencv2/imgproc.hpp>
 
+#include "utils/image_utils.h"
 #include "utils/logger.h"
+#include "utils/string_utils.h"
 #include "utils/yaml_utils.h"
 
 namespace ir {
 
 namespace {
 
-std::string toUpperAscii(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-        return static_cast<char>(std::toupper(c));
-    });
-    return s;
-}
-
 EdgeOperatorType edgeOperatorFromString(const std::string& raw) {
-    const std::string method = toUpperAscii(raw);
+    const std::string method = string_utils::toUpperAscii(raw);
     if (method == "SOBEL") {
         return EdgeOperatorType::SOBEL;
     }
@@ -48,32 +42,12 @@ const char* toString(EdgeOperatorType type) {
     }
 }
 
-int normalizeOddKernel(int value, int fallback, int minimum = 1) {
-    if (value < minimum) {
-        value = fallback;
-    }
-    if (value % 2 == 0) {
-        ++value;
-    }
-    return value;
-}
-
-int normalizeAperture(int value) {
-    if (value != 3 && value != 5 && value != 7) {
-        return 3;
-    }
-    return value;
-}
-
+// 对输入图像应用可选的高斯模糊以减少噪声对边缘检测的影响。
 void applyOptionalBlur(const cv::Mat& gray, cv::Mat& out, int blurKernel) {
-    if (blurKernel >= 3) {
-        blurKernel = normalizeOddKernel(blurKernel, 3, 3);
-        cv::GaussianBlur(gray, out, cv::Size(blurKernel, blurKernel), 0.0);
-        return;
-    }
-    out = gray;
+    image_utils::applyOptionalGaussianBlur(gray, out, blurKernel);
 }
 
+// 对边缘强度图像应用阈值。
 void thresholdMagnitude(const cv::Mat& magnitude, cv::Mat& response, double threshold) {
     cv::Mat normalized;
     cv::normalize(magnitude, normalized, 0, 255, cv::NORM_MINMAX, CV_8U);
@@ -149,11 +123,13 @@ EdgeExtractor::EdgeExtractor(const YAML::Node& cfg) {
     _operatorType = edgeOperatorFromString(method);
     _threshold1 = yaml_utils::getDouble(params, "threshold1", 50.0);
     _threshold2 = yaml_utils::getDouble(params, "threshold2", 150.0);
-    _apertureSize = normalizeAperture(yaml_utils::getInt(params, "apertureSize", 3));
+    _apertureSize =
+        image_utils::normalizedCannyAperture(yaml_utils::getInt(params, "apertureSize", 3));
     _l2Gradient = yaml_utils::getBool(params, "l2Gradient", false);
     _blurKernel = yaml_utils::getInt(params, "blurKernel", 0);
     _dilateIterations = yaml_utils::getInt(params, "dilateIterations", 0);
-    _kernelSize = normalizeOddKernel(yaml_utils::getInt(params, "kernelSize", 3), 3, 1);
+    _kernelSize =
+        image_utils::normalizedOddKernel(yaml_utils::getInt(params, "kernelSize", 3), 3, 1);
     _scale = yaml_utils::getDouble(params, "scale", 1.0);
     _delta = yaml_utils::getDouble(params, "delta", 0.0);
     _responseThreshold = yaml_utils::getDouble(params, "responseThreshold", 50.0);

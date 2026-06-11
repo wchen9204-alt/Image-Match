@@ -1,107 +1,252 @@
-﻿# Image Registration Framework
+# Image Registration Experimental Platform
 
-A modular, OpenCV-based feature registration playground for Windows + VSCode + CMake. The first slice covers the six classic point-feature methods (SIFT, SURF, ORB, BRISK, KAZE, AKAZE), full BFMatcher with norm auto-routing, RatioTest + CrossCheck filters, and the four staple geometric estimators (Homography, Affine2D, Rigid2D, Similarity2D), wrapped in a YAML-driven pipeline.
+This project is a YAML-driven 2D image registration platform built around OpenCV,
+C++17, and optional Python deep-learning matchers. It is organized as a set of
+replaceable method families:
 
-The architecture is intentionally interface-first so later phases (line / region / deep features, evaluators, datasets) can be slotted in without touching the existing components.
+- Keypoint methods: SIFT, SURF, ORB, BRISK, KAZE, AKAZE.
+- Structure methods: edge, line, and contour based pipelines.
+- Direct methods: global, frequency, sparse, and dense direct registration.
+- Learning methods: LoFTR, SuperPoint + LightGlue, SuperPoint + SuperGlue.
+
+The C++ pipeline owns image loading, configuration, geometry estimation,
+warping, metrics, visualization, batch execution, and result summaries. Learning
+methods call Python scripts, read a unified matches JSON, and then reuse the same
+C++ geometry and evaluation stages.
 
 ## Layout
 
-```
+The tree below intentionally uses ASCII characters only, so it remains readable
+in terminals and editors with different encodings.
+
+```text
 project/
-鈹溾攢鈹€ CMakeLists.txt              modern CMake, OpenCV + yaml-cpp
-鈹溾攢鈹€ main.cpp                    thin entry point -> RegistrationApp
-鈹溾攢鈹€ apps/                       CLI driver (registration_app)
-鈹溾攢鈹€ configs/                    YAML for every component & pipeline
-鈹?  鈹溾攢鈹€ feature/                sift / surf / orb / brisk / kaze / akaze
-鈹?  鈹溾攢鈹€ matcher/                bf
-鈹?  鈹溾攢鈹€ filter/                 ratio_test / cross_check
-鈹?  鈹溾攢鈹€ geometry/               homography / affine / rigid / similarity
-鈹?  鈹斺攢鈹€ pipeline/               sift_pipeline / orb_pipeline
-鈹溾攢鈹€ include/                    public headers
-鈹?  鈹溾攢鈹€ interfaces/             pure-virtual contracts
-鈹?  鈹溾攢鈹€ core/                   types, context, factory, config, result
-鈹?  鈹溾攢鈹€ data/                   KeypointData / KeypointMatchData / StructureMatchData / GeometryData
-鈹?  鈹溾攢鈹€ feature/                concrete extractors
-鈹?  鈹溾攢鈹€ matcher/                BFMatcher
-鈹?  鈹溾攢鈹€ filter/                 RatioTest / CrossCheck
-鈹?  鈹溾攢鈹€ geometry/               Homography / Affine / Rigid / Similarity
-鈹?  鈹溾攢鈹€ transform/              warpers
-鈹?  鈹溾攢鈹€ pipeline/               BasePipeline / KeypointPipeline
-鈹?  鈹斺攢鈹€ utils/                  logger / timer / yaml_utils / draw_matches
-鈹溾攢鈹€ src/                        implementations mirrored from include/
-鈹斺攢鈹€ outputs/                    matches/ and warped/ are written here
+|-- CMakeLists.txt
+|-- main.cpp
+|-- apps/
+|   |-- registration_app.h
+|   `-- registration_app.cpp
+|-- include/
+|   |-- core/
+|   |-- data/
+|   |-- interfaces/
+|   |-- keypoint/
+|   |-- structure/
+|   |-- direct/
+|   |-- learning/
+|   |-- matcher/
+|   |-- filter/
+|   |-- geometry/
+|   |-- transform/
+|   |-- pipeline/
+|   |-- dataset/
+|   |-- evaluator/
+|   `-- utils/
+|-- src/
+|   |-- core/
+|   |-- data/
+|   |-- keypoint/
+|   |-- structure/
+|   |-- direct/
+|   |-- learning/
+|   |-- matcher/
+|   |-- filter/
+|   |-- geometry/
+|   |-- transform/
+|   |-- pipeline/
+|   |-- dataset/
+|   |-- evaluator/
+|   `-- utils/
+|-- configs/
+|   |-- keypoint/
+|   |-- structure/
+|   |-- direct/
+|   |-- learning/
+|   |-- matcher/
+|   |-- filter/
+|   |-- geometry/
+|   |-- evaluator/
+|   `-- pipeline/
+|       |-- keypoint/
+|       |-- structure/
+|       |-- direct/
+|       |-- learning/
+|       `-- batch/
+|-- tools/
+|   `-- deep/
+|       |-- learning_backend.py
+|       |-- loftr_infer.py
+|       |-- superpoint_lightglue_infer.py
+|       `-- superpoint_superglue_infer.py
+|-- third_party/
+|   |-- LightGlue/
+|   `-- SuperGluePretrainedNetwork/
+|-- datasets/
+|-- outputs/
+`-- build-mingw/
 ```
 
-## Build (Windows / VSCode + CMake Tools)
+For the full directory map, see `PROJECT_DIRECTORY_STRUCTURE_CN.md`.
 
-Prerequisites:
+## Build
 
-- Visual Studio 2019 / 2022 with the C++ workload (MSVC 19.x)
-- CMake >= 3.16
-- OpenCV 4.x with `xfeatures2d` (any prebuilt that includes `opencv_xfeatures2dXXX.lib`)
-- yaml-cpp prebuilt or installed via vcpkg
-
-Set the environment variables once so `find_package` can locate them, e.g.:
+The current local build target is MinGW:
 
 ```powershell
-setx OpenCV_DIR "C:\opencv\build"          # contains OpenCVConfig.cmake
-setx CMAKE_PREFIX_PATH "C:\yaml-cpp\install"
+cmake --build project/build-mingw
 ```
 
-Or, when using vcpkg:
+Main executable:
+
+```text
+project/build-mingw/bin/registration_app.exe
+```
+
+Core dependencies:
+
+- OpenCV 4.x, including contrib modules used by the project.
+- yaml-cpp.
+- CMake with C++17 support.
+
+## Single Run
+
+Run one pipeline YAML:
 
 ```powershell
-cmake -S . -B build -G "Visual Studio 17 2022" `
-    -DCMAKE_TOOLCHAIN_FILE="<vcpkg-root>\scripts\buildsystems\vcpkg.cmake"
-cmake --build build --config Release
+project/build-mingw/bin/registration_app.exe project/configs/pipeline/keypoint/sift_pipeline.yaml
 ```
 
-Without vcpkg:
+Examples by method family:
 
 ```powershell
-cmake -S . -B build -G "Visual Studio 17 2022" `
-    -DOpenCV_DIR="C:/opencv/build" `
-    -DCMAKE_PREFIX_PATH="C:/yaml-cpp/install"
-cmake --build build --config Release
+project/build-mingw/bin/registration_app.exe project/configs/pipeline/keypoint/sift_pipeline.yaml
+project/build-mingw/bin/registration_app.exe project/configs/pipeline/structure/line_pipeline.yaml
+project/build-mingw/bin/registration_app.exe project/configs/pipeline/direct/frequency_direct_pipeline.yaml
+project/build-mingw/bin/registration_app.exe project/configs/pipeline/learning/loftr_learning_pipeline.yaml
+project/build-mingw/bin/registration_app.exe project/configs/pipeline/learning/superpoint_lightglue_learning_pipeline.yaml
+project/build-mingw/bin/registration_app.exe project/configs/pipeline/learning/superpoint_superglue_learning_pipeline.yaml
 ```
 
-The build copies `configs/` next to the produced `registration_app.exe` so the relative paths inside the pipeline YAMLs work out of the box.
+Each pipeline can also override input images and output directory through its
+`io` block.
 
-## Run
+## Batch Run
+
+Batch configs live in:
+
+```text
+project/configs/pipeline/batch/
+```
+
+Examples:
 
 ```powershell
-cd build\bin\Release
-.\registration_app.exe configs\pipeline\keypoint\sift_pipeline.yaml path\to\imgA.jpg path\to\imgB.jpg
+project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/batch_keypoint.yaml
+project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/batch_structure.yaml
+project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/batch_direct.yaml
+project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/batch_learning.yaml
+project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/compare_direct.yaml
 ```
 
-Or rely entirely on the YAML I/O block:
+The batch runner scans the configured dataset root, runs the selected single
+pipeline for every sample, and writes a summary CSV.
 
-```powershell
-.\registration_app.exe configs\pipeline\keypoint\orb_pipeline.yaml
+## Learning Methods
+
+Learning pipelines use this flow:
+
+```text
+LearningPipeline
+  -> PythonLearningMatcher
+  -> learning_backend.py in single or worker mode
+  -> matches JSON
+  -> C++ correspondence view with source LEARNING
+  -> geometry estimation
+  -> warp, metrics, visualization, summaries
 ```
 
-Outputs land in `outputs/matches/` and `outputs/warped/`.
+Implemented learning methods:
 
-## Switching feature / geometry method
+- `LOFTR`: backed by Kornia LoFTR.
+- `SUPERPOINT_LIGHTGLUE`: backed by SuperPoint + LightGlue.
+- `SUPERPOINT_SUPERGLUE`: backed by SuperPoint + SuperGlue.
 
-Edit a pipeline YAML directly. For SIFT, switch the geometric model by modifying the `geometry` line inside `configs/pipeline/keypoint/sift_pipeline.yaml`:
+The primary Python entry is:
 
-```yaml
-keypoint: configs/keypoint/akaze.yaml      # one of: sift, surf, orb, brisk, kaze, akaze
-matcher:  configs/matcher/bf.yaml
-filters:
-  - configs/filter/ratio_test.yaml
-  - configs/filter/cross_check.yaml
-geometry: configs/geometry/homography.yaml    # homography / affine / rigid / similarity
+```text
+tools/deep/learning_backend.py
 ```
 
-The `BFMatcher` reads `descriptor_norm` from the active feature YAML, so SIFT/SURF/KAZE auto-pick `L2` and ORB/BRISK/AKAZE(MLDB) auto-pick `HAMMING` without further configuration.
+It supports two modes:
+
+- `single`: start Python, load one model, process one image pair, then exit.
+- `worker`: keep Python alive, load the model once, and process many image pairs.
+
+The three method-specific scripts remain useful as compatibility and debugging
+entry points, but the learning YAML configs use the unified backend.
+
+The learning YAML files currently point to:
+
+```text
+C:/Users/wangchenyu/AppData/Local/Python/bin/python.exe
+```
+
+This avoids the WindowsApps Python alias and starts the real Python interpreter.
+
+Python dependencies already needed by the learning scripts include:
+
+- torch
+- torchvision
+- opencv-python
+- kornia
+- certifi
+
+Source-only Python dependencies are stored under `third_party/` and are not
+compiled by CMake:
+
+```text
+project/third_party/LightGlue
+project/third_party/SuperGluePretrainedNetwork
+```
+
+The Python scripts add these directories to `sys.path` automatically.
+
+## Outputs
+
+Single-run outputs are written under:
+
+```text
+project/outputs/single/<method_family>/<pipeline>/<sample>/
+```
+
+Batch outputs are written under:
+
+```text
+project/outputs/batch/<method_family>/<pipeline>/
+```
+
+Typical files include:
+
+- original images
+- all-match visualization
+- inlier visualization
+- warped image
+- blend image
+- `run_summary.txt`
+- `run_summary.json`
+- batch `summary.csv`
 
 ## Extending
 
-- Add a new extractor: derive from `IKeypointExtractor`, register a string in `Factory::createKeypointExtractor`, drop a YAML in `configs/keypoint/`.
-- Add a new filter / matcher / geometry: same recipe against the matching interface and factory branch.
-- Add a new pipeline variant: derive from `BasePipeline` (or implement `IPipeline`) and reuse `Config::loadPipeline`.
+Common extension points:
 
-The `RegistrationContext` is the single shared mutable state. Every stage receives it by reference and reads/writes the relevant `data/` struct in place, avoiding copy-by-value of large matrices.
+- Add a keypoint extractor by implementing `IKeypointExtractor` and registering
+  it in the factory.
+- Add a structure extractor or associator through the structure interfaces.
+- Add a direct aligner through `IDirectAligner` and direct pipeline config.
+- Add a learning matcher by providing a Python script that writes the unified
+  matches JSON format.
+- Add or switch geometry estimators through the geometry YAML configs.
 
+The shared `RegistrationContext` carries image data, matches, geometry, warp
+results, metrics, and run summaries across pipeline stages.

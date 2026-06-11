@@ -1,7 +1,6 @@
 #include "keypoint/sift_extractor.h"
 
-#include <opencv2/imgproc.hpp>
-
+#include "utils/image_utils.h"
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
 
@@ -49,11 +48,10 @@ bool SiftExtractor::extract(RegistrationContext& ctx) {
     }
 
     // 灰度图优先复用上游预处理结果，避免重复颜色空间转换。
-    if (images.first_gray.empty()) {
-        cv::cvtColor(images.first, images.first_gray, cv::COLOR_BGR2GRAY);
-    }
-    if (images.second_gray.empty()) {
-        cv::cvtColor(images.second, images.second_gray, cv::COLOR_BGR2GRAY);
+    if (!image_utils::ensureGray(images.first, images.first_gray) ||
+        !image_utils::ensureGray(images.second, images.second_gray)) {
+        IR_LOG_ERROR("SIFT::extract - failed to prepare grayscale images.");
+        return false;
     }
 
     // 检测与描述子计算合并执行，保证关键点与描述子参数完全一致。

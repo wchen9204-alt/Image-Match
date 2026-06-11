@@ -19,4 +19,4 @@ private:
     float _maxDistance = 30.0f;
 };
 
-} // namespace ir
+}

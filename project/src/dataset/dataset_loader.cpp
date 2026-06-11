@@ -84,17 +84,30 @@ bool naturalLess(const std::string& a, const std::string& b) {
 DatasetLoader::DatasetLoader(const Options& opt) : _opt(opt) {}
 
 bool DatasetLoader::resolveImage(const fs::path& dir,
-                                 const std::string& stem,
+                                 const std::vector<std::string>& stems,
                                  fs::path& out) const {
-    // 同一数据集可能混用多种扩展名，按配置顺序尝试匹配第一个存在的文件。
-    for (const auto& ext : _opt.extensions) {
-        const fs::path p = dir / (stem + ext);
-        if (file_utils::fileExists(p)) {
-            out = p;
-            return true;
+    // 同一数据集可能混用 source/target 或 moving/reference 命名，按候选关键词和扩展名顺序查找。
+    for (const auto& stem : stems) {
+        if (stem.empty()) {
+            continue;
+        }
+        for (const auto& ext : _opt.extensions) {
+            const fs::path p = dir / (stem + ext);
+            if (file_utils::fileExists(p)) {
+                out = p;
+                return true;
+            }
         }
     }
     return false;
+}
+
+std::vector<std::string> DatasetLoader::sourcePatterns() const {
+    return _opt.pattern_sources;
+}
+
+std::vector<std::string> DatasetLoader::targetPatterns() const {
+    return _opt.pattern_targets;
 }
 
 bool DatasetLoader::tryLoadGroundTruth(const fs::path& dir, cv::Mat& H_gt) const {
@@ -151,14 +164,16 @@ std::vector<Sample> DatasetLoader::load() const {
     }
 
     // 3. 每个子目录解析为一个样本，缺少任一输入图像时跳过该样本。
+    const std::vector<std::string> sourceStems = sourcePatterns();
+    const std::vector<std::string> targetStems = targetPatterns();
     for (const auto& d : dirs) {
         Sample s;
         s.name = d.filename().string();
-        if (!resolveImage(d, _opt.pattern_source, s.source_path)) {
+        if (!resolveImage(d, sourceStems, s.source_path)) {
             IR_LOG_WARN("DatasetLoader: missing source for ", d.string());
             continue;
         }
-        if (!resolveImage(d, _opt.pattern_target, s.target_path)) {
+        if (!resolveImage(d, targetStems, s.target_path)) {
             IR_LOG_WARN("DatasetLoader: missing target for ", d.string());
             continue;
         }

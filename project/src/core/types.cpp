@@ -1,24 +1,11 @@
 ﻿#include "core/types.h"
 
-#include <algorithm>
-#include <cctype>
-
 #include <opencv2/calib3d.hpp>
 #include <opencv2/core.hpp>
 
+#include "utils/string_utils.h"
+
 namespace ir {
-
-namespace {
-
-// 配置解析统一转大写归一化，降低大小写和别名差异对枚举映射的影响。
-std::string toUpper(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-        return static_cast<char>(std::toupper(c));
-    });
-    return s;
-}
-
-} // namespace
 
 std::string toString(KeypointType t) {
     switch (t) {
@@ -41,7 +28,7 @@ std::string toString(KeypointType t) {
 }
 
 KeypointType keypointTypeFromString(const std::string& s) {
-    const std::string u = toUpper(s);
+    const std::string u = string_utils::toUpperAscii(s);
     if (u == "SIFT") {
         return KeypointType::SIFT;
     }
@@ -78,7 +65,7 @@ std::string toString(StructureType t) {
 }
 
 StructureType structureTypeFromString(const std::string& s) {
-    const std::string u = toUpper(s);
+    const std::string u = string_utils::toUpperAscii(s);
     if (u == "EDGE" || u == "CANNY") {
         return StructureType::EDGE;
     }
@@ -108,7 +95,7 @@ std::string toString(NormType t) {
 }
 
 NormType normTypeFromString(const std::string& s) {
-    const std::string u = toUpper(s);
+    const std::string u = string_utils::toUpperAscii(s);
     if (u == "L1") {
         return NormType::L1;
     }
@@ -158,7 +145,7 @@ std::string toString(MatchMethod t) {
 }
 
 MatchMethod matchMethodFromString(const std::string& s) {
-    const std::string u = toUpper(s);
+    const std::string u = string_utils::toUpperAscii(s);
     if (u == "MATCH" || u == "TOP1" || u == "NN") {
         return MatchMethod::MATCH;
     }
@@ -188,7 +175,7 @@ std::string toString(GeometryType t) {
 }
 
 GeometryType geometryTypeFromString(const std::string& s) {
-    const std::string u = toUpper(s);
+    const std::string u = string_utils::toUpperAscii(s);
     if (u == "HOMOGRAPHY") {
         return GeometryType::HOMOGRAPHY;
     }
@@ -204,8 +191,33 @@ GeometryType geometryTypeFromString(const std::string& s) {
     return GeometryType::UNKNOWN;
 }
 
+std::string toString(TransformType t) {
+    switch (t) {
+    case TransformType::PERSPECTIVE:
+        return "PERSPECTIVE";
+    case TransformType::AFFINE:
+        return "AFFINE";
+    case TransformType::UNKNOWN:
+    default:
+        return "UNKNOWN";
+    }
+}
+
+TransformType toTransformType(GeometryType g) {
+    switch (g) {
+    case GeometryType::HOMOGRAPHY:
+        return TransformType::PERSPECTIVE;
+    case GeometryType::AFFINE:
+    case GeometryType::RIGID:
+    case GeometryType::SIMILARITY:
+        return TransformType::AFFINE;
+    default:
+        return TransformType::UNKNOWN;
+    }
+}
+
 int robustMethodFromString(const std::string& s) {
-    const std::string u = toUpper(s);
+    const std::string u = string_utils::toUpperAscii(s);
     if (u == "RANSAC") {
         return cv::RANSAC;
     }

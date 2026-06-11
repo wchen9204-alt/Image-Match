@@ -70,6 +70,8 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
         if (key == "keypoint" || key == "KEYPOINT")       cfg.method_family = MethodFamily::KEYPOINT;
         else if (key == "structure" || key == "STRUCTURE") cfg.method_family = MethodFamily::STRUCTURE;
         else if (key == "direct" || key == "DIRECT")       cfg.method_family = MethodFamily::DIRECT;
+        else if (key == "learning" || key == "LEARNING" ||
+                 key == "deep" || key == "DEEP")           cfg.method_family = MethodFamily::LEARNING;
     } else {
         // 向后兼容：无 method_family 时从路径推断
         if (!yaml_utils::getString(node, "structure").empty())
@@ -82,6 +84,7 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
     cfg.keypoint_path = resolvePath(base, keypoint_entry);
     cfg.structure_path = resolvePath(base, yaml_utils::getString(node, "structure"));
     cfg.direct_path   = resolvePath(base, yaml_utils::getString(node, "direct"));
+    cfg.learning_path = resolvePath(base, yaml_utils::getString(node, "learning"));
     cfg.matcher_path  = resolvePath(base, yaml_utils::getString(node, "matcher"));
     cfg.geometry_path = resolvePath(base, yaml_utils::getString(node, "geometry"));
 
@@ -135,6 +138,7 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
     IR_LOG_INFO("Pipeline '", cfg.name, "' loaded from ", path.string());
     IR_LOG_INFO("  keypoint : ", cfg.keypoint_path.string());
     IR_LOG_INFO("  structure: ", cfg.structure_path.string());
+    IR_LOG_INFO("  learning : ", cfg.learning_path.string());
     IR_LOG_INFO("  matcher  : ", cfg.matcher_path.string());
     for (const auto& f : cfg.filter_paths) {
         IR_LOG_INFO("  filter   : ", f.string());

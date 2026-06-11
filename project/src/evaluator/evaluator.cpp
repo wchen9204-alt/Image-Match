@@ -1,6 +1,5 @@
 #include "evaluator/evaluator.h"
 
-#include <cctype>
 #include <memory>
 #include <string>
 
@@ -12,6 +11,7 @@
 #include "evaluator/metrics/image/ssim.h"
 #include "evaluator/metrics/keypoint/repeatability.h"
 #include "utils/logger.h"
+#include "utils/string_utils.h"
 #include "utils/yaml_utils.h"
 
 namespace ir {
@@ -21,10 +21,8 @@ namespace ir {
 // ---------------------------------------------------------------------------
 std::shared_ptr<IMetric> Evaluator::createMetric(const std::string& name,
                                                   const YAML::Node& params) {
-    // 大小写不敏感匹配
-    std::string key;
-    key.reserve(name.size());
-    for (char c : name) key.push_back(static_cast<char>(std::toupper(c)));
+    // 大小写和分隔符不敏感匹配。
+    const std::string key = string_utils::normalizedKey(name);
 
     if (key == "PSNR")
         return std::make_shared<PsnrMetric>(params);
@@ -32,9 +30,9 @@ std::shared_ptr<IMetric> Evaluator::createMetric(const std::string& name,
         return std::make_shared<SsimMetric>(params);
     if (key == "RMSE")
         return std::make_shared<RmseMetric>(params);
-    if (key == "INLIER_RATIO" || key == "INLIERRATIO")
+    if (key == "INLIERRATIO")
         return std::make_shared<InlierRatioMetric>(params);
-    if (key == "REPROJECTION_ERROR" || key == "REPROJECTIONERROR")
+    if (key == "REPROJECTIONERROR")
         return std::make_shared<ReprojectionErrorMetric>(params);
     if (key == "REPEATABILITY")
         return std::make_shared<RepeatabilityMetric>(params);

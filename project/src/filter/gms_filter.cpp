@@ -7,6 +7,7 @@
 
 namespace ir {
 
+// 读取网格运动统计所需的参数开关，用于几何一致性过滤。
 GmsFilter::GmsFilter(const YAML::Node& cfg) {
     const auto params = cfg["params"];
     _withRotation = yaml_utils::getBool(params, "withRotation", false);
@@ -22,7 +23,7 @@ GmsFilter::GmsFilter(const YAML::Node& cfg) {
 }
 
 bool GmsFilter::apply(RegistrationContext& ctx) {
-    // --- 结构法路径：GMS 需要 KeyPoint 空间坐标，线匹配当前不支持 ---
+    // 结构法路径：网格运动统计依赖关键点空间分布，当前结构匹配不支持。
     if (!ctx.structure_match_data.raw_matches_knn.empty() ||
         !ctx.structure_match_data.filtered_matches.empty()) {
         IR_LOG_WARN("GmsFilter [structure]: not supported for line matches, pass-through.");
@@ -44,7 +45,7 @@ bool GmsFilter::apply(RegistrationContext& ctx) {
         return false;
     }
 
-    // GMS ��������ͳ��Լ�����˾ֲ���һ��ƥ�䣬�ʺϴ��ģ���ܺ�ѡ������
+    // 步骤一：调用网格运动统计，保留局部运动一致的匹配。
     std::vector<cv::DMatch> kept;
     cv::xfeatures2d::matchGMS(images.first.size(),
                               images.second.size(),
@@ -57,9 +58,10 @@ bool GmsFilter::apply(RegistrationContext& ctx) {
                               _thresholdFactor);
 
     IR_LOG_INFO("GMS kept ", kept.size(), " / ", input.size(), " matches");
+
+    // 步骤二：用网格运动统计精炼后的结果覆盖当前筛选结果。
     md.filtered = std::move(kept);
     return true;
 }
 
-} // namespace ir
-
+}

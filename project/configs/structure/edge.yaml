@@ -32,7 +32,7 @@ extractor:
 association:
   # 默认值：PHASE_CORRELATE。
   # 可选：PHASE_CORRELATE / CHAMFER / HAUSDORFF / ICP。
-  method: ICP
+  method: HAUSDORFF
   # 按匹配方法分组配置参数，避免不同方法共用同一层键名。
   params:
     phase_correlate:

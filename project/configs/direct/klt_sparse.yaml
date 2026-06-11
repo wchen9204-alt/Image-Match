@@ -1,0 +1,88 @@
+# ---------------------------------------------------------------------------
+# 稀疏 KLT 直接法配置
+# ---------------------------------------------------------------------------
+# 直接法类型；可选项：DENSE / SPARSE / GLOBAL / FREQUENCY；默认值：无，pipeline 根据该值标识直接法类别。
+type: SPARSE
+
+# 直接法方法；可选项：KLT；默认值：无，SPARSE 类型下使用金字塔 Lucas-Kanade 光流。
+method: KLT
+
+params:
+  # 最大角点数量；默认值：500；仅 KLT 生效，用于限制 goodFeaturesToTrack 提取规模。
+  max_corners: 500
+
+  # 角点质量阈值；默认值：0.01；仅 KLT 生效，值越大保留的角点越少但更强。
+  quality_level: 0.01
+
+  # 角点之间的最小距离，单位为像素；默认值：8.0；仅 KLT 生效。
+  min_distance: 8.0
+
+  # 角点检测块大小；默认值：7；仅 KLT 生效，传给 goodFeaturesToTrack。
+  block_size: 7
+
+  # KLT 跟踪窗口尺寸；默认值：21；仅 KLT 生效，代码会强制转为不小于 3 的奇数。
+  window_size: 21
+
+  # 金字塔最大层级；默认值：3；仅 KLT 生效，0 表示只在原图层跟踪。
+  max_level: 3
+
+  # KLT 迭代次数上限；默认值：30；仅 KLT 生效，用于 TermCriteria COUNT。
+  max_iterations: 30
+
+  # KLT 收敛精度阈值；默认值：0.01；仅 KLT 生效，用于 TermCriteria EPS。
+  epsilon: 0.01
+
+  # 是否按网格均匀提取角点；默认值：true；开启后可减少角点过度集中在局部纹理区域。
+  grid_enabled: true
+
+  # 网格划分行数；默认值：4；仅 grid_enabled=true 时生效。
+  grid_rows: 4
+
+  # 网格划分列数；默认值：4；仅 grid_enabled=true 时生效。
+  grid_cols: 4
+
+  # 是否对角点做 cornerSubPix 亚像素精修；默认值：true。
+  subpix_refine: true
+
+  # cornerSubPix 窗口大小；默认值：5；仅 subpix_refine=true 时生效，会自动转为奇数窗口。
+  subpix_window_size: 5
+
+  # cornerSubPix 最大迭代次数；默认值：20；仅 subpix_refine=true 时生效。
+  subpix_max_iterations: 20
+
+  # cornerSubPix 收敛阈值；默认值：0.03；仅 subpix_refine=true 时生效。
+  subpix_epsilon: 0.03
+
+  # 是否启用 forward-backward 跟踪一致性检查；默认值：true；可剔除不稳定 LK 点。
+  forward_backward_check: true
+
+  # forward-backward 回投误差阈值，单位为像素；默认值：1.5；仅 forward_backward_check=true 时生效。
+  fb_threshold: 1.5
+
+  # 目标点距图像边界的最小安全边距，单位为像素；默认值：3；超出边界安全区的跟踪点会被剔除。
+  border_margin: 3
+
+  # 允许的最大 LK 跟踪误差；默认值：-1.0；小于 0 表示禁用该过滤。
+  max_track_error: -1.0
+
+  # 跟踪点拟合的全局几何模型；默认值：RIGID；可选项：RIGID / SIMILARITY / AFFINE / HOMOGRAPHY。
+  # RIGID 先用 OpenCV estimateAffinePartial2D 做 RANSAC 筛选，再回归严格平移+旋转；SIMILARITY 允许等比缩放；AFFINE/HOMOGRAPHY 会引入剪切或透视自由度。
+  fit_model: RIGID
+
+  # RANSAC 内点阈值，单位为像素；默认值：3.0；仅全局几何拟合阶段生效。
+  ransac_threshold: 3.0
+
+  # 全局几何鲁棒估计方法；默认值：RANSAC；可选项：RANSAC / LMEDS；HOMOGRAPHY 额外支持 RHO。
+  robust_method: RANSAC
+
+  # 全局几何鲁棒估计最大迭代次数；默认值：2000；仅全局几何拟合阶段生效。
+  ransac_max_iters: 2000
+
+  # 全局几何鲁棒估计置信度；默认值：0.99；仅全局几何拟合阶段生效。
+  ransac_confidence: 0.99
+
+  # 全局几何鲁棒估计 refine 迭代次数；默认值：10；仅 AFFINE / RIGID / SIMILARITY 生效。
+  ransac_refine_iters: 10
+
+  # 接受全局几何结果所需最少内点数；默认值：6；低于该值会判定配准失败。
+  min_inliers: 6

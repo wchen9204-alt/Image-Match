@@ -6,7 +6,7 @@
 
 namespace ir {
 
-/// 按 OpenCV 教程中的 min_dist 启发式过滤匹配。
+/// 按最小距离启发式规则过滤匹配。
 class MinDistanceFilter : public IFilter {
 public:
     explicit MinDistanceFilter(const YAML::Node& cfg);
@@ -20,4 +20,4 @@ private:
     float _minCutoff = 30.0f;
 };
 
-} // namespace ir
+}

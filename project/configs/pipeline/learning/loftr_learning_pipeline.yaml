@@ -1,0 +1,55 @@
+# ---------------------------------------------------------------------------
+# 深度学习流水线：LoFTR
+# 用途：LoFTR 产生稀疏匹配点对，再由现有几何估计器求解变换。
+# ---------------------------------------------------------------------------
+# 流水线名称；默认：loftr_learning_pipeline；用于日志和输出目录命名。
+name: loftr_learning_pipeline
+# 方法族；默认：learning；本配置固定属于 learning 方法族。
+method_family: learning
+
+# 学习匹配器配置；默认：../../learning/loftr.yaml；相对本文件解析。
+learning: ../../learning/loftr.yaml
+# 几何估计配置；默认：../../geometry/homography.yaml；可选 Homography/Affine/Rigid/Similarity 配置。
+geometry: ../../geometry/rigid.yaml
+# 评测指标配置；默认：../../evaluator/metrics.yaml。
+evaluator: ../../evaluator/metrics.yaml
+
+io:
+  # 源图路径；默认：../../../datasets/Test01/source.png；可替换为任意待配准图像。
+  image1: ../../../datasets/Test01/source.png
+  # 目标图路径；默认：../../../datasets/Test01/target.png；可替换为任意待配准图像。
+  image2: ../../../datasets/Test01/target.png
+  # 输出根目录；默认：../../../outputs；流水线会在其下创建 learning 子目录。
+  output_dir: ../../../outputs
+
+visualization:
+  # 是否绘制匹配图；默认：true；可选：true / false。
+  draw_matches: true
+  # 是否只绘制内点；默认：false；可选：true / false。
+  draw_inliers_only: false
+  # 最大绘制匹配数；默认：200；小于等于 0 表示不限制。
+  max_matches_drawn: 200
+  # 是否保存 warped 图像；默认：true；可选：true / false。
+  warp: true
+  # 是否弹出源图窗口；默认：false；可选：true / false。
+  show_source_window: false
+  # 是否弹出目标图窗口；默认：false；可选：true / false。
+  show_target_window: false
+  # 是否弹出 warped 图像窗口；默认：false；可选：true / false。
+  show_warped_window: false
+  # OpenCV 窗口等待时间；默认：0；单位：毫秒，0 表示无限等待。
+  wait_key: 0
+
+validation:
+  warp_overlap:
+    # 是否启用 warp 后前景重叠校验；默认：false；可选：true / false。
+    enabled: true
+    # 最小 IoU 阈值；默认：0.20；低于该值判定重叠质量不足。
+    min_iou: 0.20
+    # 前景阈值；默认：5；灰度大于该值的像素参与重叠统计。
+    foreground_threshold: 5
+  photometric:
+    # 是否启用光度一致性校验；默认：false；可选：true / false。
+    enabled: true
+    # 最大 NMAD 阈值；默认：0.15；高于该值判定光度差异过大。
+    max_nmad: 0.15

@@ -7,18 +7,19 @@
 
 namespace ir {
 
-/// 通过双向一致性检查过滤匹配点，只保留互相匹配的最近邻对。
+/// 点特征法专用的双向一致性过滤器。
 ///
-/// 这种过滤通常用于暴力匹配之后，用来剔除单向成立、双向不一致的匹配。
+/// 该过滤器通常用于暴力匹配之后，用来剔除只在单向成立、
+/// 但不满足双向一致性的匹配。结构法和直接法当前不使用该过滤器。
 class CrossCheckFilter : public IFilter {
 public:
-    /// 根据 YAML 配置创建过滤器。
+    /// 根据配置构造过滤器。
     explicit CrossCheckFilter(const YAML::Node& cfg);
 
     /// 返回日志和诊断中使用的显示名称。
     std::string name() const override { return "CrossCheck"; }
 
-    /// 对上下文中的匹配结果执行双向一致性过滤。
+    /// 对点特征匹配结果执行双向一致性过滤。
     bool apply(RegistrationContext& ctx) override;
 
 private:
@@ -26,4 +27,4 @@ private:
     bool _enabled = true;
 };
 
-} // namespace ir
+}

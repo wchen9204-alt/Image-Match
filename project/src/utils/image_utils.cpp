@@ -24,6 +24,78 @@ cv::Mat toGrayFloat(const cv::Mat& src) {
     return f;
 }
 
+int normalizedOddKernelOrZero(int value, int minSize) {
+    if (value < minSize) {
+        return 0;
+    }
+    if (value % 2 == 0) {
+        ++value;
+    }
+    return value;
+}
+
+int normalizedOddKernel(int value, int fallback, int minimum) {
+    if (value < minimum) {
+        value = fallback;
+    }
+    if (value % 2 == 0) {
+        ++value;
+    }
+    return value;
+}
+
+int normalizedCannyAperture(int value, int fallback) {
+    if (value == 3 || value == 5 || value == 7) {
+        return value;
+    }
+    return (fallback == 3 || fallback == 5 || fallback == 7) ? fallback : 3;
+}
+
+bool ensureGray(const cv::Mat& color, cv::Mat& gray) {
+    if (!gray.empty()) {
+        return gray.channels() == 1;
+    }
+    if (color.empty()) {
+        return false;
+    }
+    if (color.channels() == 1) {
+        gray = color;
+        return true;
+    }
+    if (color.channels() == 3) {
+        cv::cvtColor(color, gray, cv::COLOR_BGR2GRAY);
+        return true;
+    }
+    if (color.channels() == 4) {
+        cv::cvtColor(color, gray, cv::COLOR_BGRA2GRAY);
+        return true;
+    }
+    return false;
+}
+
+void applyOptionalGaussianBlur(const cv::Mat& src, cv::Mat& dst, int blurKernel) {
+    const int kernel = normalizedOddKernelOrZero(blurKernel);
+    if (kernel > 0) {
+        cv::GaussianBlur(src, dst, cv::Size(kernel, kernel), 0.0);
+        return;
+    }
+    dst = src;
+}
+
+bool convertGrayToFloat01(const cv::Mat& gray, cv::Mat& out, int blurKernel) {
+    out.release();
+    if (gray.empty() || gray.channels() != 1) {
+        return false;
+    }
+
+    gray.convertTo(out, CV_32F, 1.0 / 255.0);
+    const int kernel = normalizedOddKernelOrZero(blurKernel);
+    if (kernel > 0) {
+        cv::GaussianBlur(out, out, cv::Size(kernel, kernel), 0.0);
+    }
+    return true;
+}
+
 cv::Mat warpedValidMask(const cv::Mat& src, const cv::Mat& H, const cv::Size& dst_size) {
     // 有效区域掩码通过对全 1 图做同样的几何变换获得，与实际插值路径保持一致。
     if (src.empty() || H.empty())

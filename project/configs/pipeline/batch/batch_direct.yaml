@@ -1,0 +1,39 @@
+# ---------------------------------------------------------------------------
+# 直接法批处理任务配置
+# 当前文件定义批量样本的直接法 pipeline 入口、数据集位置和输出策略
+# ---------------------------------------------------------------------------
+# 批处理名称；默认值：当前 YAML 文件名 stem；主要用于日志和配置识别。
+name: batch_direct
+
+# 单样本 pipeline 入口；默认值：空，批处理必须显式指定。
+# 可选示例：../direct/global_direct_pipeline.yaml / ../direct/frequency_direct_pipeline.yaml /
+# ../direct/sparse_direct_pipeline.yaml / ../direct/dense_direct_pipeline.yaml
+# 具体算法由对应 pipeline 中的 direct 字段决定：
+# global 可切换 ecc.yaml / global_lk.yaml / esm_rigid.yaml / zncc_rigid.yaml
+# frequency 可切换 phase_correlation.yaml / fourier_mellin.yaml
+# sparse 可切换 klt_sparse.yaml
+# dense 可切换 dis_flow.yaml / farneback.yaml / tvl1_flow.yaml
+pipeline: ../direct/global_direct_pipeline.yaml
+
+dataset:
+  # 数据集根目录；默认值：空，批处理必须显式指定。
+  root: ../../../datasets
+
+  # source 图像文件名关键词候选；DatasetLoader 按顺序寻找源图。
+  pattern_sources: [source, moving]
+
+  # target 图像文件名关键词候选；DatasetLoader 按顺序寻找目标图。
+  pattern_targets: [target, reference]
+
+  # 样本白名单；默认值：空列表，表示包含全部样本；填写样本目录名可只跑指定样本。
+  include: []
+
+output:
+  # 输出根目录；默认值：../../outputs；实际输出会追加 batch/direct/<pipeline>/<sample> 层级。
+  root: ../../../outputs
+
+  # 是否保存可视化结果；默认值：true；false 时批处理会关闭 draw_matches 和 warp。
+  save_visuals: true
+
+  # 是否保存批处理汇总 CSV；默认值：true；文件写到 batch/direct/<pipeline>/summary.csv。
+  summary_csv: true

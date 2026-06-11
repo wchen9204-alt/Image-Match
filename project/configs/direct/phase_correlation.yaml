@@ -1,0 +1,45 @@
+# ---------------------------------------------------------------------------
+# 灰度图相位相关直接法配置
+# ---------------------------------------------------------------------------
+# 直接法类型；可选项：DENSE / SPARSE / GLOBAL / FREQUENCY；默认值：无，pipeline 根据该值标识直接法类别。
+type: FREQUENCY
+
+# 直接法方法；可选项：PHASE_CORRELATION / PHASE_CORRELATE；默认值：无，FREQUENCY 类型下使用相位相关估计平移。
+method: PHASE_CORRELATION
+
+params:
+  # 相位相关响应阈值；默认值：0.01；低于该分数会判定配准失败。
+  response_threshold: 0.01
+
+  # 灰度图高斯预平滑核大小；默认值：5；仅 PHASE_CORRELATION 生效，小于 3 时不做平滑，偶数会自动加 1。
+  blur_kernel: 5
+
+  # 是否使用 Hann 窗抑制边界效应；默认值：true；仅 PHASE_CORRELATION 生效。
+  use_hann_window: true
+
+  # 是否启用加权相位相关 WPC；默认值：false；关闭时保持旧版 phaseCorrelate 输入行为。
+  weighted: true
+
+  # WPC 权重模式；默认值：GRADIENT；可选项：GRADIENT / SOURCE_GRADIENT / TARGET_GRADIENT / NONE。
+  weight_mode: GRADIENT
+
+  # WPC 梯度权重图平滑核大小；默认值：0；小于 3 时不平滑，偶数会自动加 1。
+  weight_blur_kernel: 0
+
+  # WPC 权重幂指数；默认值：1.0；值越大越强调高纹理区域。
+  weight_power: 1.0
+
+  # WPC 权重下限；默认值：0.05；避免低纹理区域被完全压成 0。
+  weight_floor: 0.05
+
+  # 是否启用亚像素峰值置信度诊断；默认值：false；任一阈值大于 0 时会自动启用检查。
+  confidence_check: true
+
+  # 主峰/次峰比阈值；默认值：0.0；大于 0 时低于该值会拒绝结果。
+  peak_ratio_threshold: 0.0
+
+  # 亚像素置信度阈值；默认值：0.0；大于 0 时局部峰值不够尖锐会拒绝结果。
+  subpixel_confidence_threshold: 0.0
+
+  # 搜索次峰时在主峰周围排除的半径；默认值：5；单位：像素。
+  peak_exclusion_radius: 5

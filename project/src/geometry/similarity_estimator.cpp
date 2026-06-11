@@ -5,7 +5,8 @@
 #include <string>
 #include <vector>
 
-#include "partial_affine_utils.h"
+#include "data/correspondence_view.h"
+#include "geometry/partial_affine_utils.h"
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
 
@@ -39,21 +40,24 @@ SimilarityEstimator::SimilarityEstimator(const YAML::Node& cfg) {
 }
 
 bool SimilarityEstimator::estimate(RegistrationContext& ctx) {
-    auto& md = ctx.keypoint_match_data;
     auto& gd = ctx.geometry_data;
 
     gd.clear();
     gd.type = GeometryType::SIMILARITY;
 
-    if (md.filtered.size() < 2) {
-        gd.message = "need at least 2 matches, got " + std::to_string(md.filtered.size());
-        IR_LOG_ERROR("SimilarityEstimator: need at least 2 matches, got ", md.filtered.size());
+    const CorrespondenceSource source = correspondenceSourceFromContext(ctx);
+    const CorrespondenceView view =
+        source == CorrespondenceSource::NONE ? buildBestCorrespondenceView(ctx)
+                                             : buildCorrespondenceView(ctx, source);
+    if (view.filtered.size() < 2) {
+        gd.message = "need at least 2 correspondences, got " + std::to_string(view.filtered.size());
+        IR_LOG_ERROR("SimilarityEstimator: need at least 2 correspondences, got ", view.filtered.size());
         return false;
     }
 
     std::vector<cv::Point2f> pts1;
     std::vector<cv::Point2f> pts2;
-    partial_affine_utils::extractPoints(ctx, pts1, pts2);
+    partial_affine_utils::extractPoints(view, pts1, pts2);
 
     // 相似变换保留旋转、平移和统一缩放，不允许剪切。
     std::vector<unsigned char> inlier_mask;
@@ -72,12 +76,12 @@ bool SimilarityEstimator::estimate(RegistrationContext& ctx) {
         return false;
     }
 
-    partial_affine_utils::promoteInliers(ctx, inlier_mask);
-    const int inliers = static_cast<int>(md.inliers.size());
+    partial_affine_utils::promoteInliers(ctx, view, inlier_mask);
+    const int inliers = partial_affine_utils::countInliers(inlier_mask);
 
     gd.A = A;
     gd.num_inliers = inliers;
-    gd.inlier_ratio = md.filtered.empty() ? 0.0 : static_cast<double>(inliers) / md.filtered.size();
+    gd.inlier_ratio = view.filtered.empty() ? 0.0 : static_cast<double>(inliers) / view.filtered.size();
     gd.valid = inliers >= _minInliers;
     if (!gd.valid) {
         gd.message =
@@ -88,9 +92,11 @@ bool SimilarityEstimator::estimate(RegistrationContext& ctx) {
     IR_LOG_INFO("Similarity2D inliers=",
                 inliers,
                 " / ",
-                md.filtered.size(),
+                view.filtered.size(),
                 " (ratio=",
                 gd.inlier_ratio,
+                ", source=",
+                view.source_name,
                 ")");
     return gd.valid;
 }

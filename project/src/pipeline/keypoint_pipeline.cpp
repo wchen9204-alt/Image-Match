@@ -1,7 +1,6 @@
 ﻿#include "pipeline/keypoint_pipeline.h"
 
 #include <algorithm>
-#include <cctype>
 #include <filesystem>
 #include <string>
 
@@ -12,6 +11,7 @@
 #include "core/factory.h"
 #include "core/types.h"
 #include "utils/logger.h"
+#include "utils/string_utils.h"
 #include "utils/timer.h"
 #include "utils/visualization/draw_inliers.h"
 #include "utils/visualization/draw_matches.h"
@@ -22,17 +22,9 @@ namespace ir {
 
 namespace {
 
-// 统一将配置中的枚举样式字符串折叠为大写 ASCII，降低 YAML 写法差异对分支逻辑的影响。
-std::string toUpperAscii(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-        return static_cast<char>(std::toupper(c));
-    });
-    return s;
-}
-
 // 将匹配器类型别名归一到稳定标签，用于输出命名和日志统计。
 std::string normalizeMatcherType(const std::string& raw_type) {
-    const std::string type = toUpperAscii(raw_type);
+    const std::string type = string_utils::toUpperAscii(raw_type);
     if (type == "BF" || type == "BFMATCHER" || type == "BRUTE_FORCE") {
         return "BF";
     }
@@ -44,7 +36,7 @@ std::string normalizeMatcherType(const std::string& raw_type) {
 
 // 将匹配接口名称归一化，避免配置别名导致输出目录标签分裂。
 std::string normalizeMatchMethod(const std::string& raw_method) {
-    const std::string method = toUpperAscii(raw_method);
+    const std::string method = string_utils::toUpperAscii(raw_method);
     if (method == "MATCH" || method == "TOP1" || method == "NN") {
         return "MATCH";
     }
@@ -77,7 +69,7 @@ std::string buildMatcherLabel(const fs::path& matcher_path) {
 
         return normalizeMatcherType(raw_type) + "_" + normalizeMatchMethod(raw_method);
     } catch (const std::exception&) {
-        return toUpperAscii(matcher_path.stem().string());
+        return string_utils::toUpperAscii(matcher_path.stem().string());
     }
 }
 
@@ -259,6 +251,7 @@ bool KeypointPipeline::runEstimation(RegistrationContext& ctx) {
         return false;
     }
 
+    ctx.correspondence_source = "KEYPOINT";
     // 2. 使用过滤后的匹配估计几何模型，结果写入 ctx.geometry_data。
     const bool ok = _geometry->estimate(ctx);
     // 3. 将内点统计同步到通用运行摘要。

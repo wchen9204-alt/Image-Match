@@ -1,0 +1,61 @@
+# ---------------------------------------------------------------------------
+# 稀疏直接法通用 pipeline
+# 当前文件承载稀疏直接法共享的 IO、可视化与验证配置；具体算法通过 direct 指向对应配置。
+# ---------------------------------------------------------------------------
+# pipeline 名称；默认值：当前 YAML 文件名 stem；用于输出目录和摘要标识。
+name: sparse_direct_pipeline
+
+# 方法族；可选项：keypoint / structure / direct；默认值：keypoint，直接法必须显式写 direct。
+method_family: direct
+
+# 直接法算法配置路径；默认值：空；SPARSE 族当前主要使用 klt_sparse.yaml。
+direct: ../../direct/klt_sparse.yaml
+
+# 评估指标配置路径；默认值：空；为空时不加载额外 evaluator。
+evaluator: ../../evaluator/metrics.yaml
+
+io:
+  # 源图路径；默认值：空；单次运行必须由 YAML 或命令行提供。
+  image1: ../../../datasets/Test01/source.png
+
+  # 目标图路径；默认值：空；单次运行必须由 YAML 或命令行提供。
+  image2: ../../../datasets/Test01/target.png
+
+  # 输出根目录；默认值：outputs；实际输出会追加 single/direct/<pipeline>/<sample> 层级。
+  output_dir: ../../../outputs
+
+visualization:
+  # 是否绘制直接法点对匹配图；默认值：true；稀疏直接法通常产出可视点对，因此默认开启。
+  draw_matches: true
+
+  # 是否保存配准后的 warp 图；默认值：true。
+  warp: true
+
+  # 是否显示源图窗口；默认值：false；批处理会强制关闭窗口。
+  show_source_window: false
+
+  # 是否显示目标图窗口；默认值：false；批处理会强制关闭窗口。
+  show_target_window: false
+
+  # 是否显示 warp 结果窗口；默认值：false；批处理会强制关闭窗口。
+  show_warped_window: false
+
+  # OpenCV 窗口等待时间，单位毫秒；默认值：0；仅启用窗口显示时生效。
+  wait_key: 0
+
+validation:
+  warp_overlap:
+    # 是否启用 warp 后前景重合 IoU 验证；默认值：false。
+    enabled: true
+
+    # warp 前景重合 IoU 最低阈值；默认值：0.20；仅 enabled=true 时生效。
+    min_iou: 0.20
+
+    # 前景二值化阈值；默认值：10；仅 warp_overlap.enabled=true 时生效。
+    foreground_threshold: 10
+  photometric:
+    # 是否启用 warp 后光度误差 NMAD 验证；默认值：false。
+    enabled: true
+
+    # warp 光度误差 NMAD 最大允许值；默认值：0.15；仅 enabled=true 时生效。
+    max_nmad: 0.15

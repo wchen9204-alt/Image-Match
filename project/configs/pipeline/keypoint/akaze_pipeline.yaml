@@ -18,7 +18,7 @@ matcher:  ../../matcher/bf.yaml
 # distance_threshold / gms / min_distance
 filters:
   - ../../filter/ratio_test.yaml
- # - ../../filter/cross_check.yaml
+  - ../../filter/cross_check.yaml
  # - ../../filter/distance_distribution.yaml
  # - ../../filter/distance_threshold.yaml
 

@@ -1,7 +1,6 @@
 #include "matcher/structure/line_descriptor_associator.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -15,6 +14,7 @@
 
 #include "core/types.h"
 #include "utils/logger.h"
+#include "utils/string_utils.h"
 #include "utils/yaml_utils.h"
 
 namespace ir {
@@ -32,14 +32,6 @@ struct LineInfo {
     double angle = 0.0;
     double length = 0.0;
 };
-
-/// 将字符串转为大写，便于兼容 YAML 中不同大小写的枚举值。
-std::string upperAscii(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-        return static_cast<char>(std::toupper(c));
-    });
-    return s;
-}
 
 LineInfo describeLineGeom(const cv::Vec4i& line) {
     const cv::Point2d p1(static_cast<double>(line[0]), static_cast<double>(line[1]));
@@ -71,6 +63,33 @@ cv::Point2d matchShiftGeom(const std::vector<LineInfo>& src,
                            const cv::DMatch& m) {
     return dst[static_cast<size_t>(m.trainIdx)].center -
            src[static_cast<size_t>(m.queryIdx)].center;
+}
+
+cv::Point2d averageShiftGeom(const std::vector<cv::DMatch>& matches,
+                             const std::vector<cv::Vec4i>& srcLines,
+                             const std::vector<cv::Vec4i>& dstLines) {
+    if (matches.empty()) {
+        return cv::Point2d(0.0, 0.0);
+    }
+
+    const std::vector<LineInfo> src = describeLinesGeom(srcLines);
+    const std::vector<LineInfo> dst = describeLinesGeom(dstLines);
+    cv::Point2d sum(0.0, 0.0);
+    int count = 0;
+    for (const auto& m : matches) {
+        if (m.queryIdx < 0 || m.trainIdx < 0 ||
+            m.queryIdx >= static_cast<int>(src.size()) ||
+            m.trainIdx >= static_cast<int>(dst.size())) {
+            continue;
+        }
+        sum += matchShiftGeom(src, dst, m);
+        ++count;
+    }
+    if (count == 0) {
+        return cv::Point2d(0.0, 0.0);
+    }
+    const double inv = 1.0 / static_cast<double>(count);
+    return cv::Point2d(sum.x * inv, sum.y * inv);
 }
 
 /// 几何一致性筛选：方向 + 长度比 + 中心位移投票 + 一对一去重。
@@ -189,57 +208,83 @@ std::vector<cv::line_descriptor::KeyLine> toKeyLines(const std::vector<cv::Vec4i
 
 /// 通用 KNN 匹配：根据描述子类型自动选择匹配器（二进制→BinaryDescriptorMatcher，浮点→BFMatcher L2）。
 /// 输出重映射后的 KNN 分组（描述子索引→线段 class_id）。
-std::vector<std::vector<cv::DMatch>> knnMatchDescriptors(
+// 描述子匹配：支持 MATCH / KNN / RADIUS 三种模式。
+// 二进制和浮点路径分开，因为 BinaryDescriptorMatcher 不继承 cv::DescriptorMatcher。
+std::vector<std::vector<cv::DMatch>> matchDescriptors(
     const cv::Mat& srcDescriptors,
     const cv::Mat& dstDescriptors,
     const std::vector<cv::line_descriptor::KeyLine>& srcKeys,
     const std::vector<cv::line_descriptor::KeyLine>& dstKeys,
-    int knnK,
-    bool binaryDescriptor,
-    bool useFlann) {
-    std::vector<std::vector<cv::DMatch>> knn;
+    const std::string& matchMode, int knnK, float radius,
+    bool binaryDescriptor, bool useFlann) {
 
+    std::vector<std::vector<cv::DMatch>> raw;
+    const std::string mode = matchMode.empty() ? "KNN" : matchMode;
+
+    // ── 二进制路径：BinaryDescriptorMatcher ──
     if (binaryDescriptor) {
 #ifdef IR_HAS_OPENCV_LINE_DESCRIPTOR
-        cv::Ptr<cv::line_descriptor::BinaryDescriptorMatcher> matcher =
-            cv::line_descriptor::BinaryDescriptorMatcher::createBinaryDescriptorMatcher();
-        matcher->knnMatch(srcDescriptors, dstDescriptors, knn, std::max(2, knnK));
+        auto m = cv::line_descriptor::BinaryDescriptorMatcher::createBinaryDescriptorMatcher();
+        if (mode == "MATCH") {
+            std::vector<cv::DMatch> tmp; m->match(srcDescriptors, dstDescriptors, tmp);
+            raw.reserve(tmp.size());
+            for (auto& x : tmp) raw.push_back({x});
+        } else if (mode == "RADIUS") {
+            m->radiusMatch(srcDescriptors, dstDescriptors, raw, std::max(1.0f, radius));
+        } else {
+            m->knnMatch(srcDescriptors, dstDescriptors, raw, std::max(1, knnK));
+        }
 #else
         return {};
 #endif
-    } else if (useFlann) {
-        cv::Ptr<cv::FlannBasedMatcher> matcher =
-            cv::FlannBasedMatcher::create();
-        matcher->knnMatch(srcDescriptors, dstDescriptors, knn, std::max(2, knnK));
+    // ── 浮点路径：BFMatcher / FlannBasedMatcher ──
     } else {
-        cv::Ptr<cv::BFMatcher> matcher = cv::BFMatcher::create(cv::NORM_L2, false);
-        matcher->knnMatch(srcDescriptors, dstDescriptors, knn, std::max(2, knnK));
+        cv::Ptr<cv::DescriptorMatcher> m;
+        if (useFlann) m = cv::FlannBasedMatcher::create();
+        else          m = cv::BFMatcher::create(cv::NORM_L2, false);
+        if (mode == "MATCH") {
+            std::vector<cv::DMatch> tmp; m->match(srcDescriptors, dstDescriptors, tmp);
+            raw.reserve(tmp.size());
+            for (auto& x : tmp) raw.push_back({x});
+        } else if (mode == "RADIUS") {
+            m->radiusMatch(srcDescriptors, dstDescriptors, raw, std::max(1.0f, radius));
+        } else {
+            m->knnMatch(srcDescriptors, dstDescriptors, raw, std::max(1, knnK));
+        }
     }
 
-    // 将描述子行号重映射为框架线段下标（class_id）
+    // class_id 重映射
     std::vector<std::vector<cv::DMatch>> out;
-    out.reserve(knn.size());
-    for (const auto& neighbours : knn) {
+    out.reserve(raw.size());
+    for (const auto& neighbours : raw) {
         std::vector<cv::DMatch> remapped;
         remapped.reserve(neighbours.size());
-        for (const auto& candidate : neighbours) {
-            if (candidate.queryIdx < 0 || candidate.trainIdx < 0 ||
-                candidate.queryIdx >= static_cast<int>(srcKeys.size()) ||
-                candidate.trainIdx >= static_cast<int>(dstKeys.size())) {
-                continue;
-            }
-            const int queryLine = srcKeys[static_cast<size_t>(candidate.queryIdx)].class_id;
-            const int trainLine = dstKeys[static_cast<size_t>(candidate.trainIdx)].class_id;
-            if (queryLine < 0 || trainLine < 0) {
-                continue;
-            }
-            remapped.emplace_back(queryLine, trainLine, candidate.distance);
+        for (const auto& c : neighbours) {
+            if (c.queryIdx < 0 || c.trainIdx < 0 ||
+                c.queryIdx >= static_cast<int>(srcKeys.size()) ||
+                c.trainIdx >= static_cast<int>(dstKeys.size())) continue;
+            const int ql = srcKeys[static_cast<size_t>(c.queryIdx)].class_id;
+            const int tl = dstKeys[static_cast<size_t>(c.trainIdx)].class_id;
+            if (ql < 0 || tl < 0) continue;
+            remapped.emplace_back(ql, tl, c.distance);
         }
-        if (!remapped.empty()) {
-            out.push_back(std::move(remapped));
-        }
+        if (!remapped.empty()) out.push_back(std::move(remapped));
     }
     return out;
+}
+
+bool computeLbd(const cv::Mat& gray,
+                std::vector<cv::line_descriptor::KeyLine>& keyLines,
+                cv::Mat& descriptors,
+                std::string& message) {
+    descriptors.release();
+    if (gray.empty()) { message = "input gray image is empty"; return false; }
+    if (keyLines.empty()) { message = "line set is empty"; return false; }
+    cv::Ptr<cv::line_descriptor::BinaryDescriptor> descriptor =
+        cv::line_descriptor::BinaryDescriptor::createBinaryDescriptor();
+    descriptor->compute(gray, keyLines, descriptors);
+    if (descriptors.empty()) { message = "LBD descriptor matrix is empty"; return false; }
+    return true;
 }
 
 #endif
@@ -249,24 +294,6 @@ std::vector<std::vector<cv::DMatch>> knnMatchDescriptors(
 // ========================================================================
 // 描述子计算（在 ir 命名空间中，被 associate() 调用）
 // ========================================================================
-
-bool computeLbd(const cv::Mat& gray,
-                std::vector<cv::line_descriptor::KeyLine>& keyLines,
-                cv::Mat& descriptors,
-                std::string& message) {
-#ifdef IR_HAS_OPENCV_LINE_DESCRIPTOR
-    descriptors.release();
-    if (gray.empty()) { message = "input gray image is empty"; return false; }
-    if (keyLines.empty()) { message = "line set is empty"; return false; }
-    cv::Ptr<cv::line_descriptor::BinaryDescriptor> descriptor =
-        cv::line_descriptor::BinaryDescriptor::createBinaryDescriptor();
-    descriptor->compute(gray, keyLines, descriptors);
-    if (descriptors.empty()) { message = "LBD descriptor matrix is empty"; return false; }
-    return true;
-#else
-    message = "OpenCV line_descriptor module not available"; return false;
-#endif
-}
 
 namespace {
 
@@ -495,7 +522,9 @@ LineDescriptorAssociator::LineDescriptorAssociator(const YAML::Node& cfg) {
     const YAML::Node params = cfg["params"] ? cfg["params"] : cfg;
     _descriptor = yaml_utils::getString(params, "descriptor", "LBD");
     _matcher = yaml_utils::getString(params, "matcher", "BF");
-    _knnK = yaml_utils::getInt(params, "knn_k", 8);
+    _matchMode = yaml_utils::getString(params, "match_mode", "KNN");
+    _knnK = yaml_utils::getInt(params, "knn_k", 2);
+    _matchRadius = yaml_utils::getFloat(params, "match_radius", 50.0f);
     _minMatches = yaml_utils::getInt(params, "min_matches", 2);
     _geometricFilter = yaml_utils::getBool(params, "geometric_filter", true);
     _angleThresholdDeg = yaml_utils::getDouble(params, "angle_threshold_deg", 30.0);
@@ -512,6 +541,7 @@ LineDescriptorAssociator::LineDescriptorAssociator(const YAML::Node& cfg) {
     IR_LOG_INFO("LineDescriptorAssociator: descriptor=",
                 _descriptor,
                 ", matcher=", _matcher,
+                ", mode=", _matchMode,
                 ", knnK=", _knnK,
                 ", minMatches=", _minMatches,
                 ", geometricFilter=", _geometricFilter,
@@ -541,7 +571,7 @@ bool LineDescriptorAssociator::associate(RegistrationContext& ctx) {
         return false;
     }
 
-    const std::string descriptor = upperAscii(_descriptor);
+    const std::string descriptor = string_utils::toUpperAscii(_descriptor);
     const bool isLbd = (descriptor == "LBD");
     const bool isFloat = (descriptor == "MSLD" || descriptor == "LINE_SIFT");
 
@@ -625,10 +655,11 @@ bool LineDescriptorAssociator::associate(RegistrationContext& ctx) {
 
     // 4. KNN 匹配：二进制→BinaryDescriptorMatcher，浮点→BFMatcher L2
 
-    const bool useFlann = (upperAscii(_matcher) == "FLANN") && !isLbd;
+    const bool useFlann = (string_utils::toUpperAscii(_matcher) == "FLANN") && !isLbd;
+    const std::string modeKey = string_utils::toUpperAscii(_matchMode);
     md.raw_matches_knn =
-        knnMatchDescriptors(srcDescriptors, dstDescriptors, srcKeys, dstKeys,
-                            _knnK, isLbd, useFlann);
+        matchDescriptors(srcDescriptors, dstDescriptors, srcKeys, dstKeys,
+                         modeKey, _knnK, _matchRadius, isLbd, useFlann);
     IR_LOG_INFO("LineDescriptorAssociator KNN: raw_matches_knn groups=",
                 md.raw_matches_knn.size());
     if (md.raw_matches_knn.empty()) {
@@ -670,6 +701,13 @@ bool LineDescriptorAssociator::associate(RegistrationContext& ctx) {
     md.filtered_matches = selected;
     md.line_matches = md.filtered_matches;
     md.inlier_line_matches = md.line_matches;
+    md.translation = averageShiftGeom(md.line_matches, srcLines, dstLines);
+    md.affine = (cv::Mat_<double>(2, 3) << 1.0,
+                 0.0,
+                 md.translation.x,
+                 0.0,
+                 1.0,
+                 md.translation.y);
     md.valid = static_cast<int>(md.line_matches.size()) >= _minMatches;
     md.score = srcLines.empty()
                    ? 0.0
@@ -686,6 +724,8 @@ bool LineDescriptorAssociator::associate(RegistrationContext& ctx) {
 
     IR_LOG_INFO("LineDescriptorAssociator produced ", descriptor, " matches: ",
                 md.line_matches.size(), " / ", rawFlat.size(), " raw",
+                ", dx=", md.translation.x,
+                ", dy=", md.translation.y,
                 ", geometricFilter=", _geometricFilter,
                 ", srcLines=", srcLines.size(),
                 ", dstLines=", dstLines.size());

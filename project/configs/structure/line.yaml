@@ -12,7 +12,7 @@ extractor:
   #   HOUGH_LINES    标准霍夫直线检测，会把无限直线裁剪到图像边界。
   #   LSD            OpenCV Line Segment Detector，直接输出线段。
   #   FLD            Fast Line Detector，需要 OpenCV ximgproc。
-  method: LSD
+  method: HOUGH_LINES
 
   params:
     # 默认值：50.0。Canny 低阈值，HOUGH_LINES / HOUGH_LINES_P 会先用 Canny 提取边缘。
@@ -42,6 +42,9 @@ extractor:
     duplicateDistance: 8.0
 
     # LSD 参数；仅当 extractor.method: LSD 时使用。
+    # 专用 LSD 路径：使用 line_descriptor::LSDDetector，和 KeyLine / LBD 保持一致。
+    # 只有 detectorScale / detectorNumOctaves 会作用于这条主路径。
+    # 下方经典 LSD 参数仅在回退到 cv::createLineSegmentDetector 时生效。
     lsd:
       # 默认值：1。OpenCV LSD 细化模式：0(None) / 1(Standard) / 2(Advanced)。
       refine: 1
@@ -59,6 +62,7 @@ extractor:
       densityTh: 0.7
       # 默认值：1024。方向直方图 bin 数。
       nBins: 1024
+      # 专用 line_descriptor LSD 参数。
       detectorScale: 2
       detectorNumOctaves: 2
 
@@ -83,18 +87,19 @@ association:
   #   LINE_SEGMENT     基于角度/长度/中心位移的几何 baseline 匹配。
   #   LINE_DESCRIPTOR  基于线描述子的匹配入口，当前优先支持 LBD。
   #   PHASE_CORRELATE / CHAMFER / HAUSDORFF / ICP  结构响应图平移关联。
-  method: line_descriptor
+  method: Line_SEGMENT
   params:
     line_descriptor:
       # 线描述子类型，可选 LBD / MSLD / LINE_SIFT。
-      #   LBD:      二进制描述子，依赖 OpenCV contrib line_descriptor 模块。
-      #   MSLD:     浮点描述子（72维），纯 OpenCV 基础操作。
-      #   LINE_SIFT: 浮点描述子（128维），SIFT 梯度直方图 + 高斯加权。
-      descriptor: LINE_SIFT
+      descriptor: LBD
       # 匹配器类型，可选 BF / FLANN（仅 float 描述子支持 FLANN）。
       matcher: BF
-      # KNN 邻居数量。
-      knn_k: 8
+      # 匹配模式，可选 MATCH / KNN / RADIUS（与点特征法一致）。
+      match_mode: MATCH
+      # KNN 的 K（仅 match_mode: KNN 时使用）。
+      knn_k: 2
+      # 半径匹配阈值（仅 match_mode: RADIUS 时使用）。
+      match_radius: 50.0
       # 进入后续阶段前要求的最少匹配数。
       min_matches: 2
       # 几何一致性筛选（线匹配特有，在线段空间做方向/长度/位移投票）。

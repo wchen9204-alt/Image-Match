@@ -11,6 +11,7 @@
 #include <opencv2/imgproc.hpp>
 
 #include "core/config.h"
+#include "transform/affine_warper.h"
 #include "transform/perspective_warper.h"
 #include "utils/logger.h"
 #include "utils/timer.h"
@@ -226,8 +227,8 @@ bool BasePipeline::configure(const PipelineConfig& cfg) {
         return false;
     }
 
-    // 3. 创建通用 warp 组件；仿射族矩阵会在 warper 内部扩展为 3x3。
-    _warper = std::make_shared<PerspectiveWarper>();
+    // 3. 创建通用 warp 组件；默认使用 2x3 仿射 warper，透视 warper 作为扩展保留。
+    _warper = std::make_shared<AffineWarper>();
 
     // 4. 加载评测指标（可选）。
     _evaluator.clear();
@@ -294,7 +295,11 @@ bool BasePipeline::runWarp(RegistrationContext& ctx) {
         return false;
     }
 
-    // 3. 执行 source -> target 画布的图像变换，结果写入 ctx.warped_image。
+    // 3. HOMOGRAPHY 必须保留完整 3x3 透视项；仿射族继续走默认 2x3 warper。
+    if (t == GeometryType::HOMOGRAPHY) {
+        PerspectiveWarper perspectiveWarper;
+        return perspectiveWarper.warp(ctx);
+    }
     return _warper->warp(ctx);
 }
 
@@ -512,7 +517,12 @@ bool BasePipeline::run(RegistrationContext& ctx) {
         return fail(detail);
     }
 
-    runWarp(ctx);
+    if (!runWarp(ctx)) {
+        return fail(ctx.result.message.empty() ? "warp failed" : ctx.result.message);
+    }
+    if (_config.warp && ctx.warped_image.empty()) {
+        return fail("warp failed: warped image is empty");
+    }
     if (!validateWarpQuality(ctx)) {
         return fail(ctx.result.message.empty() ? "warp validation failed" : ctx.result.message);
     }

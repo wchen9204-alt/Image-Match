@@ -1,0 +1,51 @@
+# ---------------------------------------------------------------------------
+# Fourier-Mellin 频域直接法配置
+# ---------------------------------------------------------------------------
+# 直接法类型；可选项：DENSE / SPARSE / GLOBAL / FREQUENCY；默认值：无，pipeline 根据该值标识直接法类别。
+type: FREQUENCY
+
+# 直接法方法；可选项：FOURIER_MELLIN / FOURIER_MELLIN_TRANSFORM / FMT；默认值：无，FREQUENCY 类型下估计相似变换。
+method: FOURIER_MELLIN
+
+params:
+  # 灰度图高斯预平滑核大小；默认值：3；仅 FOURIER_MELLIN 生效，小于 3 时不做平滑，偶数会自动加 1。
+  blur_kernel: 3
+
+  # 是否使用 Hann 窗抑制边界效应；默认值：true；会同时作用于频谱估计、log-polar 相位相关和平移相位相关。
+  windowed: true
+
+  # 是否启用金字塔候选生成；默认值：true；开启后会在多尺度层估计旋转/尺度候选，再回到原图评分。
+  use_pyramid: true
+
+  # 金字塔层数；默认值：3；包含原图层，仅 use_pyramid=true 时完整生效。
+  pyramid_levels: 3
+
+  # 金字塔缩放比例；默认值：0.5；有效范围会被限制到 [0.25, 0.95]。
+  pyramid_scale: 0.5
+
+  # log-polar 图宽；默认值：0；小于等于 0 时使用当前估计层宽度。
+  log_polar_cols: 0
+
+  # log-polar 图高；默认值：0；小于等于 0 时使用当前估计层高度。
+  log_polar_rows: 0
+
+  # 频谱幅值图高斯平滑核大小；默认值：3；小于 3 时不平滑，偶数会自动加 1。
+  magnitude_blur_kernel: 3
+
+  # 频谱中心 DC 分量抑制半径；默认值：3；小于等于 0 时不抑制。
+  dc_suppress_radius: 3
+
+  # 允许的最小尺度；默认值：0.25；用于过滤 log-polar 得到的异常尺度候选。
+  min_scale: 0.25
+
+  # 允许的最大尺度；默认值：4.0；用于过滤 log-polar 得到的异常尺度候选。
+  max_scale: 4.0
+
+  # 旋转/尺度相位相关响应阈值；默认值：0.0；高于 0 时会拒绝低响应候选层。
+  rotation_scale_response_threshold: 0.0
+
+  # 平移相位相关响应阈值；默认值：0.01；低于该分数会判定最终配准失败。
+  translation_response_threshold: 0.01
+
+  # 是否尝试 180 度歧义候选；默认值：true；频谱幅值存在中心对称性，开启后对旋转歧义更稳健。
+  try_half_turn_ambiguity: true

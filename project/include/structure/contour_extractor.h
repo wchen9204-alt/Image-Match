@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include <yaml-cpp/yaml.h>
 
 #include "interfaces/i_structure_extractor.h"
@@ -18,7 +20,11 @@ private:
     double _cannyThreshold1 = 50.0;
     double _cannyThreshold2 = 150.0;
     int _apertureSize = 3;
+    std::string _retrievalMode = "EXTERNAL";
+    std::string _chainApprox = "SIMPLE";
     double _minArea = 20.0;
+    double _minPerimeter = 0.0;
+    int _minPoints = 3;
     int _maxContours = 1000;
     int _contourThickness = 1;
 };

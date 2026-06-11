@@ -1,51 +1,150 @@
-# 结构类型可选：EDGE / LINE / CONTOUR。
+# 结构类型，可选：EDGE / LINE / CONTOUR
 type: CONTOUR
 
-# 轮廓提取方法。
-# 当前已实现：CANNY_FIND_CONTOURS。
-# 当前已实现的通用结构关联方法：PHASE_CORRELATE / CHAMFER。
-# 后续轮廓关联方法计划支持：HU_MOMENTS / SHAPE_CONTEXT / FOURIER_SHAPE / HAUSDORFF / ICP。
 extractor:
-  # 默认值：CANNY_FIND_CONTOURS。当前流程为 Canny -> findContours。
+  # 当前实现：Canny 边缘 + findContours
   method: CANNY_FIND_CONTOURS
   params:
-    # 默认值：50.0。Canny 低阈值，用于先提取边缘。
+    # 默认值：50.0
     cannyThreshold1: 50.0
-    # 默认值：150.0。Canny 高阈值，用于先提取边缘。
+    # 默认值：150.0
     cannyThreshold2: 150.0
-    # 默认值：3。Canny Sobel 核大小，仅允许 3 / 5 / 7。
+    # 默认值：3
     apertureSize: 3
-    # 默认值：20.0。最小轮廓面积，小于该值的轮廓会被丢弃。
+
+    # 轮廓检索模式：EXTERNAL / LIST / CCOMP / TREE
+    # 默认值：EXTERNAL
+    retrievalMode: TREE
+    # 轮廓近似模式：SIMPLE / NONE
+    # 默认值：SIMPLE
+    chainApprox: SIMPLE
+
+    # 默认值：20.0
     minArea: 20.0
-    # 默认值：1000。最多保留的轮廓数量，<=0 表示不限制。
+    # 默认值：0.0
+    minPerimeter: 0.0
+    # 默认值：3
+    minPoints: 3
+    # 默认值：1000
     maxContours: 1000
-    # 默认值：1。将轮廓绘制回结构响应图时的线宽。
+    # 默认值：1
     contourThickness: 1
 
-# 兼容说明：
-# 当前 ContourExtractor 仍接收旧的顶层 params 布局；
-# 新配置建议使用 extractor.method 和 extractor.params。
 association:
-  # 默认值：PHASE_CORRELATE。可选：PHASE_CORRELATE / CHAMFER。
-  method: PHASE_CORRELATE
+  # 可选：
+  #   PHASE_CORRELATE / CHAMFER / HAUSDORFF / ICP
+  #       结构响应图关联方法。PHASE_CORRELATE 只估计平移，不属于轮廓描述子法。
+  #   CONTOUR_DESCRIPTOR
+  #       轮廓描述子匹配方法。
+  method: CONTOUR_DESCRIPTOR
   params:
+    contour_descriptor:
+      # 描述子类型，可选：
+      #   HU             HuMoments，全局 7 维形状描述子
+      #   MATCH_SHAPES   cv::matchShapes 直接比较
+      #   SHAPE_CONTEXT  简化版 Shape Context 轮廓直方图描述子
+      #   FD             Fourier Descriptor，固定重采样 + DFT 低频幅值
+      #   EFD            Elliptic Fourier Descriptor，闭合轮廓谐波系数描述子
+      # 说明：
+      #   FD / EFD 属于轮廓级形状描述子，可以放在这里。
+      #   EFD / Fourier-Mellin / FFT 相位相关暂不在本文件中实现，
+      #   它们留给后续频域或直接法模块。
+      # 默认值：HU
+      descriptor: HU
+
+      # 匹配器类型：
+      #   BF
+      # 当前轮廓描述子匹配统一使用 BFMatcher。
+      # 默认值：BF
+      matcher: BF
+
+      # 匹配模式，可选：
+      #   KNN     为每个源轮廓保留前 k 个最近邻，配合 knn_k 使用
+      #   MATCH   只保留每个源轮廓的最佳匹配
+      #   RADIUS  保留距离阈值内的所有匹配，配合 match_radius 使用
+      # 默认值：KNN
+      match_mode: KNN
+      # KNN 模式参数：保留前 k 个近邻
+      # 默认值：2
+      knn_k: 2
+      # RADIUS 模式参数：距离阈值
+      # 默认值：50.0
+      match_radius: 50.0
+      # 默认值：2
+      min_matches: 2
+
+      # 几何一致性预筛选：
+      #   先做面积比预筛和一对一去重，再按 geometric_model 做几何一致性筛选。
+      #   TRANSLATION 使用旧的质心平移一致性；
+      #   RIGID 使用基于质心点对的刚体 RANSAC，更适合旋转 + 平移场景。
+      # 默认值：true
+      geometric_filter: true
+      # 默认值：RIGID
+      geometric_model: RIGID
+      # 默认值：0.30
+      area_ratio_min: 0.30
+      # TRANSLATION 模式参数：质心平移一致性阈值
+      # 默认值：30.0
+      shift_consistency_threshold: 30.0
+      # RIGID 模式参数：质心点对刚体 RANSAC 阈值/迭代次数/最小内点数
+      # 默认值：8.0 / 200 / 2
+      rigid_ransac_threshold: 8.0
+      rigid_ransac_iterations: 200
+      rigid_min_inliers: 2
+
+      # Fourier Descriptor 参数（仅 descriptor: FD 时使用）
+      # 默认值：128 / 16
+      fourier_sample_points: 128
+      fourier_coefficients: 16
+
+      # Elliptic Fourier Descriptor 参数（仅 descriptor: EFD 时使用）
+      # 默认值：12 / true / true
+      efd_harmonics: 12
+      efd_normalize_rotation: true
+      efd_normalize_scale: true
+
+      # Shape Context 参数（仅 descriptor: SHAPE_CONTEXT 时使用）
+      # 默认值：64 / 5 / 12 / 0.125 / 2.0
+      shape_context_sample_points: 64
+      shape_context_radial_bins: 5
+      shape_context_angular_bins: 12
+      shape_context_inner_radius: 0.125
+      shape_context_outer_radius: 2.0
+
     phase_correlate:
-      # 默认值：0.01。响应阈值，低于该值时认为关联不可靠。
+      # 默认值：0.01 / 5
       responseThreshold: 0.01
-      # 默认值：5。phaseCorrelate 前使用的高斯模糊核大小。
       phaseBlurKernel: 5
+
     chamfer:
-      # 默认值：20。平移搜索半径。
+      # 默认值：20 / 1 / 2000 / 5 / 0.25 / true / PHASE_CORRELATE
       searchRadius: 20
-      # 默认值：1。平移搜索步长。
       step: 1
-      # 默认值：2000。最多采样的结构点数量。
       maxPoints: 2000
-      # 默认值：0.25。平均距离阈值，低于该值时认为关联有效。
+      phaseBlurKernel: 5
       scoreThreshold: 0.25
-      # 默认值：true。是否同时计算正向和反向平均距离。
+      bidirectional: true
+      initialization: PHASE_CORRELATE
+
+    hausdorff:
+      # 默认值：20 / 1 / 2000 / 0.95 / 3.0 / true
+      searchRadius: 30
+      step: 2
+      maxPoints: 2000
+      percentile: 0.95
+      scoreThreshold: 3.0
       bidirectional: true
 
+    icp:
+      # 默认值：30 / 0.01 / 2000 / 20 / 10.0 / 2.0 / CENTROID
+      maxIterations: 30
+      tolerance: 0.01
+      maxPoints: 2000
+      minCorrespondences: 20
+      maxCorrespondenceDistance: 15.0
+      scoreThreshold: 2.0
+      initialization: CENTROID
+
 estimation:
-  # 默认值：0.01。结构匹配结果的有效性阈值；当前平移模型直接复用关联结果。
+  # 默认值：0.01
   responseThreshold: 0.01

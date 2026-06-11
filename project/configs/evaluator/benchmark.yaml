@@ -6,8 +6,10 @@ name: feature_full_sweep
 # 数据集根目录；DatasetLoader 会扫描符合命名规则的子目录。
 dataset:
   root:           datasets
-  pattern_source: source
-  pattern_target: target
+  # source 图像文件名关键词候选；DatasetLoader 按顺序寻找源图。
+  pattern_sources: [source, moving]
+  # target 图像文件名关键词候选；DatasetLoader 按顺序寻找目标图。
+  pattern_targets: [target, reference]
   # 可选子目录列表；为空时自动扫描 root 下所有子目录。
   include: []
 

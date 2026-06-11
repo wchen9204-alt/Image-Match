@@ -16,6 +16,7 @@
 
 #include "core/config.h"
 #include "core/factory.h"
+#include "data/correspondence_view.h"
 #include "utils/logger.h"
 #include "utils/timer.h"
 #include "utils/yaml_utils.h"
@@ -115,6 +116,14 @@ cv::Point lineMidpoint(const cv::Vec4i& line) {
     return cv::Point((line[0] + line[2]) / 2, (line[1] + line[3]) / 2);
 }
 
+cv::Point2f contourCentroidPoint(const std::vector<cv::Point>& contour) {
+    const cv::Moments m = cv::moments(contour);
+    if (std::abs(m.m00) < 1e-9) {
+        return {-1.0f, -1.0f};
+    }
+    return {static_cast<float>(m.m10 / m.m00), static_cast<float>(m.m01 / m.m00)};
+}
+
 cv::Point2d applyAffinePoint(const cv::Mat& A, const cv::Point2d& p) {
     return {A.at<double>(0, 0) * p.x + A.at<double>(0, 1) * p.y + A.at<double>(0, 2),
             A.at<double>(1, 0) * p.x + A.at<double>(1, 1) * p.y + A.at<double>(1, 2)};
@@ -165,77 +174,27 @@ std::vector<cv::line_descriptor::KeyLine> toDrawableKeyLines(
 }
 #endif
 
-bool sameLineDirection(const cv::Vec4i& srcLine, const cv::Vec4i& dstLine) {
-    const cv::Point2f sv = linePoint2(srcLine) - linePoint1(srcLine);
-    const cv::Point2f dv = linePoint2(dstLine) - linePoint1(dstLine);
-    return sv.x * dv.x + sv.y * dv.y >= 0.0f;
-}
-
-bool prepareLineEndpointMatches(RegistrationContext& ctx) {
+void promoteStructureInliersFromGeometryMask(RegistrationContext& ctx) {
     auto& md = ctx.structure_match_data;
-    const auto& srcLines = ctx.structure_data.first.lines;
-    const auto& dstLines = ctx.structure_data.second.lines;
+    const auto& gd = ctx.geometry_data;
+    const CorrespondenceView view = buildStructureCorrespondenceView(ctx);
 
-    ctx.keypoint_data.clear();
-    ctx.keypoint_match_data.clear();
-
-    if (md.line_matches.empty()) {
-        md.message = "no line matches for geometry estimation";
-        return false;
-    }
-
-    for (size_t lineMatchIdx = 0; lineMatchIdx < md.line_matches.size(); ++lineMatchIdx) {
-        const cv::DMatch& lm = md.line_matches[lineMatchIdx];
-        if (lm.queryIdx < 0 || lm.trainIdx < 0 ||
-            lm.queryIdx >= static_cast<int>(srcLines.size()) ||
-            lm.trainIdx >= static_cast<int>(dstLines.size())) {
+    std::vector<int> pointInlierCounts(md.line_matches.size(), 0);
+    for (size_t i = 0; i < view.filtered.size() && i < gd.inlier_mask.size(); ++i) {
+        if (!gd.inlier_mask[i]) {
             continue;
         }
-
-        const cv::Vec4i& srcLine = srcLines[static_cast<size_t>(lm.queryIdx)];
-        const cv::Vec4i& dstLine = dstLines[static_cast<size_t>(lm.trainIdx)];
-        const cv::Point2f sp1 = linePoint1(srcLine);
-        const cv::Point2f sp2 = linePoint2(srcLine);
-        cv::Point2f dp1 = linePoint1(dstLine);
-        cv::Point2f dp2 = linePoint2(dstLine);
-        if (!sameLineDirection(srcLine, dstLine)) {
-            std::swap(dp1, dp2);
-        }
-
-        const int srcBase = static_cast<int>(ctx.keypoint_data.first.keypoints.size());
-        const int dstBase = static_cast<int>(ctx.keypoint_data.second.keypoints.size());
-        ctx.keypoint_data.first.keypoints.emplace_back(sp1, 1.0f);
-        ctx.keypoint_data.first.keypoints.emplace_back(sp2, 1.0f);
-        ctx.keypoint_data.second.keypoints.emplace_back(dp1, 1.0f);
-        ctx.keypoint_data.second.keypoints.emplace_back(dp2, 1.0f);
-
-        ctx.keypoint_match_data.filtered.emplace_back(srcBase, dstBase, lm.distance);
-        ctx.keypoint_match_data.filtered.back().imgIdx = static_cast<int>(lineMatchIdx);
-        ctx.keypoint_match_data.filtered.emplace_back(srcBase + 1, dstBase + 1, lm.distance);
-        ctx.keypoint_match_data.filtered.back().imgIdx = static_cast<int>(lineMatchIdx);
-    }
-
-    if (ctx.keypoint_match_data.filtered.empty()) {
-        md.message = "no valid endpoint matches converted from line matches";
-        return false;
-    }
-    return true;
-}
-
-void promoteLineInliersFromEndpointMatches(RegistrationContext& ctx) {
-    const auto& endpointInliers = ctx.keypoint_match_data.inliers;
-    auto& md = ctx.structure_match_data;
-
-    std::vector<int> endpointCounts(md.line_matches.size(), 0);
-    for (const auto& m : endpointInliers) {
-        if (m.imgIdx >= 0 && m.imgIdx < static_cast<int>(endpointCounts.size())) {
-            ++endpointCounts[static_cast<size_t>(m.imgIdx)];
+        const int structureMatchIndex = view.filtered[i].imgIdx;
+        if (structureMatchIndex >= 0 &&
+            structureMatchIndex < static_cast<int>(pointInlierCounts.size())) {
+            ++pointInlierCounts[static_cast<size_t>(structureMatchIndex)];
         }
     }
 
     md.inlier_line_matches.clear();
-    for (size_t i = 0; i < endpointCounts.size(); ++i) {
-        if (endpointCounts[i] >= 2) {
+    const int requiredPoints = ctx.structure_data.type == StructureType::LINE ? 2 : 1;
+    for (size_t i = 0; i < pointInlierCounts.size(); ++i) {
+        if (pointInlierCounts[i] >= requiredPoints) {
             md.inlier_line_matches.push_back(md.line_matches[i]);
         }
     }
@@ -329,6 +288,89 @@ cv::Mat renderLineSegmentMatches(const RegistrationContext& ctx,
         cv::line(canvas, srcMid, dstMid, matchColor, 1, cv::LINE_AA);
         cv::circle(canvas, srcMid, 2, srcColor, cv::FILLED, cv::LINE_AA);
         cv::circle(canvas, dstMid, 2, dstColor, cv::FILLED, cv::LINE_AA);
+        ++drawn;
+    }
+
+    return drawn > 0 ? canvas : cv::Mat{};
+}
+
+// 轮廓匹配可视化：
+// 1. 左右拼接 source / target 原图。
+// 2. 在两侧分别描边显示匹配到的 source / target contour。
+// 3. 使用轮廓质心作为连线锚点，直观看每一对轮廓对应关系。
+cv::Mat renderContourMatches(const RegistrationContext& ctx,
+                             const std::vector<cv::DMatch>& matches,
+                             int maxMatches) {
+    if (matches.empty() || ctx.images.first.empty() || ctx.images.second.empty() ||
+        ctx.structure_data.first.contours.empty() || ctx.structure_data.second.contours.empty()) {
+        return {};
+    }
+
+    cv::Mat src = toBgr(ctx.images.first);
+    cv::Mat dst = toBgr(ctx.images.second);
+    if (src.empty() || dst.empty()) {
+        return {};
+    }
+
+    std::vector<cv::DMatch> draw = matches;
+    if (maxMatches > 0 && static_cast<int>(draw.size()) > maxMatches) {
+        std::partial_sort(draw.begin(),
+                          draw.begin() + maxMatches,
+                          draw.end(),
+                          [](const cv::DMatch& a, const cv::DMatch& b) {
+                              return a.distance < b.distance;
+                          });
+        draw.resize(maxMatches);
+    }
+
+    const int canvasRows = std::max(src.rows, dst.rows);
+    const int canvasCols = src.cols + dst.cols;
+    cv::Mat canvas(canvasRows, canvasCols, src.type(), cv::Scalar::all(0));
+    src.copyTo(canvas(cv::Rect(0, 0, src.cols, src.rows)));
+    dst.copyTo(canvas(cv::Rect(src.cols, 0, dst.cols, dst.rows)));
+
+    int drawn = 0;
+    for (const auto& m : draw) {
+        if (m.queryIdx < 0 || m.trainIdx < 0 ||
+            m.queryIdx >= static_cast<int>(ctx.structure_data.first.contours.size()) ||
+            m.trainIdx >= static_cast<int>(ctx.structure_data.second.contours.size())) {
+            continue;
+        }
+
+        const auto& srcContour =
+            ctx.structure_data.first.contours[static_cast<size_t>(m.queryIdx)];
+        const auto& dstContour =
+            ctx.structure_data.second.contours[static_cast<size_t>(m.trainIdx)];
+        if (srcContour.empty() || dstContour.empty()) {
+            continue;
+        }
+
+        const cv::Point2f srcCentroid = contourCentroidPoint(srcContour);
+        const cv::Point2f dstCentroid = contourCentroidPoint(dstContour);
+        if (srcCentroid.x < 0.0f || srcCentroid.y < 0.0f ||
+            dstCentroid.x < 0.0f || dstCentroid.y < 0.0f) {
+            continue;
+        }
+
+        std::vector<std::vector<cv::Point>> srcDrawContours{srcContour};
+        std::vector<cv::Point> shiftedDstContour;
+        shiftedDstContour.reserve(dstContour.size());
+        for (const cv::Point& p : dstContour) {
+            shiftedDstContour.emplace_back(p.x + src.cols, p.y);
+        }
+        std::vector<std::vector<cv::Point>> dstDrawContours{shiftedDstContour};
+
+        const cv::Scalar srcColor(0, 180, 255);
+        const cv::Scalar dstColor(0, 255, 0);
+        const cv::Scalar matchColor(255, 180, 0);
+        cv::drawContours(canvas, srcDrawContours, -1, srcColor, 2, cv::LINE_AA);
+        cv::drawContours(canvas, dstDrawContours, -1, dstColor, 2, cv::LINE_AA);
+
+        const cv::Point srcCenter(cvRound(srcCentroid.x), cvRound(srcCentroid.y));
+        const cv::Point dstCenter(cvRound(dstCentroid.x) + src.cols, cvRound(dstCentroid.y));
+        cv::line(canvas, srcCenter, dstCenter, matchColor, 1, cv::LINE_AA);
+        cv::circle(canvas, srcCenter, 3, srcColor, cv::FILLED, cv::LINE_AA);
+        cv::circle(canvas, dstCenter, 3, dstColor, cv::FILLED, cv::LINE_AA);
         ++drawn;
     }
 
@@ -550,6 +592,7 @@ bool StructurePipeline::runEstimation(RegistrationContext& ctx) {
     // 1. 初始化几何结果。
     auto& gd = ctx.geometry_data;
     gd.clear();
+    ctx.correspondence_source = "STRUCTURE";
 
     // 2. 检查结构匹配是否给出了有效结果，无效时保留失败原因。
     if (!ctx.structure_match_data.valid) {
@@ -560,33 +603,40 @@ bool StructurePipeline::runEstimation(RegistrationContext& ctx) {
         return false;
     }
 
-    // 3. 有线段匹配时，展开为端点点对并交由 YAML 配置的几何估计器做 RANSAC。
-    //    几何模型由用户配置决定（Rigid / Affine / Similarity / Homography），
+    // 3. 有结构匹配时，几何估计器直接读取 CorrespondenceView，不再临时伪装成 keypoint match。
     if (_geometry && !ctx.structure_match_data.line_matches.empty()) {
-        if (!prepareLineEndpointMatches(ctx)) {
-            gd.message = ctx.structure_match_data.message.empty()
-                             ? "failed to prepare endpoint matches"
-                             : ctx.structure_match_data.message;
+        if (buildStructureCorrespondenceView(ctx).empty()) {
+            gd.message = "no valid structure correspondences for geometry estimation";
             IR_LOG_WARN("StructurePipeline::runEstimation: ", gd.message);
             return false;
         }
 
-        const bool ok = _geometry->estimate(ctx);
-        promoteLineInliersFromEndpointMatches(ctx);
+        const cv::Point2d assocTranslation = ctx.structure_match_data.translation;
+        const cv::Mat assocAffine = ctx.structure_match_data.affine.clone();
 
-        ctx.structure_match_data.affine =
-            (ctx.geometry_data.A.empty() ? cv::Mat{} : ctx.geometry_data.A.clone());
-        if (!ctx.geometry_data.A.empty()) {
-            ctx.structure_match_data.translation =
-                {ctx.geometry_data.A.at<double>(0, 2), ctx.geometry_data.A.at<double>(1, 2)};
-        } else if (!ctx.geometry_data.H.empty()) {
-            ctx.structure_match_data.translation =
-                {ctx.geometry_data.H.at<double>(0, 2) / ctx.geometry_data.H.at<double>(2, 2),
-                 ctx.geometry_data.H.at<double>(1, 2) / ctx.geometry_data.H.at<double>(2, 2)};
+        const bool ok = _geometry->estimate(ctx);
+        promoteStructureInliersFromGeometryMask(ctx);
+
+        if (ok) {
+            ctx.structure_match_data.affine =
+                (ctx.geometry_data.A.empty() ? cv::Mat{} : ctx.geometry_data.A.clone());
+            if (!ctx.geometry_data.A.empty()) {
+                ctx.structure_match_data.translation =
+                    {ctx.geometry_data.A.at<double>(0, 2), ctx.geometry_data.A.at<double>(1, 2)};
+            } else if (!ctx.geometry_data.H.empty()) {
+                ctx.structure_match_data.translation =
+                    {ctx.geometry_data.H.at<double>(0, 2) / ctx.geometry_data.H.at<double>(2, 2),
+                     ctx.geometry_data.H.at<double>(1, 2) / ctx.geometry_data.H.at<double>(2, 2)};
+            }
+        } else {
+            ctx.structure_match_data.affine = assocAffine;
+            ctx.structure_match_data.translation = assocTranslation;
         }
 
-        ctx.result.num_inliers = static_cast<int>(ctx.structure_match_data.inlier_line_matches.size());
-        ctx.result.num_filtered_matches = ctx.result.num_inliers;
+        // 保留关联器/预筛后的匹配数量，不在几何阶段用内点数覆盖，
+        // 这样 summary 里可以区分“筛后匹配数”和“最终几何内点数”。
+        ctx.result.num_inliers =
+            static_cast<int>(ctx.structure_match_data.inlier_line_matches.size());
         ctx.result.inlier_ratio = ctx.structure_match_data.score;
         if (!ok) {
             ctx.structure_match_data.message = ctx.geometry_data.message;
@@ -595,8 +645,8 @@ bool StructurePipeline::runEstimation(RegistrationContext& ctx) {
 
         IR_LOG_INFO("StructurePipeline geometry estimated by ",
                     _geometry->name(),
-                    ", endpoint_inliers=",
-                    ctx.keypoint_match_data.inliers.size(),
+                    ", correspondence_inliers=",
+                    ctx.geometry_data.num_inliers,
                     ", line_inliers=",
                     ctx.structure_match_data.inlier_line_matches.size(),
                     ", score=",
@@ -674,10 +724,16 @@ bool StructurePipeline::saveOutputs(RegistrationContext& ctx) {
     // 3. 按配置保存结构匹配连线图，便于和点特征 matches 输出对照。
     if (_config.draw_matches) {
         cv::Mat vis;
-        if (ctx.structure_match_data.valid &&
-            !ctx.structure_match_data.inlier_line_matches.empty()) {
-            vis = renderLineSegmentMatches(
-                ctx, ctx.structure_match_data.inlier_line_matches, _config.max_matches_drawn);
+        const std::vector<cv::DMatch>& preferredMatches =
+            !ctx.structure_match_data.inlier_line_matches.empty()
+                ? ctx.structure_match_data.inlier_line_matches
+                : ctx.structure_match_data.line_matches;
+
+        if (ctx.structure_data.type == StructureType::LINE && !preferredMatches.empty()) {
+            vis = renderLineSegmentMatches(ctx, preferredMatches, _config.max_matches_drawn);
+        } else if (ctx.structure_data.type == StructureType::CONTOUR &&
+                   !preferredMatches.empty()) {
+            vis = renderContourMatches(ctx, preferredMatches, _config.max_matches_drawn);
         }
         if (vis.empty()) {
             vis = renderStructureMatches(ctx, _config.max_matches_drawn);

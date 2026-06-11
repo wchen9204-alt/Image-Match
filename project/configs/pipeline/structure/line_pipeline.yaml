@@ -39,5 +39,5 @@ validation:
 evaluator: ../../evaluator/metrics.yaml
 
 filters:
- # - ../../filter/ratio_test.yaml
- # - ../../filter/distance_threshold.yaml
+#  - ../../filter/ratio_test.yaml
+#  - ../../filter/distance_threshold.yaml

@@ -4,6 +4,7 @@
 
 #include <opencv2/imgcodecs.hpp>
 
+#include "data/correspondence_view.h"
 #include "utils/file_utils.h"
 #include "utils/logger.h"
 #include "utils/visualization/draw_diff.h"
@@ -55,7 +56,12 @@ bool VisualizationManager::saveAll(const RegistrationContext& ctx,
         }
     }
 
-    if (opt.draw_inliers && !ctx.keypoint_match_data.inliers.empty()) {
+    const CorrespondenceSource source = correspondenceSourceFromContext(ctx);
+    const CorrespondenceView view =
+        source == CorrespondenceSource::NONE ? buildBestCorrespondenceView(ctx)
+                                             : buildCorrespondenceView(ctx, source);
+
+    if (opt.draw_inliers && !view.inliers.empty()) {
         // 内点图只展示几何模型接受的匹配，用于检查鲁棒估计质量。
         DrawInliers::Options inlier_opt;
         inlier_opt.max_inliers = opt.max_inliers;

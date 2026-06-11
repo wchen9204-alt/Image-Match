@@ -1,7 +1,6 @@
 #include "core/factory.h"
 
 #include <algorithm>
-#include <cctype>
 #include <stdexcept>
 #include <string>
 
@@ -15,6 +14,7 @@
 #include "matcher/keypoint/bf_matcher.h"
 #include "matcher/keypoint/flann_matcher.h"
 #include "matcher/structure/chamfer_associator.h"
+#include "matcher/structure/contour_descriptor_associator.h"
 #include "matcher/structure/hausdorff_associator.h"
 #include "matcher/structure/icp_associator.h"
 #include "matcher/structure/line_descriptor_associator.h"
@@ -32,12 +32,24 @@
 #include "filter/min_distance_filter.h"
 #include "filter/ratio_test.h"
 
+#include "direct/dense/dis_flow_aligner.h"
+#include "direct/dense/farneback_flow_aligner.h"
+#include "direct/dense/tvl1_flow_aligner.h"
+#include "direct/frequency/fourier_mellin_aligner.h"
+#include "direct/frequency/phase_correlation_aligner.h"
+#include "direct/global/ecc_aligner.h"
+#include "direct/global/esm_rigid_aligner.h"
+#include "direct/global/global_lk_aligner.h"
+#include "direct/global/zncc_rigid_aligner.h"
+#include "direct/sparse/klt_sparse_aligner.h"
+
 #include "geometry/affine_estimator.h"
 #include "geometry/homography_estimator.h"
 #include "geometry/rigid_estimator.h"
 #include "geometry/similarity_estimator.h"
 
 #include "utils/logger.h"
+#include "utils/string_utils.h"
 #include "utils/yaml_utils.h"
 
 namespace ir {
@@ -51,19 +63,6 @@ std::string typeOf(const YAML::Node& cfg) {
         return type;
     }
     return yaml_utils::getString(cfg, "method", "");
-}
-
-// 将 YAML 中的方法名归一化为只含大写字母/数字的 key。
-// 这样 PHASE_CORRELATE / PhaseCorrelate / phase_correlate 可走同一分支。
-std::string methodKey(const std::string& value) {
-    std::string out;
-    out.reserve(value.size());
-    for (unsigned char c : value) {
-        if (std::isalnum(c)) {
-            out.push_back(static_cast<char>(std::toupper(c)));
-        }
-    }
-    return out;
 }
 
 } // namespace
@@ -109,7 +108,7 @@ std::shared_ptr<IStructureExtractor> Factory::createStructureExtractor(const YAM
 std::shared_ptr<IStructureAssociator> Factory::createStructureAssociator(const YAML::Node& cfg) {
     const YAML::Node assoc_cfg = cfg["association"] ? cfg["association"] : cfg;
     const std::string t = typeOf(assoc_cfg);
-    const std::string key = methodKey(t);
+    const std::string key = string_utils::normalizedKey(t);
     const YAML::Node all_params = assoc_cfg["params"];
 
     if (key == "PHASECORRELATE") {
@@ -142,6 +141,12 @@ std::shared_ptr<IStructureAssociator> Factory::createStructureAssociator(const Y
             all_params && all_params["line_descriptor"] ? all_params["line_descriptor"]
                                                          : assoc_cfg;
         return std::make_shared<LineDescriptorAssociator>(params);
+    }
+    if (key == "CONTOURDESCRIPTOR" || key == "CONTOUR_DESCRIPTOR") {
+        const YAML::Node params =
+            all_params && all_params["contour_descriptor"] ? all_params["contour_descriptor"]
+                                                            : assoc_cfg;
+        return std::make_shared<ContourDescriptorAssociator>(params);
     }
     throw std::runtime_error("Factory: unknown structure associator type: " + t);
 }
@@ -180,6 +185,46 @@ std::shared_ptr<IFilter> Factory::createFilter(const YAML::Node& cfg) {
         return std::make_shared<GmsFilter>(cfg);
     }
     throw std::runtime_error("Factory: unknown filter type: " + t);
+}
+
+std::shared_ptr<IDirectAligner> Factory::createDirectAligner(const YAML::Node& cfg) {
+    const std::string method =
+        yaml_utils::getString(cfg, "method", yaml_utils::getString(cfg, "type"));
+    const std::string key = string_utils::normalizedKey(method);
+
+    if (key == "ECC") {
+        return std::make_shared<EccAligner>(cfg);
+    }
+    if (key == "ESMRIGID" || key == "RIGIDESM" || key == "ESM") {
+        return std::make_shared<EsmRigidAligner>(cfg);
+    }
+    if (key == "GLOBALLK" || key == "LKGLOBAL") {
+        return std::make_shared<GlobalLkAligner>(cfg);
+    }
+    if (key == "ZNCCRIGID" || key == "GLOBALZNCC" || key == "ZNCC") {
+        return std::make_shared<ZnccRigidAligner>(cfg);
+    }
+    if (key == "PHASECORRELATION" || key == "PHASECORRELATE") {
+        return std::make_shared<DirectPhaseCorrelationAligner>(cfg);
+    }
+    if (key == "FOURIERMELLIN" || key == "FOURIERMELLINTRANSFORM" ||
+        key == "FOURIERMELLINALIGNER" || key == "DIRECTFOURIERMELLIN" || key == "FMT") {
+        return std::make_shared<DirectFourierMellinAligner>(cfg);
+    }
+    if (key == "KLT" || key == "PYRAMIDALKLT" || key == "SPARSEKLT") {
+        return std::make_shared<KltSparseAligner>(cfg);
+    }
+    if (key == "FARNEBACK" || key == "FARNEBACKFLOW") {
+        return std::make_shared<FarnebackFlowAligner>(cfg);
+    }
+    if (key == "DIS" || key == "DISFLOW" || key == "DENSEINVERSESEARCH") {
+        return std::make_shared<DisFlowAligner>(cfg);
+    }
+    if (key == "TVL1" || key == "TVL1FLOW" || key == "DUALTVL1" || key == "DUALTVL1FLOW") {
+        return std::make_shared<Tvl1FlowAligner>(cfg);
+    }
+
+    throw std::runtime_error("Factory: unknown direct aligner method: " + method);
 }
 
 std::shared_ptr<IGeometryEstimator> Factory::createGeometryEstimator(const YAML::Node& cfg) {

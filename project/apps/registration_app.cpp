@@ -1,6 +1,7 @@
 ﻿#include "registration_app.h"
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -13,7 +14,9 @@
 #include "core/context.h"
 #include "dataset/dataset_loader.h"
 #include "interfaces/i_pipeline.h"
+#include "pipeline/direct_pipeline.h"
 #include "pipeline/keypoint_pipeline.h"
+#include "pipeline/learning_pipeline.h"
 #include "pipeline/structure_pipeline.h"
 #include "utils/file_utils.h"
 #include "utils/logger.h"
@@ -25,26 +28,28 @@ namespace ir {
 
 namespace {
 
+namespace summary_text {
+
 // 统一格式化毫秒耗时，保证终端摘要的小数位一致。
-std::string fmtMs(double v) {
+std::string formatMilliseconds(double v) {
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(2) << v << " ms";
     return oss.str();
 }
 
 // 统一输出各阶段耗时，避免两类方法维护两套终端格式。
-void appendTimingSummary(std::ostringstream& oss, const RegistrationResult& r) {
+void appendTiming(std::ostringstream& oss, const RegistrationResult& r) {
     oss << "  -- timings --\n";
-    oss << "  load          : " << fmtMs(r.t_load_ms) << "\n";
-    oss << "  extract       : " << fmtMs(r.t_extract_ms) << "\n";
-    oss << "  match         : " << fmtMs(r.t_match_ms) << "\n";
-    oss << "  filter        : " << fmtMs(r.t_filter_ms) << "\n";
-    oss << "  geometry      : " << fmtMs(r.t_geometry_ms) << "\n";
-    oss << "  warp          : " << fmtMs(r.t_warp_ms) << "\n";
-    oss << "  TOTAL         : " << fmtMs(r.t_total_ms) << "\n";
+    oss << "  load          : " << formatMilliseconds(r.t_load_ms) << "\n";
+    oss << "  extract       : " << formatMilliseconds(r.t_extract_ms) << "\n";
+    oss << "  match         : " << formatMilliseconds(r.t_match_ms) << "\n";
+    oss << "  filter        : " << formatMilliseconds(r.t_filter_ms) << "\n";
+    oss << "  geometry      : " << formatMilliseconds(r.t_geometry_ms) << "\n";
+    oss << "  warp          : " << formatMilliseconds(r.t_warp_ms) << "\n";
+    oss << "  TOTAL         : " << formatMilliseconds(r.t_total_ms) << "\n";
 }
 
-void appendEvaluationSummary(std::ostringstream& oss, const EvaluationData& evaluation) {
+void appendEvaluation(std::ostringstream& oss, const EvaluationData& evaluation) {
     if (evaluation.metrics.empty()) {
         return;
     }
@@ -64,7 +69,27 @@ void appendEvaluationSummary(std::ostringstream& oss, const EvaluationData& eval
     }
 }
 
-std::string jsonEscape(const std::string& s) {
+// 直接法诊断项由各算法自行写入，摘要层只负责统一展示，避免为每个新方法增加特判。
+void appendDirectDiagnostics(std::ostringstream& oss, const DirectData& direct) {
+    if (direct.diagnostics.empty()) {
+        return;
+    }
+
+    for (const auto& item : direct.diagnostics) {
+        if (!std::isfinite(item.value)) {
+            continue;
+        }
+        const std::string label = item.label.empty() ? item.key : item.label;
+        oss << "  " << label << " : " << std::fixed << std::setprecision(3)
+            << item.value << "\n";
+    }
+}
+
+} // namespace summary_text
+
+namespace json_output {
+
+std::string escapeString(const std::string& s) {
     std::string out;
     out.reserve(s.size() + 8);
     for (char c : s) {
@@ -92,6 +117,61 @@ std::string jsonEscape(const std::string& s) {
     return out;
 }
 
+// 将直接法诊断项写成 JSON 对象；key 保持机器可读，便于后续 FMT 等方法复用同一出口。
+void appendDirectDiagnostics(std::ostringstream& oss, const DirectData& direct) {
+    oss << "    \"direct_diagnostics\": {";
+    bool wroteAny = false;
+    for (const auto& item : direct.diagnostics) {
+        if (item.key.empty() || !std::isfinite(item.value)) {
+            continue;
+        }
+        oss << (wroteAny ? ",\n" : "\n");
+        oss << "      \"" << escapeString(item.key) << "\": " << item.value;
+        wroteAny = true;
+    }
+    if (wroteAny) {
+        oss << "\n    }\n";
+    } else {
+        oss << "}\n";
+    }
+}
+
+} // namespace json_output
+
+double matAtAsDouble(const cv::Mat& mat, int row, int col) {
+    if (mat.empty() || row < 0 || col < 0 || row >= mat.rows || col >= mat.cols) {
+        return 0.0;
+    }
+
+    cv::Mat value64;
+    mat(cv::Rect(col, row, 1, 1)).convertTo(value64, CV_64F);
+    return value64.at<double>(0, 0);
+}
+
+std::vector<std::string> readPatternCandidates(const YAML::Node& node,
+                                               const std::string& listKey,
+                                               const std::string& scalarKey,
+                                               const std::vector<std::string>& fallback) {
+    std::vector<std::string> values = yaml_utils::getVec<std::string>(node, listKey, {});
+    if (!values.empty()) {
+        return values;
+    }
+
+    const std::string scalar = yaml_utils::getString(node, scalarKey);
+    if (!scalar.empty()) {
+        return {scalar};
+    }
+    return fallback;
+}
+
+void loadDatasetNamingOptions(const YAML::Node& ds, DatasetLoader::Options& options) {
+    // 读取数据集命名候选列表；缺省时回退到默认 source/moving 与 target/reference。
+    options.pattern_sources =
+        readPatternCandidates(ds, "pattern_sources", "pattern_source", {"source", "moving"});
+    options.pattern_targets =
+        readPatternCandidates(ds, "pattern_targets", "pattern_target", {"target", "reference"});
+}
+
 // 点特征法摘要聚焦 keypoint/descriptor 匹配链路。
 std::string buildKeypointSummaryText(const RegistrationContext& ctx) {
     const auto& r = ctx.result;
@@ -113,8 +193,36 @@ std::string buildKeypointSummaryText(const RegistrationContext& ctx) {
         oss << "  warp NMAD      : " << std::fixed << std::setprecision(4)
             << r.warp_photometric_error << "\n";
     }
-    appendTimingSummary(oss, r);
-    appendEvaluationSummary(oss, ctx.evaluation);
+    // 终端摘要统一追加耗时和评价指标，避免各方法族各写一套格式。
+    summary_text::appendTiming(oss, r);
+    summary_text::appendEvaluation(oss, ctx.evaluation);
+    oss << "==============================================================\n";
+    return oss.str();
+}
+
+// 深度学习匹配法复用点对几何链路，但摘要标题单独标识来源。
+std::string buildLearningSummaryText(const RegistrationContext& ctx) {
+    const auto& r = ctx.result;
+    std::ostringstream oss;
+    oss << "\n================ Learning registration summary ================\n";
+    oss << "  status        : " << (r.success ? "OK" : "FAILED") << "\n";
+    oss << "  message       : " << r.message << "\n";
+    oss << "  keypoints     : " << r.num_keypoints_first << " / " << r.num_keypoints_second
+        << "\n";
+    oss << "  raw matches   : " << r.num_raw_matches << "\n";
+    oss << "  filtered      : " << r.num_filtered_matches << "\n";
+    oss << "  inliers       : " << r.num_inliers << " (" << std::fixed << std::setprecision(3)
+        << r.inlier_ratio << ")\n";
+    if (r.warp_overlap_iou >= 0.0) {
+        oss << "  warp IoU      : " << std::fixed << std::setprecision(3)
+            << r.warp_overlap_iou << "\n";
+    }
+    if (r.warp_photometric_error >= 0.0) {
+        oss << "  warp NMAD      : " << std::fixed << std::setprecision(4)
+            << r.warp_photometric_error << "\n";
+    }
+    summary_text::appendTiming(oss, r);
+    summary_text::appendEvaluation(oss, ctx.evaluation);
     oss << "==============================================================\n";
     return oss.str();
 }
@@ -123,6 +231,7 @@ std::string buildKeypointSummaryText(const RegistrationContext& ctx) {
 std::string buildStructureSummaryText(const RegistrationContext& ctx) {
     const auto& r = ctx.result;
     const auto& gd = ctx.geometry_data;
+    const auto& smd = ctx.structure_match_data;
     std::ostringstream oss;
     oss << "\n================ Structure registration summary ================\n";
     oss << "  status        : " << (r.success ? "OK" : "FAILED") << "\n";
@@ -130,9 +239,15 @@ std::string buildStructureSummaryText(const RegistrationContext& ctx) {
     oss << "  structure type: " << toString(ctx.structure_data.type) << "\n";
     oss << "  structures    : " << r.num_structures_first << " / " << r.num_structures_second
         << "\n";
-    if (!gd.A.empty() && gd.A.rows >= 2 && gd.A.cols >= 3) {
+    if (gd.valid && !gd.A.empty() && gd.A.rows >= 2 && gd.A.cols >= 3) {
         oss << "  translation   : dx=" << std::fixed << std::setprecision(3)
             << gd.A.at<double>(0, 2) << ", dy=" << gd.A.at<double>(1, 2) << "\n";
+    } else if (!smd.affine.empty() && smd.affine.rows >= 2 && smd.affine.cols >= 3) {
+        oss << "  translation   : dx=" << std::fixed << std::setprecision(3)
+            << smd.affine.at<double>(0, 2) << ", dy=" << smd.affine.at<double>(1, 2) << "\n";
+    } else {
+        oss << "  translation   : dx=" << std::fixed << std::setprecision(3)
+            << smd.translation.x << ", dy=" << smd.translation.y << "\n";
     }
     oss << "  response      : " << std::fixed << std::setprecision(3) << r.inlier_ratio << "\n";
     if (r.warp_overlap_iou >= 0.0) {
@@ -143,9 +258,60 @@ std::string buildStructureSummaryText(const RegistrationContext& ctx) {
         oss << "  warp NMAD      : " << std::fixed << std::setprecision(4)
             << r.warp_photometric_error << "\n";
     }
-    appendTimingSummary(oss, r);
-    appendEvaluationSummary(oss, ctx.evaluation);
+    // 终端摘要统一追加耗时和评价指标，避免各方法族各写一套格式。
+    summary_text::appendTiming(oss, r);
+    summary_text::appendEvaluation(oss, ctx.evaluation);
     oss << "================================================================\n";
+    return oss.str();
+}
+
+// 直接法摘要聚焦算法、全局几何结果和光度质量，不再套用点特征标题。
+std::string buildDirectSummaryText(const RegistrationContext& ctx) {
+    const auto& r = ctx.result;
+    const auto& gd = ctx.geometry_data;
+    const auto& dd = ctx.direct_data;
+    std::ostringstream oss;
+    oss << "\n================ Direct registration summary ================\n";
+    oss << "  status        : " << (r.success ? "OK" : "FAILED") << "\n";
+    oss << "  message       : " << r.message << "\n";
+    oss << "  method        : " << (dd.method.empty() ? "DIRECT" : dd.method) << "\n";
+    oss << "  geometry      : " << toString(gd.type) << "\n";
+
+    if (gd.valid && !gd.A.empty() && gd.A.rows >= 2 && gd.A.cols >= 3) {
+        const double a00 = matAtAsDouble(gd.A, 0, 0);
+        const double a10 = matAtAsDouble(gd.A, 1, 0);
+        const double tx = matAtAsDouble(gd.A, 0, 2);
+        const double ty = matAtAsDouble(gd.A, 1, 2);
+        const double rotationDeg = std::atan2(a10, a00) * 180.0 / 3.14159265358979323846;
+        oss << "  translation   : dx=" << std::fixed << std::setprecision(3) << tx
+            << ", dy=" << ty << "\n";
+        if (gd.type == GeometryType::RIGID || gd.type == GeometryType::SIMILARITY ||
+            gd.type == GeometryType::AFFINE) {
+            oss << "  rotation      : " << std::fixed << std::setprecision(3)
+                << rotationDeg << " deg\n";
+        }
+    }
+
+    oss << "  correspondences: " << r.num_raw_matches << "\n";
+    oss << "  inliers       : " << r.num_inliers << " (" << std::fixed << std::setprecision(3)
+        << r.inlier_ratio << ")\n";
+    summary_text::appendDirectDiagnostics(oss, dd);
+    if (dd.photometric_error >= 0.0) {
+        oss << "  photometric MSE: " << std::fixed << std::setprecision(6)
+            << dd.photometric_error << "\n";
+    }
+    if (r.warp_overlap_iou >= 0.0) {
+        oss << "  warp IoU      : " << std::fixed << std::setprecision(3)
+            << r.warp_overlap_iou << "\n";
+    }
+    if (r.warp_photometric_error >= 0.0) {
+        oss << "  warp NMAD      : " << std::fixed << std::setprecision(4)
+            << r.warp_photometric_error << "\n";
+    }
+    // 终端摘要统一追加耗时和评价指标，避免各方法族各写一套格式。
+    summary_text::appendTiming(oss, r);
+    summary_text::appendEvaluation(oss, ctx.evaluation);
+    oss << "=============================================================\n";
     return oss.str();
 }
 
@@ -153,7 +319,11 @@ std::string buildStructureSummaryText(const RegistrationContext& ctx) {
 std::string buildSummaryText(const RegistrationContext& ctx, MethodFamily family) {
     if (family == MethodFamily::STRUCTURE)
         return buildStructureSummaryText(ctx);
-    return buildKeypointSummaryText(ctx);  // KEYPOINT / DIRECT 暂用点特征格式
+    if (family == MethodFamily::DIRECT)
+        return buildDirectSummaryText(ctx);
+    if (family == MethodFamily::LEARNING)
+        return buildLearningSummaryText(ctx);
+    return buildKeypointSummaryText(ctx);
 }
 
 void printSummary(const RegistrationContext& ctx, MethodFamily family) {
@@ -166,7 +336,9 @@ std::shared_ptr<IPipeline> createPipelineForConfig(const PipelineConfig& cfg) {
     case MethodFamily::STRUCTURE:
         return std::make_shared<StructurePipeline>();
     case MethodFamily::DIRECT:
-        // TODO: return std::make_shared<DirectPipeline>();
+        return std::make_shared<DirectPipeline>();
+    case MethodFamily::LEARNING:
+        return std::make_shared<LearningPipeline>();
     case MethodFamily::KEYPOINT:
     default:
         return std::make_shared<KeypointPipeline>();
@@ -195,15 +367,17 @@ std::string buildSummaryJson(const RegistrationContext& ctx,
     const auto& r = ctx.result;
     const auto family = cfg.methodFamily();
     const bool isStructure = (family == MethodFamily::STRUCTURE);
+    const bool isDirect = (family == MethodFamily::DIRECT);
     std::ostringstream oss;
     oss << "{\n";
-    oss << "  \"pipeline_name\": \"" << jsonEscape(cfg.name) << "\",\n";
+    // JSON 字符串统一经过本文件私有转义，避免路径/消息中的特殊字符破坏语法。
+    oss << "  \"pipeline_name\": \"" << json_output::escapeString(cfg.name) << "\",\n";
     oss << "  \"method_family\": \"" << methodFamilyDir(family) << "\",\n";
-    oss << "  \"sample_name\": \"" << jsonEscape(sample_name) << "\",\n";
+    oss << "  \"sample_name\": \"" << json_output::escapeString(sample_name) << "\",\n";
     oss << "  \"status\": \"" << (r.success ? "OK" : "FAILED") << "\",\n";
-    oss << "  \"message\": \"" << jsonEscape(r.message) << "\",\n";
-    oss << "  \"image1_path\": \"" << jsonEscape(ctx.image1_path.string()) << "\",\n";
-    oss << "  \"image2_path\": \"" << jsonEscape(ctx.image2_path.string()) << "\",\n";
+    oss << "  \"message\": \"" << json_output::escapeString(r.message) << "\",\n";
+    oss << "  \"image1_path\": \"" << json_output::escapeString(ctx.image1_path.string()) << "\",\n";
+    oss << "  \"image2_path\": \"" << json_output::escapeString(ctx.image2_path.string()) << "\",\n";
     oss << "  \"counts\": {\n";
     if (isStructure) {
         oss << "    \"num_structures_first\": " << r.num_structures_first << ",\n";
@@ -219,13 +393,25 @@ std::string buildSummaryJson(const RegistrationContext& ctx,
     oss << "  \"quality\": {\n";
     oss << "    \"inlier_ratio\": " << r.inlier_ratio << ",\n";
     oss << "    \"mean_reproj_error\": " << r.mean_reproj_error << ",\n";
-    oss << "    \"warp_overlap_iou\": " << r.warp_overlap_iou << "\n";
+    oss << "    \"warp_overlap_iou\": " << r.warp_overlap_iou;
+    if (isDirect) {
+        oss << ",\n";
+        json_output::appendDirectDiagnostics(oss, ctx.direct_data);
+    } else {
+        oss << "\n";
+    }
     oss << "  },\n";
-    if (isStructure && !ctx.geometry_data.A.empty() && ctx.geometry_data.A.rows >= 2 &&
+    if (isStructure && ctx.geometry_data.valid &&
+        !ctx.geometry_data.A.empty() && ctx.geometry_data.A.rows >= 2 &&
         ctx.geometry_data.A.cols >= 3) {
         oss << "  \"translation\": {\n";
         oss << "    \"dx\": " << ctx.geometry_data.A.at<double>(0, 2) << ",\n";
         oss << "    \"dy\": " << ctx.geometry_data.A.at<double>(1, 2) << "\n";
+        oss << "  },\n";
+    } else if (isStructure) {
+        oss << "  \"translation\": {\n";
+        oss << "    \"dx\": " << ctx.structure_match_data.translation.x << ",\n";
+        oss << "    \"dy\": " << ctx.structure_match_data.translation.y << "\n";
         oss << "  },\n";
     }
     oss << "  \"timings_ms\": {\n";
@@ -240,7 +426,7 @@ std::string buildSummaryJson(const RegistrationContext& ctx,
     oss << "  \"metrics\": {\n";
     for (size_t i = 0; i < ctx.evaluation.metrics.size(); ++i) {
         const auto& metric = ctx.evaluation.metrics[i];
-        oss << "    \"" << jsonEscape(metric.name) << "\": ";
+        oss << "    \"" << json_output::escapeString(metric.name) << "\": ";
         if (metric.valid) {
             oss << metric.value;
         } else {
@@ -393,19 +579,15 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
     const YAML::Node cfg = Config::load(compare_yaml);
     const auto baseDir = compare_yaml.parent_path();
 
-    // 1. 加载基础配置模板
+    // 1. 解析基础 pipeline。compare_line 复用它跑结构法；compare_direct 可在组合项中覆盖。
     const auto pipeline_yaml = Config::resolvePath(baseDir,
         yaml_utils::getString(cfg, "base_pipeline"));
-    const auto structure_yaml = Config::resolvePath(baseDir,
-        yaml_utils::getString(cfg, "base_structure"));
-    YAML::Node structureNode = Config::load(structure_yaml);
 
     // 2. 数据集
     DatasetLoader::Options datasetOpts;
     const YAML::Node ds = cfg["dataset"];
     datasetOpts.root = Config::resolvePath(baseDir, yaml_utils::getString(ds, "root"));
-    datasetOpts.pattern_source = yaml_utils::getString(ds, "pattern_source", "source");
-    datasetOpts.pattern_target = yaml_utils::getString(ds, "pattern_target", "target");
+    loadDatasetNamingOptions(ds, datasetOpts);
     datasetOpts.include = yaml_utils::getVec<std::string>(ds, "include", {});
 
     // 3. 输出根目录
@@ -422,34 +604,12 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
     std::vector<double> avgIous;
     std::vector<double> avgPsnrs;
 
-    for (const auto& combo : combos) {
-        const std::string extractor = yaml_utils::getString(combo, "extractor", "LSD");
-        const std::string descriptor = yaml_utils::getString(combo, "descriptor", "LBD");
-        const std::string label = extractor + "+" + descriptor;
-
-        // 修改结构 YAML 节点
-        structureNode["extractor"]["method"] = extractor;
-        structureNode["association"]["params"]["line_descriptor"]["descriptor"] = descriptor;
-        structureNode["association"]["params"]["line_descriptor"]["geometric_filter"] = true;
-
-        // 写临时文件
-        const auto tmpYaml = outputRoot / "tmp" / (label + ".yaml");
-        std::ofstream fout(tmpYaml.string());
-        fout << structureNode;
-        fout.close();
-
-        // 加载 pipeline 配置并执行批量
-        PipelineConfig pipelineCfg = Config::loadPipeline(pipeline_yaml);
-        pipelineCfg.structure_path = tmpYaml;
-        pipelineCfg.output_dir = outputRoot / label;
-        pipelineCfg.draw_matches = false;
-        pipelineCfg.warp = true;
-
+    auto runCombination = [&](const std::string& label, const PipelineConfig& pipelineCfg) {
         DatasetLoader loader(datasetOpts);
         const auto samples = loader.load();
         if (samples.empty()) {
             std::cerr << "Compare: no samples for " << label << "\n";
-            continue;
+            return;
         }
 
         int okCount = 0;
@@ -472,7 +632,7 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
                 iouSum += ctx.result.warp_overlap_iou;
                 ++iouValid;
             }
-            // 从 evaluation 中取 PSNR
+            // 从 evaluation 中取 PSNR。
             if (const auto* m = ctx.evaluation.find("PSNR"); m && m->valid) {
                 psnrSum += m->value;
                 ++psnrValid;
@@ -487,6 +647,91 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
 
         std::cout << "  " << label << ": " << okCount << " / " << samples.size()
                   << " succeeded\n";
+    };
+
+    bool compareDirect = static_cast<bool>(cfg["base_direct"]);
+    for (const auto& combo : combos) {
+        if (combo["direct"] || combo["pipeline"]) {
+            compareDirect = true;
+            break;
+        }
+    }
+
+    if (compareDirect) {
+        const std::string baseDirect = yaml_utils::getString(cfg, "base_direct");
+
+        for (const auto& combo : combos) {
+            const std::string pipelineEntry = yaml_utils::getString(combo, "pipeline");
+            const auto comboPipelineYaml = pipelineEntry.empty()
+                ? pipeline_yaml
+                : Config::resolvePath(baseDir, pipelineEntry);
+
+            const std::string directEntry = yaml_utils::getString(combo, "direct", baseDirect);
+            const auto directYaml = directEntry.empty()
+                ? std::filesystem::path{}
+                : Config::resolvePath(baseDir, directEntry);
+
+            PipelineConfig pipelineCfg = Config::loadPipeline(comboPipelineYaml);
+            if (!directYaml.empty()) {
+                pipelineCfg.direct_path = directYaml;
+            }
+            if (pipelineCfg.methodFamily() != MethodFamily::DIRECT) {
+                std::cerr << "Compare: skip non-direct pipeline "
+                          << comboPipelineYaml.string() << "\n";
+                continue;
+            }
+
+            const std::string directStem = !pipelineCfg.direct_path.empty()
+                ? pipelineCfg.direct_path.stem().string()
+                : std::string{"configured_direct"};
+            std::string label = yaml_utils::getString(combo, "label");
+            if (label.empty()) {
+                label = comboPipelineYaml.stem().string() + "+" + directStem;
+            }
+
+            pipelineCfg.name = label;
+            pipelineCfg.output_dir = outputRoot / label;
+            pipelineCfg.draw_matches = false;
+            pipelineCfg.warp = true;
+            pipelineCfg.show_source_window = false;
+            pipelineCfg.show_target_window = false;
+            pipelineCfg.show_warped_window = false;
+
+            runCombination(label, pipelineCfg);
+        }
+    } else {
+        const auto structure_yaml = Config::resolvePath(baseDir,
+            yaml_utils::getString(cfg, "base_structure"));
+        YAML::Node structureNode = Config::load(structure_yaml);
+
+        for (const auto& combo : combos) {
+            const std::string extractor = yaml_utils::getString(combo, "extractor", "LSD");
+            const std::string descriptor = yaml_utils::getString(combo, "descriptor", "LBD");
+            const std::string label = extractor + "+" + descriptor;
+
+            // 修改结构 YAML 节点
+            structureNode["extractor"]["method"] = extractor;
+            structureNode["association"]["params"]["line_descriptor"]["descriptor"] = descriptor;
+            structureNode["association"]["params"]["line_descriptor"]["geometric_filter"] = true;
+
+            // 写临时文件
+            const auto tmpYaml = outputRoot / "tmp" / (label + ".yaml");
+            std::ofstream fout(tmpYaml.string());
+            fout << structureNode;
+            fout.close();
+
+            // 加载 pipeline 配置并执行批量
+            PipelineConfig pipelineCfg = Config::loadPipeline(pipeline_yaml);
+            pipelineCfg.structure_path = tmpYaml;
+            pipelineCfg.output_dir = outputRoot / label;
+            pipelineCfg.draw_matches = false;
+            pipelineCfg.warp = true;
+            pipelineCfg.show_source_window = false;
+            pipelineCfg.show_target_window = false;
+            pipelineCfg.show_warped_window = false;
+
+            runCombination(label, pipelineCfg);
+        }
     }
 
     // 5. 写对比总表
@@ -519,8 +764,7 @@ RegistrationApp::BatchConfig RegistrationApp::loadBatchConfig(const std::filesys
 
     const YAML::Node dataset = node["dataset"];
     cfg.dataset.root = Config::resolvePath(batch_dir, yaml_utils::getString(dataset, "root"));
-    cfg.dataset.pattern_source = yaml_utils::getString(dataset, "pattern_source", "source");
-    cfg.dataset.pattern_target = yaml_utils::getString(dataset, "pattern_target", "target");
+    loadDatasetNamingOptions(dataset, cfg.dataset);
     cfg.dataset.include = yaml_utils::getVec<std::string>(dataset, "include", {});
 
     const YAML::Node output = node["output"];

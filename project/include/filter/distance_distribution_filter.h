@@ -24,4 +24,4 @@ private:
     float _minDistanceFloor = 0.0f;
 };
 
-} // namespace ir
+}

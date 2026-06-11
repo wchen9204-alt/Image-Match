@@ -1,0 +1,22 @@
+# ---------------------------------------------------------------------------
+# ECC 全局直接法配置
+# ---------------------------------------------------------------------------
+# 直接法类型；可选项：DENSE / SPARSE / GLOBAL / FREQUENCY；默认值：无，pipeline 根据该值标识直接法类别。
+type: GLOBAL
+
+# 直接法方法；可选项：ECC；默认值：无，GLOBAL 类型下使用 OpenCV findTransformECC。
+method: ECC
+
+params:
+  # ECC 运动模型；默认值：RIGID；可选项：TRANSLATION / EUCLIDEAN(RIGID) / AFFINE / HOMOGRAPHY。
+  # RIGID 是当前场景主路径，只允许平移和旋转；AFFINE/HOMOGRAPHY 会引入压缩、剪切或透视自由度。
+  motion_model: RIGID
+
+  # ECC 最大迭代次数；默认值：100；用于 TermCriteria COUNT。
+  max_iterations: 100
+
+  # ECC 收敛精度阈值；默认值：1.0e-6；用于 TermCriteria EPS。
+  epsilon: 1.0e-6
+
+  # ECC 内部高斯滤波窗口大小；默认值：5；传给 findTransformECC 的 gaussFiltSize。
+  gaussian_filter_size: 5

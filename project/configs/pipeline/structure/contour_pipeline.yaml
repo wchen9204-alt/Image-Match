@@ -3,21 +3,33 @@
 # 当前文件用于组织基于轮廓结构的配准流程。
 # ---------------------------------------------------------------------------
 name: contour_pipeline
+# method_family 默认值：无固定默认；缺省时会根据是否存在 structure 路径自动推断为 structure
 method_family: structure
 
 # 支持的结构方法：
 # edge / line / contour
 structure: ../../structure/contour.yaml
 
+# geometry 默认值：空（不配置则不做几何估计器）
+geometry: ../../geometry/rigid.yaml
+
+# evaluator 默认值：空（不配置则不加载额外评估器）
 evaluator: ../../evaluator/metrics.yaml
 
+# filters 默认值：空列表
+filters:
+ # - ../../filter/ratio_test.yaml
+
 io:
+  # image1 / image2 默认值：空
   image1: ../../../datasets/Test01/source.png
   image2: ../../../datasets/Test01/target.png
+  # output_dir 默认值：outputs
   output_dir: ../../../outputs
 
 visualization:
-  draw_matches: false
+  # 默认值：true / false / 100 / true / false / false / false / 0
+  draw_matches: true
   draw_inliers_only: true
   max_matches_drawn: 100
   warp: true
@@ -28,9 +40,11 @@ visualization:
 
 validation:
   warp_overlap:
-    enabled: true
+    # 默认值：false / 0.20 / 10
+    enabled: false
     min_iou: 0.20
     foreground_threshold: 10
   photometric:
-    enabled: true
+    # 默认值：false / 0.15
+    enabled: false
     max_nmad: 0.15

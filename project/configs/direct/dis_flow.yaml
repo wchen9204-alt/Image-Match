@@ -1,0 +1,94 @@
+# ---------------------------------------------------------------------------
+# DIS 稠密光流直接法配置
+# ---------------------------------------------------------------------------
+# 直接法类型；可选项：DENSE / SPARSE / GLOBAL / FREQUENCY；默认值：无，pipeline 根据该值标识直接法类别。
+type: DENSE
+
+# 直接法方法；可选项：DIS / DIS_FLOW / DENSE_INVERSE_SEARCH；默认值：无，DENSE 类型下使用 DIS 稠密光流。
+method: DIS
+
+params:
+  # DIS 预设；默认值：FAST；可选项：ULTRAFAST / FAST / MEDIUM；越靠后通常质量更高但速度更慢。
+  preset: FAST
+
+  # DIS 最细金字塔层；默认值：-1；-1 表示保留 OpenCV preset 默认值，0 表示计算到原始分辨率。
+  finest_scale: -1
+
+  # DIS patch 大小；默认值：-1；-1 表示保留 OpenCV preset 默认值，常用值为 8。
+  patch_size: -1
+
+  # 相邻 patch 的步长；默认值：-1；-1 表示保留 OpenCV preset 默认值，必须小于 patch_size。
+  patch_stride: -1
+
+  # patch inverse search 梯度下降迭代次数；默认值：-1；-1 表示保留 OpenCV preset 默认值。
+  gradient_descent_iterations: -1
+
+  # 变分细化迭代次数；默认值：-1；-1 表示保留 OpenCV preset 默认值，0 表示关闭变分细化。
+  variational_refinement_iterations: -1
+
+  # 变分细化 smoothness 权重；默认值：-1.0；-1 表示保留 OpenCV preset 默认值。
+  variational_refinement_alpha: -1.0
+
+  # 变分细化 color constancy 权重；默认值：-1.0；-1 表示保留 OpenCV preset 默认值。
+  variational_refinement_delta: -1.0
+
+  # 变分细化 gradient constancy 权重；默认值：-1.0；-1 表示保留 OpenCV preset 默认值。
+  variational_refinement_gamma: -1.0
+
+  # 变分细化鲁棒惩罚 epsilon；默认值：-1.0；-1 表示保留 OpenCV preset 默认值。
+  variational_refinement_epsilon: -1.0
+
+  # 是否对 patch 做均值归一化；默认值：true；仅 DIS 生效，通常能增强亮度变化鲁棒性。
+  use_mean_normalization: true
+
+  # 是否启用空间传播；默认值：true；仅 DIS 生效，通常能改善大位移区域的光流连贯性。
+  use_spatial_propagation: true
+
+  # DIS 输入灰度图预平滑核大小；默认值：0；小于 3 时不平滑，偶数会自动修正为奇数。
+  blur_kernel: 0
+
+  # 源图梯度幅值采样阈值；默认值：0.0；仅 fit_global_transform=true 时生效，<=0 表示不按纹理过滤。
+  gradient_threshold: 0.0
+
+  # 是否从稠密光流采样点拟合全局几何变换；默认值：true；false 时只保留光流，不输出有效全局几何。
+  fit_global_transform: true
+
+  # 全局几何拟合模型；默认值：RIGID；可选项：RIGID / SIMILARITY / AFFINE / HOMOGRAPHY。
+  # RIGID 先用 OpenCV estimateAffinePartial2D 做 RANSAC 筛选，再回归严格平移+旋转；SIMILARITY 允许等比缩放；AFFINE/HOMOGRAPHY 会引入剪切或透视自由度。
+  fit_model: RIGID
+
+  # 稠密光流采样步长；默认值：8；仅 fit_global_transform=true 时生效，数值越小采样点越多。
+  sample_step: 8
+
+  # 采样点最小光流幅值，单位为像素；默认值：-1.0；小于 0 表示不启用下限过滤。
+  min_flow_magnitude: -1.0
+
+  # 采样点最大光流幅值，单位为像素；默认值：-1.0；小于 0 表示不启用上限过滤。
+  max_flow_magnitude: -1.0
+
+  # 采样点距图像边界的最小安全边距，单位为像素；默认值：0；仅 fit_global_transform=true 时生效。
+  border_margin: 0
+
+  # 是否启用前后向光流一致性检查；默认值：false；开启后会额外计算 target->source 光流，速度约减半。
+  forward_backward_check: false
+
+  # 前后向光流回投误差阈值，单位为像素；默认值：1.5；仅 forward_backward_check=true 时生效。
+  fb_threshold: 1.5
+
+  # RANSAC 内点阈值，单位为像素；默认值：3.0；仅全局几何拟合阶段生效。
+  ransac_threshold: 3.0
+
+  # 全局几何鲁棒估计方法；默认值：RANSAC；可选项：RANSAC / LMEDS；HOMOGRAPHY 额外支持 RHO。
+  robust_method: RANSAC
+
+  # 全局几何鲁棒估计最大迭代次数；默认值：2000；仅全局几何拟合阶段生效。
+  ransac_max_iters: 2000
+
+  # 全局几何鲁棒估计置信度；默认值：0.99；仅全局几何拟合阶段生效。
+  ransac_confidence: 0.99
+
+  # 全局几何鲁棒估计 refine 迭代次数；默认值：10；仅 AFFINE / RIGID / SIMILARITY 生效。
+  ransac_refine_iters: 10
+
+  # 接受全局几何结果所需最少内点数；默认值：20；低于该值会判定配准失败。
+  min_inliers: 20

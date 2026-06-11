@@ -48,6 +48,8 @@ bool PhaseCorrelateAssociator::associate(RegistrationContext& ctx) {
     md.clear();
     md.method = name();
 
+    // 这里只做结构响应图的平移估计，不估旋转、缩放或仿射。
+
     cv::Mat src;
     cv::Mat dst;
     if (!preparePhaseImage(ctx.structure_data.first.response, src, _blurKernel) ||
@@ -63,8 +65,14 @@ bool PhaseCorrelateAssociator::associate(RegistrationContext& ctx) {
 
     double score = 0.0;
     const cv::Point2d shift = cv::phaseCorrelate(src, dst, cv::noArray(), &score);
+    if (!std::isfinite(shift.x) || !std::isfinite(shift.y) || !std::isfinite(score)) {
+        md.message = "phase correlation returned non-finite result";
+        IR_LOG_WARN("PhaseCorrelateAssociator rejected match: ", md.message);
+        return false;
+    }
 
     md.translation = shift;
+    md.affine = (cv::Mat_<double>(2, 3) << 1.0, 0.0, shift.x, 0.0, 1.0, shift.y);
     md.score = score;
     md.valid = score >= _scoreThreshold;
     if (!md.valid) {

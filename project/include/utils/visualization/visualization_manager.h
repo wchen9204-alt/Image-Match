@@ -9,7 +9,7 @@ namespace ir {
 
 /// 汇总输出可视化结果的管理器。
 ///
-/// 主要供 Benchmark 或批处理脚本使用，将匹配、内点、叠加图、差异图
+/// 主要供批处理脚本使用，将匹配、内点、叠加图、差异图
 /// 和变换后图像统一保存到结果目录中。
 class VisualizationManager {
 public:

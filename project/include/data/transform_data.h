@@ -2,7 +2,7 @@
 
 #include <opencv2/core.hpp>
 
-#include "core/transform_type.h"
+#include "core/types.h"
 
 namespace ir {
 
@@ -12,6 +12,9 @@ struct TransformData {
     TransformType type = TransformType::UNKNOWN;
 
     /// 统一使用的 3x3 变换矩阵。
+    /// 约定：
+    /// - PERSPECTIVE: 标准 3x3 单应矩阵
+    /// - AFFINE: 扩展后的齐次 3x3 矩阵，最后一行为 [0, 0, 1]
     cv::Mat M;
 
     /// 变换是否有效。

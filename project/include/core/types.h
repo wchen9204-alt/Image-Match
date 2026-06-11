@@ -55,6 +55,15 @@ std::string toString(GeometryType t);
 /// 从字符串解析几何模型类型。
 GeometryType geometryTypeFromString(const std::string& s);
 
+/// 图像变换类型，描述当前配准结果是透视变换还是仿射变换。
+enum class TransformType { UNKNOWN = 0, PERSPECTIVE, AFFINE };
+
+/// 将变换类型转换为字符串。
+std::string toString(TransformType t);
+
+/// 将几何模型类型映射为变换类型。
+TransformType toTransformType(GeometryType g);
+
 /// 输入图像索引，用于标识当前是第一张还是第二张图像。
 enum class ImageIndex : std::uint8_t { First = 0, Second = 1 };
 

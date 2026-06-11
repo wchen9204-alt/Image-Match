@@ -5,40 +5,43 @@
 
 #include <opencv2/features2d.hpp>
 
+#include "data/correspondence_view.h"
 #include "utils/logger.h"
 
 namespace ir {
 
 cv::Mat DrawInliers::render(const RegistrationContext& ctx, const Options& opt) {
-    const auto& fd = ctx.keypoint_data;
     const auto& images = ctx.images;
-    const auto& md = ctx.keypoint_match_data;
 
     if (images.first.empty() || images.second.empty()) {
         IR_LOG_WARN("DrawInliers: empty source images.");
         return {};
     }
-    if (md.inliers.empty()) {
+    const CorrespondenceSource source = correspondenceSourceFromContext(ctx);
+    const CorrespondenceView view =
+        source == CorrespondenceSource::NONE ? buildBestCorrespondenceView(ctx)
+                                             : buildCorrespondenceView(ctx, source);
+    if (view.inliers.empty()) {
         IR_LOG_WARN("DrawInliers: no inlier matches available.");
         return {};
     }
 
     cv::Mat canvas;
 
-    if (opt.draw_outliers && !md.filtered.empty() && !md.inlier_mask.empty()) {
+    if (opt.draw_outliers && !view.filtered.empty() && !view.inlier_mask.empty()) {
         // 先绘制外点层，再把内点覆盖到上层，突出鲁棒估计真正接受的对应关系。
         std::vector<cv::DMatch> outliers;
-        outliers.reserve(md.filtered.size());
-        for (size_t i = 0; i < md.filtered.size() && i < md.inlier_mask.size(); ++i) {
-            if (!md.inlier_mask[i]) {
-                outliers.push_back(md.filtered[i]);
+        outliers.reserve(view.filtered.size());
+        for (size_t i = 0; i < view.filtered.size() && i < view.inlier_mask.size(); ++i) {
+            if (!view.inlier_mask[i]) {
+                outliers.push_back(view.filtered[i]);
             }
         }
 
         cv::drawMatches(images.first,
-                        fd.first.keypoints,
+                        view.first_keypoints,
                         images.second,
-                        fd.second.keypoints,
+                        view.second_keypoints,
                         outliers,
                         canvas,
                         opt.non_inlier_color,
@@ -47,7 +50,7 @@ cv::Mat DrawInliers::render(const RegistrationContext& ctx, const Options& opt) 
                         cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
     }
 
-    std::vector<cv::DMatch> inliers = md.inliers;
+    std::vector<cv::DMatch> inliers = view.inliers;
     if (opt.max_inliers > 0 && static_cast<int>(inliers.size()) > opt.max_inliers) {
         // 内点数量过多时优先保留距离更小的匹配，避免可视化过于拥挤。
         std::partial_sort(inliers.begin(),
@@ -61,9 +64,9 @@ cv::Mat DrawInliers::render(const RegistrationContext& ctx, const Options& opt) 
 
     cv::Mat overlay;
     cv::drawMatches(images.first,
-                    fd.first.keypoints,
+                    view.first_keypoints,
                     images.second,
-                    fd.second.keypoints,
+                    view.second_keypoints,
                     inliers,
                     overlay,
                     opt.inlier_color,

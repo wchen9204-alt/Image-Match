@@ -1,249 +1,368 @@
 # 项目目录结构
 
+## 一致性结论
+
+旧版 `PROJECT_DIRECTORY_STRUCTURE_CN.md` 已经和当前项目不完全一致：顶层顺序没有按项目目录展示，`configs/` 位置偏后；同时缺少 `build/`、`SOURCE_FILE_DOCS_CN/`、`CODEX_WORKING_RULES_CN.md`、直接法/学习法相关新增目录、`zncc_rigid`、`contour_descriptor`、`string_utils`、`direct_data`、`Test11`、`Test12` 等当前文件或目录。
+
+下面按当前 `project/` 目录的实际顺序整理。构建目录、输出目录和第三方库只列关键层级，避免把大量生成物和外部依赖文件展开到文档里。
+
 ```
 project/                                     # 图像配准实验平台根目录
-├── main.cpp                                 # 程序入口，委托给 RegistrationApp::run()
-├── CMakeLists.txt                           # CMake 构建配置（C++17, OpenCV contrib, yaml-cpp）
-│
-├── README.md                                # 英文项目概述与快速入门
-├── PROJECT_QUICK_INTRO_CN.md                # 中文快速入门：架构、模块、推荐阅读顺序
-├── PROJECT_DIRECTORY_DETAILED_CN.md         # 中文逐文件详解：每个类/函数的用途和核心逻辑
-├── METHOD_SYSTEM_OVERVIEW_CN.md             # 中文方法体系总览：点特征法 vs 结构法的完整方法矩阵
-├── API_REFERENCE_CN.md                      # 中文 API 参考：所有公开类和函数的签名与说明
-├── EXPERIMENT_PLATFORM_DEVELOPMENT_GUIDE_CN.md  # 中文开发指南：扩展新方法、环境、输出约定
-│
 ├── apps/                                    # 应用程序入口
-│   ├── registration_app.h                   #   RegistrationApp 类声明（单次/批量运行入口）
-│   └── registration_app.cpp                 #   实现：CLI 解析、单次配准、批量配准、CSV/摘要输出
+│   ├── registration_app.cpp                 # CLI 解析、单次/批量运行、结果输出
+│   └── registration_app.h                   # RegistrationApp 类声明
 │
-├── include/                                 # 公共头文件（接口、核心类、各模块）
-│   ├── core/                                # 核心基础设施
-│   │   ├── types.h                          #   枚举定义：KeypointType / StructureType / NormType / MatchMethod / GeometryType / ImageIndex 及转换函数
-│   │   ├── config.h                         #   PipelineConfig 结构体（包含所有配置字段）+ Config 静态方法（YAML 加载）
-│   │   ├── context.h                        #   RegistrationContext — 贯穿流水线的共享可变状态容器
-│   │   ├── factory.h                        #   Factory — 根据 YAML 配置创建所有算法组件的静态工厂
-│   │   ├── registration.h                   #   Registration — 顶层配准入口，包装 IPipeline
-│   │   ├── result.h                         #   RegistrationResult — 运行结果（成功/失败、计数、耗时、IoU、NMAD）
-│   │   └── transform_type.h                 #   TransformType 枚举及与 GeometryType 的映射
-│   │
-│   ├── interfaces/                          # 纯虚接口（策略模式基类）
-│   │   ├── i_keypoint_extractor.h           #   IKeypointExtractor — 点特征提取器接口
-│   │   ├── i_structure_extractor.h          #   IStructureExtractor — 结构特征提取器接口
-│   │   ├── i_matcher.h                      #   IMatcher — 描述子匹配器接口（点特征）
-│   │   ├── i_structure_associator.h         #   IStructureAssociator — 结构关联器接口（结构特征）
-│   │   ├── i_filter.h                       #   IFilter — 匹配点对过滤器接口
-│   │   ├── i_geometry_estimator.h           #   IGeometryEstimator — 几何变换估计器接口
-│   │   ├── i_pipeline.h                     #   IPipeline — 流水线接口（模板方法模式基类）
-│   │   ├── i_registration.h                 #   IRegistration — 顶层注册接口
-│   │   └── i_warper.h                       #   IWarper — 图像 warping 接口
-│   │
-│   ├── data/                                # 数据结构（流水线各阶段的输入/输出载体）
-│   │   ├── image_data.h                     #   ImagePairData — 原图对（BGR + 灰度）
-│   │   ├── keypoint_data.h                  #   KeypointData / KeypointImageData — 关键点 + 描述子
-│   │   ├── keypoint_match_data.h            #   KeypointMatchData — 原始匹配/过滤后匹配/内点
-│   │   ├── structure_data.h                 #   StructureData / StructureImageData — 结构响应图 + 基元（线段/轮廓）
-│   │   ├── structure_match_data.h           #   StructureMatchData — 结构关联结果（平移/仿射/线匹配）
-│   │   ├── geometry_data.h                  #   GeometryData — 几何模型（H/A/内点数/重投影误差）
-│   │   ├── transform_data.h                 #   TransformData — 变换矩阵
-│   │   └── evaluation_data.h                #   EvaluationData — 评测指标结果集合
-│   │
-│   ├── keypoint/                            # 点特征提取器（6 种）
-│   │   ├── sift_extractor.h                 #   SIFT 提取器
-│   │   ├── surf_extractor.h                 #   SURF 提取器
-│   │   ├── orb_extractor.h                  #   ORB 提取器
-│   │   ├── brisk_extractor.h                #   BRISK 提取器
-│   │   ├── kaze_extractor.h                 #   KAZE 提取器
-│   │   └── akaze_extractor.h                #   AKAZE 提取器
-│   │
-│   ├── structure/                           # 结构特征提取器（3 种）
-│   │   ├── edge_extractor.h                 #   EdgeExtractor — Canny / Sobel / LoG / Laplacian 边缘检测
-│   │   ├── line_extractor.h                 #   LineExtractor — Hough / HoughP / LSD / FLD 直线检测
-│   │   └── contour_extractor.h              #   ContourExtractor — Canny + findContours 轮廓检测
-│   │
-│   ├── matcher/                             # 匹配器与结构关联器
-│   │   ├── keypoint/                        # 点特征匹配器（2 种）
-│   │   │   ├── bf_matcher.h                 #   BfMatcher — 暴力匹配（L1/L2/Hamming）
-│   │   │   └── flann_matcher.h              #   FlannMatcher — FLANN 近似最近邻匹配
-│   │   └── structure/                       # 结构特征关联器（6 种）
-│   │       ├── phase_correlate_associator.h  #   PhaseCorrelateAssociator — 相位相关（频域平移估计）
-│   │       ├── chamfer_associator.h          #   ChamferAssociator — Chamfer 距离匹配
-│   │       ├── hausdorff_associator.h        #   HausdorffAssociator — Hausdorff 距离匹配
-│   │       ├── icp_associator.h              #   IcpAssociator — ICP 迭代最近点
-│   │       ├── line_segment_associator.h     #   LineSegmentAssociator — 线段几何 baseline（无描述子）
-│   │       ├── line_descriptor_associator.h  #   LineDescriptorAssociator — LBD 线描述子匹配 + 几何一致性
-│   │       └── structure_point_set.h         #   structure_points 工具集（采样/DistanceTransform/质心）
-│   │
-│   ├── filter/                              # 匹配过滤器（6 种）
-│   │   ├── ratio_test.h                     #   RatioTest — Lowe's ratio test
-│   │   ├── cross_check.h                    #   CrossCheck — 双向一致性检查
-│   │   ├── gms_filter.h                     #   GmsFilter — 基于网格的运动统计
-│   │   ├── distance_threshold_filter.h       #   DistanceThresholdFilter — 描述子距离阈值过滤
-│   │   ├── min_distance_filter.h            #   MinDistanceFilter — 最小描述子距离过滤
-│   │   └── distance_distribution_filter.h   #   DistanceDistributionFilter — 距离分布统计过滤
-│   │
-│   ├── geometry/                            # 几何变换估计器（4 种）
-│   │   ├── homography_estimator.h           #   HomographyEstimator — 单应矩阵（3×3），最少 4 对点
-│   │   ├── affine_estimator.h               #   AffineEstimator — 仿射变换（2×3），最少 3 对点
-│   │   ├── rigid_estimator.h                #   RigidEstimator — 刚性变换（旋转+平移），最少 2 对点
-│   │   └── similarity_estimator.h           #   SimilarityEstimator — 相似变换（旋转+缩放+平移），最少 2 对点
-│   │
-│   ├── transform/                           # 图像 warping
-│   │   ├── warper.h                         #   IWarper — warping 接口
-│   │   ├── perspective_warper.h             #   PerspectiveWarper — 透视变换 warping
-│   │   └── affine_warper.h                  #   AffineWarper — 仿射变换 warping
-│   │
-│   ├── pipeline/                            # 流水线（模板方法模式）
-│   │   ├── base_pipeline.h                  #   BasePipeline — 公共骨架（load → extract → associate → estimate → warp → validate → save）
-│   │   ├── keypoint_pipeline.h              #   KeypointPipeline — 点特征配准流水线
-│   │   └── structure_pipeline.h             #   StructurePipeline — 结构特征配准流水线
-│   │
-│   ├── dataset/                             # 数据集管理
-│   │   ├── sample.h                         #   Sample — 单样本结构（source/target 路径 + ground truth 变换）
-│   │   └── dataset_loader.h                 #   DatasetLoader — 从 YAML 加载数据集样本列表
-│   │
-│   ├── evaluator/                           # 评测系统
-│   │   ├── evaluator.h                      #   Evaluator — 指标执行调度器
-│   │   ├── benchmark.h                      #   Benchmark — 批量评测入口（按指标/方法/数据集运行）
-│   │   ├── statistics.h                     #   Statistics — 统计计算（均值/方差/直方图）
-│   │   └── metrics/                         # 评测指标实现
-│   │       ├── feature/                      #   特征层指标
-│   │       ├── geometric/                   #   几何层指标
-│   │       │   ├── inlier_ratio.h            #     InlierRatio — 内点率
-│   │       │   └── reprojection_error.h      #     ReprojectionError — 重投影误差
-│   │       ├── image/                       #   图像层指标
-│   │       │   ├── psnr.h                   #     PSNR — 峰值信噪比
-│   │       │   ├── rmse.h                   #     RMSE — 均方根误差
-│   │       │   └── ssim.h                   #     SSIM — 结构相似性
-│   │       └── keypoint/                    #   关键点指标
-│   │           └── repeatability.h           #     Repeatability — 关键点可重复性
-│   │
-│   └── utils/                               # 工具库
-│       ├── logger.h                         #   Logger — 带级别的日志输出（INFO/WARN/ERROR/DEBUG）
-│       ├── timer.h                          #   Timer / ScopedTimer — 计时器
-│       ├── file_utils.h                     #   FileUtils — 文件读写、CSV 转义、路径操作
-│       ├── image_utils.h                    #   ImageUtils — 图像读写、深度图/高比特转换
-│       ├── yaml_utils.h                     #   YAML 安全读取工具（getString/getInt/getDouble/getBool with default）
-│       └── visualization/                   # 可视化工具
-│           ├── visualization_manager.h      #   VisualizationManager — 可视化调度器
-│           ├── draw_matches.h               #   drawMatches — 绘制匹配点连线图
-│           ├── draw_inliers.h               #   drawInliers — 绘制内点连线图
-│           ├── draw_overlay.h               #   drawOverlay — 绘制半透明叠加图
-│           └── draw_diff.h                  #   drawDiff — 绘制差值图
+├── build/                                   # CMake/IDE 构建目录（生成物，非源码）
+│   └── CMakeFiles/                          # CMake 中间文件
 │
-├── src/                                     # 源文件实现（与 include/ 目录结构一一对应）
-│   ├── core/
-│   │   ├── config.cpp                       #   Config::load / resolvePath / loadPipeline — YAML 加载与路径解析
-│   │   ├── factory.cpp                      #   Factory — 所有 create* 方法实现（switch-case 分发）
-│   │   ├── registration.cpp                 #   Registration::configure / run
-│   │   └── types.cpp                        #   枚举 toString / fromString / toCvNorm 实现
-│   ├── keypoint/                            #   6 种点特征提取器实现
-│   ├── structure/                           #   3 种结构特征提取器实现
-│   │   ├── line_extractor.cpp               #   含线段去重、LSD 专用检测器、后处理流水线
-│   │   ├── edge_extractor.cpp
-│   │   └── contour_extractor.cpp
-│   ├── matcher/
-│   │   ├── keypoint/                        #   BFMatcher / FlannMatcher 实现
-│   │   └── structure/                       #   6 种结构关联器实现
-│   │       ├── line_descriptor_associator.cpp # LBD 描述子 + BinaryDescriptorMatcher + 几何一致性投票
-│   │       ├── line_segment_associator.cpp    # 纯几何 baseline（角度/长度/中心位移投票）
-│   │       ├── phase_correlate_associator.cpp
-│   │       ├── chamfer_associator.cpp
-│   │       ├── hausdorff_associator.cpp
-│   │       ├── icp_associator.cpp
-│   │       └── structure_point_set.cpp        # 结构点集工具函数
-│   ├── filter/                              #   6 种过滤器实现
-│   ├── geometry/                            #   4 种几何估计器实现
-│   │   └── partial_affine_utils.h           #   局部仿射内部工具（仅头文件）
-│   ├── transform/                           #   PerspectiveWarper / AffineWarper 实现
-│   ├── pipeline/
-│   │   ├── base_pipeline.cpp                #   公共骨架（loadImages / runWarp / validateWarpQuality / saveOutputs）
-│   │   ├── keypoint_pipeline.cpp            #   点特征管线（extract → match → filter → estimate）
-│   │   └── structure_pipeline.cpp           #   结构管线（extract → associate → estimate / 端点对回退）
-│   ├── dataset/
-│   │   └── dataset_loader.cpp
-│   ├── evaluator/                           #   评测指标实现
-│   │   └── metrics/
-│   │       ├── geometric/
-│   │       │   └── inlier_ratio.cpp
-│   │       └── keypoint/
-│   │           └── repeatability.cpp
-│   └── utils/
-│       ├── logger.cpp
-│       ├── timer.cpp
-│       ├── file_utils.cpp
-│       ├── image_utils.cpp
-│       ├── yaml_utils.cpp
-│       └── visualization/                   #   可视化工具实现
-│           ├── visualization_manager.cpp
-│           ├── draw_matches.cpp
-│           ├── draw_inliers.cpp
-│           ├── draw_overlay.cpp
-│           └── draw_diff.cpp
+├── build-mingw/                             # MinGW 构建与运行目录（生成物）
+│   ├── bin/                                 # 可执行文件与运行时配置副本
+│   ├── CMakeFiles/                          # CMake 中间文件
+│   └── ...                                  # 其他构建缓存和目标文件
 │
-├── configs/                                 # YAML 配置文件（全平台配置驱动，无硬编码参数）
-│   ├── keypoint/                            # 点特征提取器配置（6 个）
-│   │   ├── sift.yaml                        #   SIFT 参数（nfeatures/nOctaveLayers/contrastThreshold 等）
-│   │   ├── surf.yaml                        #   SURF 参数
-│   │   ├── orb.yaml                         #   ORB 参数
-│   │   ├── brisk.yaml                       #   BRISK 参数
-│   │   ├── kaze.yaml                        #   KAZE 参数
-│   │   └── akaze.yaml                       #   AKAZE 参数
-│   ├── structure/                           # 结构特征提取器 + 关联器配置（3 个）
-│   │   ├── edge.yaml                        #   边缘检测方法 + 关联方法参数
-│   │   ├── line.yaml                        #   直线检测方法 + LBD/几何匹配参数
-│   │   └── contour.yaml                     #   轮廓检测方法 + 关联方法参数
-│   ├── matcher/                             # 匹配器配置（2 个）
-│   │   ├── bf.yaml                          #   暴力匹配器（normType/crossCheck）
-│   │   └── flann.yaml                       #   FLANN 匹配器（trees/checks）
-│   ├── filter/                              # 过滤器配置（6 个）
-│   │   ├── ratio_test.yaml
+├── configs/                                 # YAML 配置文件
+│   ├── direct/                              # 直接法配置
+│   │   ├── dis_flow.yaml
+│   │   ├── ecc.yaml
+│   │   ├── esm_rigid.yaml
+│   │   ├── farneback.yaml
+│   │   ├── fourier_mellin.yaml
+│   │   ├── global_lk.yaml
+│   │   ├── klt_sparse.yaml
+│   │   ├── phase_correlation.yaml
+│   │   ├── tvl1_flow.yaml
+│   │   └── zncc_rigid.yaml
+│   ├── evaluator/                           # 评测配置
+│   │   ├── benchmark.yaml
+│   │   └── metrics.yaml
+│   ├── filter/                              # 匹配过滤器配置
 │   │   ├── cross_check.yaml
-│   │   ├── gms.yaml
+│   │   ├── distance_distribution.yaml
 │   │   ├── distance_threshold.yaml
+│   │   ├── gms.yaml
 │   │   ├── min_distance.yaml
-│   │   └── distance_distribution.yaml
-│   ├── geometry/                            # 几何估计器配置（4 个）
-│   │   ├── homography.yaml                  #   单应估计（method/threshold/confidence/maxIters）
-│   │   ├── affine.yaml                      #   仿射估计
-│   │   ├── rigid.yaml                       #   刚性估计
-│   │   └── similarity.yaml                  #   相似估计
+│   │   └── ratio_test.yaml
+│   ├── geometry/                            # 几何估计器配置
+│   │   ├── affine.yaml
+│   │   ├── homography.yaml
+│   │   ├── rigid.yaml
+│   │   └── similarity.yaml
+│   ├── keypoint/                            # 点特征提取器配置
+│   │   ├── akaze.yaml
+│   │   ├── brisk.yaml
+│   │   ├── kaze.yaml
+│   │   ├── orb.yaml
+│   │   ├── sift.yaml
+│   │   └── surf.yaml
+│   ├── learning/                            # 深度学习匹配器配置
+│   │   ├── loftr.yaml
+│   │   ├── superpoint_lightglue.yaml
+│   │   └── superpoint_superglue.yaml
+│   ├── matcher/                             # 点特征匹配器配置
+│   │   ├── bf.yaml
+│   │   └── flann.yaml
 │   ├── pipeline/                            # 流水线编排配置
-│   │   ├── keypoint/                        #   点特征流水线（6 个，各组合 keypoint+matcher+filter+geometry）
-│   │   │   ├── sift_pipeline.yaml
-│   │   │   ├── surf_pipeline.yaml
-│   │   │   ├── orb_pipeline.yaml
+│   │   ├── batch/                           # 批量运行配置
+│   │   │   ├── batch_direct.yaml
+│   │   │   ├── batch_keypoint.yaml
+│   │   │   ├── batch_learning.yaml
+│   │   │   ├── batch_structure.yaml
+│   │   │   ├── compare_direct.yaml
+│   │   │   └── compare_line.yaml
+│   │   ├── direct/                          # 直接法流水线
+│   │   │   ├── dense_direct_pipeline.yaml
+│   │   │   ├── frequency_direct_pipeline.yaml
+│   │   │   ├── global_direct_pipeline.yaml
+│   │   │   └── sparse_direct_pipeline.yaml
+│   │   ├── keypoint/                        # 点特征流水线
+│   │   │   ├── akaze_pipeline.yaml
 │   │   │   ├── brisk_pipeline.yaml
 │   │   │   ├── kaze_pipeline.yaml
-│   │   │   └── akaze_pipeline.yaml
-│   │   ├── structure/                       #   结构特征流水线（3 个）
-│   │   │   ├── edge_pipeline.yaml           #     边缘 → ICP/Chamfer/Hausdorff/PhaseCorrelate
-│   │   │   ├── line_pipeline.yaml           #     直线 → LineDescriptor/LineSegment + Rigid 回退
-│   │   │   └── contour_pipeline.yaml        #     轮廓 → PhaseCorrelate/Chamfer/Hausdorff/ICP
-│   │   └── batch/                           #   批量配置
-│   │       ├── batch_keypoint.yaml          #     批量点特征评测（数据集+流水线组合）
-│   │       └── batch_structure.yaml         #     批量结构特征评测
-│   └── evaluator/                           # 评测配置
-│       ├── metrics.yaml                     #   指标配置（启用哪些指标及其参数）
-│       └── benchmark.yaml                   #   基准测试配置（方法列表+指标列表+数据集+重复次数）
+│   │   │   ├── orb_pipeline.yaml
+│   │   │   ├── sift_pipeline.yaml
+│   │   │   └── surf_pipeline.yaml
+│   │   ├── learning/                        # 深度学习流水线
+│   │   │   ├── loftr_learning_pipeline.yaml
+│   │   │   ├── superpoint_lightglue_learning_pipeline.yaml
+│   │   │   └── superpoint_superglue_learning_pipeline.yaml
+│   │   └── structure/                       # 结构特征流水线
+│   │       ├── contour_pipeline.yaml
+│   │       ├── edge_pipeline.yaml
+│   │       └── line_pipeline.yaml
+│   └── structure/                           # 结构特征提取与关联配置
+│       ├── contour.yaml
+│       ├── edge.yaml
+│       └── line.yaml
 │
 ├── datasets/                                # 测试数据集
-│   └── test1/ .. test10/                    #   每个子文件夹包含 source.png + target.png 图像对
+│   ├── Test01/                              # source.png + target.png
+│   ├── Test02/                              # moving.png + reference.png
+│   ├── Test03/                              # source.png + target.png
+│   ├── Test04/                              # source.png + target.png
+│   ├── Test05/                              # source.png + target.png
+│   ├── Test06/                              # source.png + target.png
+│   ├── Test07/                              # source.png + target.png
+│   ├── Test08/                              # source.png + target.png
+│   ├── Test09/                              # source.png + target.png
+│   ├── Test10/                              # source.png + target.png
+│   ├── Test11/                              # source.png + target.png
+│   └── Test12/                              # source.png + target.png
 │
-├── outputs/                                 # 运行输出目录（运行时自动创建）
-│   ├── single/                              #   单次运行输出
-│   │   └── {keypoint|structure}/{pipeline}/{sample}/
-│   │       ├── originals/                   #     原始图像
-│   │       ├── keypoints/ 或 structures/    #     特征/结构响应图
-│   │       ├── matches/                     #     匹配连线图（all_match / inlier_match）
-│   │       ├── warped/                      #     warped 图像
-│   │       ├── blend/                       #     叠加混合图
-│   │       ├── summary.txt                  #     运行摘要文本
-│   │       └── summary.json                 #     运行摘要 JSON
-│   └── batch/                               #   批量运行输出
-│       └── {keypoint|structure}/{pipeline}/
-│           ├── results.csv                  #     汇总 CSV（所有样本的结果行）
-│           └── {sample}/                    #     每个样本的详细输出（结构同 single/）
+├── include/                                 # 公共头文件
+│   ├── core/                                # 核心基础设施
+│   │   ├── config.h                         # 配置加载与路径解析：定义 MethodFamily、PipelineConfig 和 Config::load/loadPipeline/resolvePath
+│   │   ├── context.h                        # RegistrationContext 上下文：贯穿单次配准流程，集中保存图像、特征、匹配、几何、评测和输出状态
+│   │   ├── factory.h                        # Factory 静态工厂：根据 YAML 枚举和参数创建提取器、匹配器、过滤器、估计器、直接法和流水线对象
+│   │   ├── registration.h                   # Registration 顶层门面：实现 IRegistration，负责配置流水线并对外提供统一 run 入口
+│   │   ├── result.h                         # RegistrationResult 结果摘要：记录成功状态、失败原因、匹配/内点数量、耗时、IoU、NMAD 等运行指标
+│   │   └── types.h                          # 全局枚举与转换工具：KeypointType、StructureType、NormType、MatchMethod、GeometryType、TransformType、ImageIndex
+│   ├── data/                                # 流水线数据结构
+│   │   ├── correspondence_view.h            # CorrespondenceView 统一对应点视图：把点特征、结构、直接法、学习法结果转换成通用点对/匹配/内点只读接口
+│   │   ├── direct_data.h                    # DirectData 直接法输出：保存仿射/单应矩阵、光流、采样点对、伪匹配、内点掩码、得分和诊断指标
+│   │   ├── evaluation_data.h                # EvaluationData 评测结果集合：用 MetricResult 记录指标名称、数值、启用状态和说明文本
+│   │   ├── geometry_data.h                  # GeometryData 几何估计结果：保存模型类型、H/A 变换矩阵、内点掩码、内点数、重投影误差和有效性
+│   │   ├── image_data.h                     # ImagePairData 图像对缓存：保存 source/target 的 BGR 图、灰度图和输入路径，供各流水线共享
+│   │   ├── keypoint_data.h                  # KeypointData 点特征数据：分别保存两幅图的关键点、描述子、提取器名称和特征数量
+│   │   ├── keypoint_match_data.h            # KeypointMatchData 点匹配数据：保存原始匹配、过滤后匹配、内点匹配以及与几何估计对齐的索引关系
+│   │   ├── structure_data.h                 # StructureData 结构特征数据：保存边缘/线段/轮廓响应图、结构基元、描述子和提取方法信息
+│   │   ├── structure_match_data.h           # StructureMatchData 结构关联结果：保存结构点对、线段匹配、估计平移、仿射初值、得分和关联有效性
+│   │   └── transform_data.h                 # TransformData 最终变换数据：保存可用于 warping 的矩阵、变换类型、图像尺寸、有效性和说明信息
+│   ├── dataset/                             # 数据集加载
+│   │   ├── dataset_loader.h
+│   │   └── sample.h
+│   ├── direct/                              # 直接法配准器
+│   │   ├── dense/
+│   │   │   ├── dense_flow_common.h
+│   │   │   ├── dis_flow_aligner.h
+│   │   │   ├── farneback_flow_aligner.h
+│   │   │   └── tvl1_flow_aligner.h
+│   │   ├── frequency/
+│   │   │   ├── fourier_mellin_aligner.h
+│   │   │   └── phase_correlation_aligner.h
+│   │   ├── global/
+│   │   │   ├── ecc_aligner.h
+│   │   │   ├── esm_rigid_aligner.h
+│   │   │   ├── global_lk_aligner.h
+│   │   │   ├── rigid_direct_common.h
+│   │   │   └── zncc_rigid_aligner.h
+│   │   └── sparse/
+│   │       └── klt_sparse_aligner.h
+│   ├── evaluator/                           # 评测系统
+│   │   ├── evaluator.h
+│   │   └── metrics/
+│   │       ├── feature/                     # 预留特征层指标目录
+│   │       ├── geometric/
+│   │       │   ├── inlier_ratio.h
+│   │       │   └── reprojection_error.h
+│   │       ├── image/
+│   │       │   ├── psnr.h
+│   │       │   ├── rmse.h
+│   │       │   └── ssim.h
+│   │       └── keypoint/
+│   │           └── repeatability.h
+│   ├── filter/                              # 匹配过滤器
+│   │   ├── cross_check.h
+│   │   ├── distance_distribution_filter.h
+│   │   ├── distance_threshold_filter.h
+│   │   ├── gms_filter.h
+│   │   ├── min_distance_filter.h
+│   │   └── ratio_test.h
+│   ├── geometry/                            # 几何变换估计器
+│   │   ├── affine_estimator.h
+│   │   ├── homography_estimator.h
+│   │   ├── partial_affine_utils.h
+│   │   ├── rigid_estimator.h
+│   │   └── similarity_estimator.h
+│   ├── interfaces/                          # 抽象接口
+│   │   ├── i_direct_aligner.h
+│   │   ├── i_filter.h
+│   │   ├── i_geometry_estimator.h
+│   │   ├── i_keypoint_extractor.h
+│   │   ├── i_learning_matcher.h
+│   │   ├── i_matcher.h
+│   │   ├── i_pipeline.h
+│   │   ├── i_registration.h
+│   │   ├── i_structure_associator.h
+│   │   └── i_structure_extractor.h
+│   ├── keypoint/                            # 点特征提取器
+│   │   ├── akaze_extractor.h
+│   │   ├── brisk_extractor.h
+│   │   ├── kaze_extractor.h
+│   │   ├── orb_extractor.h
+│   │   ├── sift_extractor.h
+│   │   └── surf_extractor.h
+│   ├── learning/                            # 深度学习匹配桥接
+│   │   └── python_learning_matcher.h
+│   ├── matcher/                             # 匹配器与结构关联器
+│   │   ├── feature/                         # 预留特征匹配目录
+│   │   ├── keypoint/
+│   │   │   ├── bf_matcher.h
+│   │   │   └── flann_matcher.h
+│   │   └── structure/
+│   │       ├── chamfer_associator.h
+│   │       ├── contour_descriptor_associator.h
+│   │       ├── hausdorff_associator.h
+│   │       ├── icp_associator.h
+│   │       ├── line_descriptor_associator.h
+│   │       ├── line_segment_associator.h
+│   │       ├── phase_correlate_associator.h
+│   │       └── structure_point_set.h
+│   ├── pipeline/                            # 配准流水线
+│   │   ├── base_pipeline.h
+│   │   ├── direct_pipeline.h
+│   │   ├── keypoint_pipeline.h
+│   │   ├── learning_pipeline.h
+│   │   └── structure_pipeline.h
+│   ├── structure/                           # 结构特征提取器
+│   │   ├── contour_extractor.h
+│   │   ├── edge_extractor.h
+│   │   └── line_extractor.h
+│   ├── transform/                           # 图像 warping
+│   │   ├── affine_warper.h
+│   │   ├── perspective_warper.h
+│   │   └── warper.h
+│   └── utils/                               # 工具库
+│       ├── file_utils.h
+│       ├── image_utils.h
+│       ├── logger.h
+│       ├── string_utils.h
+│       ├── timer.h
+│       ├── yaml_utils.h
+│       └── visualization/
+│           ├── draw_diff.h
+│           ├── draw_inliers.h
+│           ├── draw_matches.h
+│           ├── draw_overlay.h
+│           └── visualization_manager.h
 │
-└── build-mingw/                             # MinGW 编译输出目录（预编译产物）
-    └── registration_app.exe                 #   可执行文件
+├── outputs/                                 # 运行输出目录（生成物）
+│   ├── batch/                               # 批量运行结果
+│   ├── compare/                             # 横向对比实验结果
+│   ├── debug_ecc_fix/                       # ECC 调试输出
+│   └── single/                              # 单次运行结果
+│
+├── SOURCE_FILE_DOCS_CN/                     # 源文件中文说明文档
+│   ├── CORE_CONFIG_FUNCTIONS_CN.md
+│   ├── DIRECT_FOURIER_MELLIN_CN.md
+│   ├── DIRECT_PHASE_CORRELATION_CN.md
+│   ├── DIRECT_ZNCC_RIGID_CN.md
+│   ├── README.md
+│   └── REGISTRATION_APP_FUNCTIONS_UPDATED_CN.md
+│
+├── src/                                     # 源文件实现
+│   ├── core/
+│   │   ├── config.cpp
+│   │   ├── factory.cpp
+│   │   ├── registration.cpp
+│   │   └── types.cpp
+│   ├── data/
+│   │   └── correspondence_view.cpp
+│   ├── dataset/
+│   │   └── dataset_loader.cpp
+│   ├── direct/
+│   │   ├── dense/
+│   │   │   ├── dense_flow_common.cpp
+│   │   │   ├── dis_flow_aligner.cpp
+│   │   │   ├── farneback_flow_aligner.cpp
+│   │   │   └── tvl1_flow_aligner.cpp
+│   │   ├── frequency/
+│   │   │   ├── fourier_mellin_aligner.cpp
+│   │   │   └── phase_correlation_aligner.cpp
+│   │   ├── global/
+│   │   │   ├── ecc_aligner.cpp
+│   │   │   ├── esm_rigid_aligner.cpp
+│   │   │   ├── global_lk_aligner.cpp
+│   │   │   └── zncc_rigid_aligner.cpp
+│   │   └── sparse/
+│   │       └── klt_sparse_aligner.cpp
+│   ├── evaluator/
+│   │   ├── evaluator.cpp
+│   │   └── metrics/
+│   │       ├── feature/                     # 当前无实现文件
+│   │       ├── geometric/
+│   │       │   └── inlier_ratio.cpp
+│   │       ├── image/                       # 当前无实现文件
+│   │       └── keypoint/
+│   │           └── repeatability.cpp
+│   ├── filter/
+│   │   ├── cross_check.cpp
+│   │   ├── distance_distribution_filter.cpp
+│   │   ├── distance_threshold_filter.cpp
+│   │   ├── gms_filter.cpp
+│   │   ├── min_distance_filter.cpp
+│   │   └── ratio_test.cpp
+│   ├── geometry/
+│   │   ├── affine_estimator.cpp
+│   │   ├── homography_estimator.cpp
+│   │   ├── rigid_estimator.cpp
+│   │   └── similarity_estimator.cpp
+│   ├── keypoint/
+│   │   ├── akaze_extractor.cpp
+│   │   ├── brisk_extractor.cpp
+│   │   ├── kaze_extractor.cpp
+│   │   ├── orb_extractor.cpp
+│   │   ├── sift_extractor.cpp
+│   │   └── surf_extractor.cpp
+│   ├── learning/
+│   │   └── python_learning_matcher.cpp
+│   ├── matcher/
+│   │   ├── keypoint/
+│   │   │   ├── bf_matcher.cpp
+│   │   │   └── flann_matcher.cpp
+│   │   └── structure/
+│   │       ├── chamfer_associator.cpp
+│   │       ├── contour_descriptor_associator.cpp
+│   │       ├── hausdorff_associator.cpp
+│   │       ├── icp_associator.cpp
+│   │       ├── line_descriptor_associator.cpp
+│   │       ├── line_segment_associator.cpp
+│   │       ├── phase_correlate_associator.cpp
+│   │       └── structure_point_set.cpp
+│   ├── pipeline/
+│   │   ├── base_pipeline.cpp
+│   │   ├── direct_pipeline.cpp
+│   │   ├── keypoint_pipeline.cpp
+│   │   ├── learning_pipeline.cpp
+│   │   └── structure_pipeline.cpp
+│   ├── structure/
+│   │   ├── contour_extractor.cpp
+│   │   ├── edge_extractor.cpp
+│   │   └── line_extractor.cpp
+│   ├── transform/
+│   │   ├── affine_warper.cpp
+│   │   ├── perspective_warper.cpp
+│   │   └── warper.cpp
+│   └── utils/
+│       ├── file_utils.cpp
+│       ├── image_utils.cpp
+│       ├── logger.cpp
+│       ├── string_utils.cpp
+│       ├── timer.cpp
+│       ├── yaml_utils.cpp
+│       └── visualization/
+│           ├── draw_diff.cpp
+│           ├── draw_inliers.cpp
+│           ├── draw_matches.cpp
+│           ├── draw_overlay.cpp
+│           └── visualization_manager.cpp
+│
+├── third_party/                             # 第三方源码依赖
+│   ├── LightGlue/                           # LightGlue Python 依赖
+│   └── SuperGluePretrainedNetwork/          # SuperGlue Python 依赖
+│
+├── tools/                                   # 辅助工具脚本
+│   └── deep/
+│       ├── learning_backend.py
+│       ├── loftr_infer.py
+│       ├── superpoint_lightglue_infer.py
+│       └── superpoint_superglue_infer.py
+│
+├── .clang-format                            # C/C++ 格式化配置
+├── CMakeLists.txt                           # CMake 构建入口
+├── CODEX_WORKING_RULES_CN.md                # Codex 协作/工作规则
+├── main.cpp                                 # 程序入口
+├── PROJECT_DIRECTORY_STRUCTURE_CN.md        # 当前目录结构说明
+├── PROJECT_PIPELINE_INTERNALS_CN.md         # 平台内部流水线、数据流、Factory 与 YAML 机制说明
+├── PROJECT_QUICK_INTRO_CN.md                # 中文快速入门
+└── README.md                                # 项目说明
 ```

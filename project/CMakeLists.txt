@@ -42,12 +42,18 @@ find_package(OpenCV CONFIG REQUIRED
         video
     OPTIONAL_COMPONENTS
         line_descriptor
+        optflow
 )
 message(STATUS "OpenCV version: ${OpenCV_VERSION}")
 if(OpenCV_line_descriptor_FOUND)
     message(STATUS "OpenCV line_descriptor module: FOUND")
 else()
     message(STATUS "OpenCV line_descriptor module: NOT FOUND")
+endif()
+if(OpenCV_optflow_FOUND)
+    message(STATUS "OpenCV optflow module: FOUND")
+else()
+    message(STATUS "OpenCV optflow module: NOT FOUND")
 endif()
 
 # ---------------------------------------------------------------------------
@@ -94,6 +100,9 @@ target_compile_features(ir_core PUBLIC cxx_std_17)
 
 if(OpenCV_line_descriptor_FOUND)
     target_compile_definitions(ir_core PUBLIC IR_HAS_OPENCV_LINE_DESCRIPTOR=1)
+endif()
+if(OpenCV_optflow_FOUND)
+    target_compile_definitions(ir_core PUBLIC IR_HAS_OPENCV_OPTFLOW=1)
 endif()
 
 # ---------------------------------------------------------------------------

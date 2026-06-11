@@ -1,0 +1,52 @@
+# ---------------------------------------------------------------------------
+# 直接法对比配置：同时遍历四类 direct pipeline 下的小方法，批量跑完输出总表
+# ---------------------------------------------------------------------------
+name: compare_direct_methods
+
+# 默认模板；组合项可以用 pipeline 字段覆盖到 global/frequency/sparse/dense。
+base_pipeline: ../direct/dense_direct_pipeline.yaml
+
+# 待对比的直接法小方法。
+# pipeline 决定使用哪一类直接法公共参数，direct 决定具体算法配置。
+combinations:
+  - label: global_ecc
+    pipeline: ../direct/global_direct_pipeline.yaml
+    direct: ../../direct/ecc.yaml
+  - label: global_global_lk
+    pipeline: ../direct/global_direct_pipeline.yaml
+    direct: ../../direct/global_lk.yaml
+  - label: global_esm_rigid
+    pipeline: ../direct/global_direct_pipeline.yaml
+    direct: ../../direct/esm_rigid.yaml
+  - label: global_zncc_rigid
+    pipeline: ../direct/global_direct_pipeline.yaml
+    direct: ../../direct/zncc_rigid.yaml
+  - label: frequency_phase_correlation
+    pipeline: ../direct/frequency_direct_pipeline.yaml
+    direct: ../../direct/phase_correlation.yaml
+  - label: frequency_fourier_mellin
+    pipeline: ../direct/frequency_direct_pipeline.yaml
+    direct: ../../direct/fourier_mellin.yaml
+  - label: sparse_klt_sparse
+    pipeline: ../direct/sparse_direct_pipeline.yaml
+    direct: ../../direct/klt_sparse.yaml
+  - label: dense_dis_flow
+    pipeline: ../direct/dense_direct_pipeline.yaml
+    direct: ../../direct/dis_flow.yaml
+  - label: dense_farneback
+    pipeline: ../direct/dense_direct_pipeline.yaml
+    direct: ../../direct/farneback.yaml
+  - label: dense_tvl1_flow
+    pipeline: ../direct/dense_direct_pipeline.yaml
+    direct: ../../direct/tvl1_flow.yaml
+
+dataset:
+  root: ../../../datasets
+  pattern_sources: [source, moving]
+  pattern_targets: [target, reference]
+  include: []
+
+output:
+  root: ../../../outputs/compare/direct
+  save_visuals: false
+  summary_csv: true

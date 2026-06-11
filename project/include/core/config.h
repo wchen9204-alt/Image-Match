@@ -12,7 +12,8 @@ namespace ir {
 enum class MethodFamily {
     KEYPOINT,
     STRUCTURE,
-    DIRECT
+    DIRECT,
+    LEARNING
 };
 
 /// 将 MethodFamily 枚举转为输出目录名。
@@ -21,6 +22,7 @@ inline const char* methodFamilyDir(MethodFamily f) {
     case MethodFamily::KEYPOINT:  return "keypoint";
     case MethodFamily::STRUCTURE: return "structure";
     case MethodFamily::DIRECT:    return "direct";
+    case MethodFamily::LEARNING:  return "learning";
     default:                      return "unknown";
     }
 }
@@ -31,6 +33,7 @@ inline const char* methodFamilyLabel(MethodFamily f) {
     case MethodFamily::KEYPOINT:  return "KeypointPipeline";
     case MethodFamily::STRUCTURE: return "StructurePipeline";
     case MethodFamily::DIRECT:    return "DirectPipeline";
+    case MethodFamily::LEARNING:  return "LearningPipeline";
     default:                      return "UnknownPipeline";
     }
 }
@@ -42,10 +45,11 @@ struct PipelineConfig {
     /// 显式声明的方法族，由 YAML 中 method_family 字段指定。
     MethodFamily method_family = MethodFamily::KEYPOINT;
 
-    /// 各方法族的配置文件路径（按需填写）。
+    /// 各方法族的配置文件路径（按需填写）；direct_path 指向具体直接法算法配置。
     std::filesystem::path keypoint_path;
     std::filesystem::path structure_path;
     std::filesystem::path direct_path;
+    std::filesystem::path learning_path;
     std::filesystem::path matcher_path;
     std::filesystem::path geometry_path;
 

@@ -4,12 +4,14 @@
 # ---------------------------------------------------------------------------
 name: batch_pipeline
 
-pipeline: ../keypoint/kaze_pipeline.yaml
+pipeline: ../keypoint/sift_pipeline.yaml
 
 dataset:
   root: ../../../datasets
-  pattern_source: source
-  pattern_target: target
+  # source 图像文件名关键词候选；DatasetLoader 按顺序寻找源图。
+  pattern_sources: [source, moving]
+  # target 图像文件名关键词候选；DatasetLoader 按顺序寻找目标图。
+  pattern_targets: [target, reference]
   include: []
 
 output:

@@ -8,6 +8,7 @@
 #include "core/result.h"
 #include "core/types.h"
 #include "data/evaluation_data.h"
+#include "data/direct_data.h"
 #include "data/geometry_data.h"
 #include "data/image_data.h"
 #include "data/keypoint_data.h"
@@ -28,6 +29,13 @@ public:
     StructureData structure_data;
     StructureMatchData structure_match_data;
     KeypointMatchData keypoint_match_data;
+
+    /// 当前阶段显式使用的对应点来源类型；由 pipeline 或 direct aligner 在进入几何/可视化阶段前写入。
+    std::string correspondence_source;
+
+    /// 直接法阶段的专属输出；DirectPipeline 会从这里同步通用几何结果和可视化点对。
+    DirectData direct_data;
+
     GeometryData geometry_data;
     TransformData transform_data;
     EvaluationData evaluation;
@@ -40,12 +48,15 @@ public:
 
     cv::Mat warped_image;
 
+    /// 清空所有阶段缓存，保证批处理或多次运行时上下文互不污染。
     void reset() {
         images.clear();
         keypoint_data.clear();
         structure_data.clear();
         structure_match_data.clear();
         keypoint_match_data.clear();
+        correspondence_source.clear();
+        direct_data.clear();
         geometry_data.clear();
         transform_data.clear();
         evaluation.clear();

@@ -1,7 +1,6 @@
 #include "keypoint/orb_extractor.h"
 
-#include <opencv2/imgproc.hpp>
-
+#include "utils/image_utils.h"
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
 
@@ -65,11 +64,10 @@ bool OrbExtractor::extract(RegistrationContext& ctx) {
         IR_LOG_ERROR("ORB::extract - source images are empty.");
         return false;
     }
-    if (images.first_gray.empty()) {
-        cv::cvtColor(images.first, images.first_gray, cv::COLOR_BGR2GRAY);
-    }
-    if (images.second_gray.empty()) {
-        cv::cvtColor(images.second, images.second_gray, cv::COLOR_BGR2GRAY);
+    if (!image_utils::ensureGray(images.first, images.first_gray) ||
+        !image_utils::ensureGray(images.second, images.second_gray)) {
+        IR_LOG_ERROR("ORB::extract - failed to prepare grayscale images.");
+        return false;
     }
 
     _impl->detectAndCompute(

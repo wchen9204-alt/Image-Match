@@ -4,15 +4,22 @@
 # ---------------------------------------------------------------------------
 name: batch_pipeline
 
+# pipeline 默认值：无固定默认，必须显式指定
 pipeline: ../structure/line_pipeline.yaml
 
 dataset:
+  # root 默认值：无固定默认，必须显式指定
   root: ../../../datasets
-  pattern_source: source
-  pattern_target: target
+  # source 图像文件名关键词候选；DatasetLoader 按顺序寻找源图。
+  pattern_sources: [source, moving]
+  # target 图像文件名关键词候选；DatasetLoader 按顺序寻找目标图。
+  pattern_targets: [target, reference]
+  # include 默认值：空列表，表示包含全部样本
   include: []
 
 output:
+  # root 默认值：无固定默认，通常应显式指定
   root: ../../../outputs
+  # save_visuals / summary_csv 默认值：由批处理逻辑按当前配置文件显式给出
   save_visuals: true
   summary_csv: true

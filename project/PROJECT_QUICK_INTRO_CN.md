@@ -64,7 +64,7 @@ main
 | `FeatureType` | 表示特征类型：SIFT、SURF、ORB、BRISK、KAZE、AKAZE。 |
 | `NormType` | 表示描述子距离类型：L1、L2、HAMMING、HAMMING2。 |
 | `GeometryType` | 表示几何模型：Homography、Affine、Rigid、Similarity。 |
-| `TransformType` | 表示图像变换类型：Perspective 或 Affine。 |
+| `TransformType` | 表示图像变换类型：Perspective 或 Affine，已并入 `core/types.h`。 |
 
 ## 5. Data 模块
 

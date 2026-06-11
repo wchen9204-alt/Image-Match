@@ -5,6 +5,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include "interfaces/i_keypoint_extractor.h"
+#include "interfaces/i_direct_aligner.h"
 #include "interfaces/i_filter.h"
 #include "interfaces/i_geometry_estimator.h"
 #include "interfaces/i_matcher.h"
@@ -13,28 +14,31 @@
 
 namespace ir {
 
-/// ¸ù¾İ YAML ÅäÖÃ´´½¨¾ßÌåµÄÅä×¼×é¼ş¡£
+/// æ ¹æ® YAML é…ç½®åˆ›å»ºå…·ä½“çš„é…å‡†ç»„ä»¶ã€‚
 ///
-/// Factory Í³Ò»¹ÜÀí YAML ÖĞ `type` »ò `method` ×Ö¶Îµ½¾ßÌåÊµÏÖµÄÓ³Éä£¬
-/// °üÀ¨µãÌØÕ÷ÌáÈ¡Æ÷¡¢½á¹¹ÌØÕ÷ÌáÈ¡Æ÷¡¢½á¹¹¹ØÁªÆ÷¡¢Æ¥ÅäÆ÷¡¢¹ıÂËÆ÷ÒÔ¼°¼¸ºÎ¹À¼ÆÆ÷¡£
+/// Factory ç»Ÿä¸€ç®¡ç† YAML ä¸­ `type` æˆ– `method` å­—æ®µåˆ°å…·ä½“å®ç°çš„æ˜ å°„ï¼Œ
+/// åŒ…æ‹¬ç‚¹ç‰¹å¾æå–å™¨ã€ç»“æ„ç‰¹å¾æå–å™¨ã€ç»“æ„å…³è”å™¨ã€åŒ¹é…å™¨ã€è¿‡æ»¤å™¨ã€ç›´æ¥æ³•é…å‡†å™¨ä»¥åŠå‡ ä½•ä¼°è®¡å™¨ã€‚
 class Factory {
 public:
-    /// ´´½¨µãÌØÕ÷ÌáÈ¡Æ÷£¬ÀıÈç SIFT¡¢SURF¡¢ORB¡¢BRISK¡¢KAZE »ò AKAZE¡£
+    /// åˆ›å»ºç‚¹ç‰¹å¾æå–å™¨ï¼Œä¾‹å¦‚ SIFTã€SURFã€ORBã€BRISKã€KAZE æˆ– AKAZEã€‚
     static std::shared_ptr<IKeypointExtractor> createKeypointExtractor(const YAML::Node& cfg);
 
-    /// ´´½¨½á¹¹ÌØÕ÷ÌáÈ¡Æ÷£¬ÀıÈç±ßÔµ¡¢Ö±Ïß»òÂÖÀªÌáÈ¡Æ÷¡£
-    static std::shared_ptr<IStructureExtractor> createStructureExtractor(const YAML::Node& cfg);
-
-    /// ´´½¨½á¹¹¹ØÁª/Æ¥ÅäÆ÷£¬ÀıÈç PHASE_CORRELATE »ò CHAMFER¡£
-    static std::shared_ptr<IStructureAssociator> createStructureAssociator(const YAML::Node& cfg);
-
-    /// ´´½¨ÃèÊö×ÓÆ¥ÅäÆ÷£¬ÀıÈç BFMatcher »ò FlannMatcher¡£
+    /// åˆ›å»ºæè¿°å­åŒ¹é…å™¨ï¼Œä¾‹å¦‚ BFMatcher æˆ– FlannMatcherã€‚
     static std::shared_ptr<IMatcher> createMatcher(const YAML::Node& cfg);
 
-    /// ´´½¨Æ¥Åä¹ıÂËÆ÷£¬ÀıÈç ratio test¡¢cross-check »ò GMS¡£
+    /// åˆ›å»ºç»“æ„ç‰¹å¾æå–å™¨ï¼Œä¾‹å¦‚è¾¹ç¼˜ã€ç›´çº¿æˆ–è½®å»“æå–å™¨ã€‚
+    static std::shared_ptr<IStructureExtractor> createStructureExtractor(const YAML::Node& cfg);
+
+    /// åˆ›å»ºç»“æ„å…³è”/åŒ¹é…å™¨ï¼Œä¾‹å¦‚ PHASE_CORRELATE æˆ– CHAMFERã€‚
+    static std::shared_ptr<IStructureAssociator> createStructureAssociator(const YAML::Node& cfg);
+
+    /// åˆ›å»ºç›´æ¥æ³•é…å‡†å™¨ï¼Œä¾‹å¦‚ ECCã€Global LKã€ESMã€ZNCCã€ç›¸ä½ç›¸å…³ã€KLTã€Farnebackã€DIS æˆ– TV-L1ã€‚
+    static std::shared_ptr<IDirectAligner> createDirectAligner(const YAML::Node& cfg);
+
+    /// åˆ›å»ºåŒ¹é…è¿‡æ»¤å™¨ï¼Œä¾‹å¦‚ ratio testã€cross-check æˆ– GMSã€‚
     static std::shared_ptr<IFilter> createFilter(const YAML::Node& cfg);
 
-    /// ´´½¨¼¸ºÎ¹À¼ÆÆ÷£¬ÀıÈçµ¥Ó¦¡¢·ÂÉä¡¢¸ÕÌå»òÏàËÆ±ä»»¹À¼ÆÆ÷¡£
+    /// åˆ›å»ºå‡ ä½•ä¼°è®¡å™¨ï¼Œä¾‹å¦‚å•åº”ã€ä»¿å°„ã€åˆšä½“æˆ–ç›¸ä¼¼å˜æ¢ä¼°è®¡å™¨ã€‚
     static std::shared_ptr<IGeometryEstimator> createGeometryEstimator(const YAML::Node& cfg);
 };
 

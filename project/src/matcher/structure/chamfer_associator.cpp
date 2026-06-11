@@ -1,7 +1,6 @@
 #include "matcher/structure/chamfer_associator.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <limits>
 #include <string>
@@ -10,7 +9,9 @@
 #include <opencv2/imgproc.hpp>
 
 #include "matcher/structure/structure_point_set.h"
+#include "utils/image_utils.h"
 #include "utils/logger.h"
+#include "utils/string_utils.h"
 #include "utils/yaml_utils.h"
 
 namespace ir {
@@ -43,14 +44,6 @@ double scoreTranslation(const std::vector<cv::Point2f>& srcPoints,
     return sum / static_cast<double>(count);
 }
 
-// 将字符串参数归一化为大写，兼容 phase_correlate / PHASE_CORRELATE 等写法。
-std::string upper(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-        return static_cast<char>(std::toupper(c));
-    });
-    return s;
-}
-
 // 使用相位相关估计全局初始平移，倒角匹配再围绕该初值做局部精搜。
 bool estimatePhaseShift(const cv::Mat& first,
                         const cv::Mat& second,
@@ -63,13 +56,8 @@ bool estimatePhaseShift(const cv::Mat& first,
         return false;
     }
 
-    if (blurKernel >= 3) {
-        if (blurKernel % 2 == 0) {
-            ++blurKernel;
-        }
-        cv::GaussianBlur(src, src, cv::Size(blurKernel, blurKernel), 0.0);
-        cv::GaussianBlur(dst, dst, cv::Size(blurKernel, blurKernel), 0.0);
-    }
+    image_utils::applyOptionalGaussianBlur(src, src, blurKernel);
+    image_utils::applyOptionalGaussianBlur(dst, dst, blurKernel);
 
     double response = 0.0;
     shift = cv::phaseCorrelate(src, dst, cv::noArray(), &response);
@@ -86,7 +74,8 @@ ChamferAssociator::ChamferAssociator(const YAML::Node& cfg) {
     _phaseBlurKernel = yaml_utils::getInt(params, "phaseBlurKernel", 5);
     _scoreThreshold = yaml_utils::getDouble(params, "scoreThreshold", 0.25);
     _bidirectional = yaml_utils::getBool(params, "bidirectional", true);
-    _initialization = upper(yaml_utils::getString(params, "initialization", "PHASE_CORRELATE"));
+    _initialization = string_utils::toUpperAscii(
+        yaml_utils::getString(params, "initialization", "PHASE_CORRELATE"));
 }
 
 bool ChamferAssociator::associate(RegistrationContext& ctx) {

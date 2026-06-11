@@ -1,0 +1,79 @@
+# ---------------------------------------------------------------------------
+# Farneback 稠密光流直接法配置
+# ---------------------------------------------------------------------------
+# 直接法类型；可选项：DENSE / SPARSE / GLOBAL / FREQUENCY；默认值：无，pipeline 根据该值标识直接法类别。
+type: DENSE
+
+# 直接法方法；可选项：FARNEBACK；默认值：无，DENSE 类型下使用 Farneback 稠密光流。
+method: FARNEBACK
+
+params:
+  # 图像金字塔缩放比例；默认值：0.5；仅 FARNEBACK 生效，值越小金字塔层间缩放越强。
+  pyramid_scale: 0.5
+
+  # 金字塔层数；默认值：3；仅 FARNEBACK 生效，用于扩大可估计位移范围。
+  levels: 3
+
+  # 光流窗口尺寸；默认值：15；仅 FARNEBACK 生效，窗口越大越平滑但细节响应更弱。
+  window_size: 15
+
+  # 每层迭代次数；默认值：3；仅 FARNEBACK 生效，增加可提升收敛但会变慢。
+  iterations: 3
+
+  # 多项式展开邻域大小；默认值：5；可选常用值：5 / 7；仅 FARNEBACK 生效。
+  poly_n: 5
+
+  # 多项式展开高斯标准差；默认值：1.2；仅 FARNEBACK 生效，通常 poly_n=5 时取 1.1~1.2。
+  poly_sigma: 1.2
+
+  # OpenCV Farneback 标志位；默认值：0；可选项：0 / OPTFLOW_USE_INITIAL_FLOW / OPTFLOW_FARNEBACK_GAUSSIAN。
+  flags: 0
+
+  # Farneback 输入灰度图预平滑核大小；默认值：0；小于 3 时不平滑，偶数会自动修正为奇数。
+  blur_kernel: 0
+
+  # 源图梯度幅值采样阈值；默认值：0.0；仅 fit_global_transform=true 时生效，<=0 表示不按纹理过滤。
+  gradient_threshold: 0.0
+
+  # 是否从稠密光流采样点拟合全局几何变换；默认值：true；false 时只输出光流，不输出有效全局几何。
+  fit_global_transform: true
+
+  # 全局几何拟合模型；默认值：RIGID；可选项：RIGID / SIMILARITY / AFFINE / HOMOGRAPHY。
+  # RIGID 先用 OpenCV estimateAffinePartial2D 做 RANSAC 筛选，再回归严格平移+旋转；SIMILARITY 允许等比缩放；AFFINE/HOMOGRAPHY 会引入剪切或透视自由度。
+  fit_model: RIGID
+
+  # 稠密光流采样步长；默认值：8；仅 fit_global_transform=true 时生效，数值越小采样点越多。
+  sample_step: 8
+
+  # 采样点最小光流幅值，单位为像素；默认值：-1.0；小于 0 表示不启用下限过滤。
+  min_flow_magnitude: -1.0
+
+  # 采样点最大光流幅值，单位为像素；默认值：-1.0；小于 0 表示不启用上限过滤。
+  max_flow_magnitude: -1.0
+
+  # 采样点距图像边界的最小安全边距，单位为像素；默认值：0；仅 fit_global_transform=true 时生效。
+  border_margin: 0
+
+  # 是否启用前后向光流一致性检查；默认值：false；开启后会额外计算 target->source 光流，速度约减半。
+  forward_backward_check: false
+
+  # 前后向光流回投误差阈值，单位为像素；默认值：1.5；仅 forward_backward_check=true 时生效。
+  fb_threshold: 1.5
+
+  # RANSAC 内点阈值，单位为像素；默认值：3.0；仅全局几何拟合阶段生效。
+  ransac_threshold: 3.0
+
+  # 全局几何鲁棒估计方法；默认值：RANSAC；可选项：RANSAC / LMEDS；HOMOGRAPHY 额外支持 RHO。
+  robust_method: RANSAC
+
+  # 全局几何鲁棒估计最大迭代次数；默认值：2000；仅全局几何拟合阶段生效。
+  ransac_max_iters: 2000
+
+  # 全局几何鲁棒估计置信度；默认值：0.99；仅全局几何拟合阶段生效。
+  ransac_confidence: 0.99
+
+  # 全局几何鲁棒估计 refine 迭代次数；默认值：10；仅 AFFINE / RIGID / SIMILARITY 生效。
+  ransac_refine_iters: 10
+
+  # 接受全局几何结果所需最少内点数；默认值：20；低于该值会判定配准失败。
+  min_inliers: 20
