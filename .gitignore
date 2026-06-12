@@ -1,11 +1,57 @@
-# CMake build outputs
+# Prerequisites
+*.d
+
+# Compiled object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled headers
+*.gch
+*.pch
+
+# Linker files
+*.ilk
+
+# Debugger files
+*.pdb
+*.dwo
+
+# Compiled dynamic libraries
+*.so
+*.so.*
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Build directories
 build/
+Build/
 build-*/
 outputs/
+
+# CMake generated files
+CMakeFiles/
 **/CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
 Makefile
+install_manifest.txt
 compile_commands.json
 
 # IDE settings
@@ -13,11 +59,15 @@ compile_commands.json
 .vscode/
 .vs/
 
-# Temporary and binary files
-*.exe
-*.dll
-*.a
-*.lib
-*.obj
-*.pdb
+# Temporary files
+*.tmp
 *.log
+*.bak
+*.swp
+
+# vcpkg
+vcpkg_installed/
+
+# Test output and cache
+Testing/
+.cache/
