@@ -4,7 +4,7 @@
 # ---------------------------------------------------------------------------
 name: batch_pipeline
 
-pipeline: ../keypoint/sift_pipeline.yaml
+pipeline: ../keypoint/akaze_pipeline.yaml
 
 dataset:
   root: ../../../datasets

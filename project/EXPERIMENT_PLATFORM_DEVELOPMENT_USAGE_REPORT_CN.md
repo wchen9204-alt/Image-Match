@@ -93,6 +93,7 @@ geometry: ../../geometry/rigid.yaml
 | 匹配图 | all match 和 inlier match 可视化。 |
 | warped 图像 | 将 source 按估计变换配准到 target 坐标系。 |
 | blend 图像 | warped source 与 target 的叠加图。 |
+| false-color overlay 图像 | warped source 映射到红色、target 映射到绿色，用红边/绿边观察错位、用黄色观察重合。 |
 | `run_summary.txt` | 人类可读的单次实验摘要。 |
 | `run_summary.json` | 机器可读的单次实验摘要。 |
 | `summary.csv` | 单次或批量实验的统计表。 |

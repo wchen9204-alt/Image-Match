@@ -295,6 +295,7 @@ validation:
 | `originals/` | 原始 source 和 target。 |
 | `warped/` | 变换后的 source。 |
 | `blend/` | warped source 与 target 的叠加图。 |
+| `false_color_overlay/` | 伪彩色配准误差叠加图：warped source 为红色，target 为绿色，重合区域为黄色。 |
 
 方法族专属输出包括：
 
@@ -482,4 +483,3 @@ output:
 ```
 
 `include` 为空时会扫描数据集根目录下全部样本；填写样本名时只运行指定样本。
-

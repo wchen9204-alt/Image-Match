@@ -111,6 +111,8 @@ endif()
 add_executable(registration_app
     main.cpp
     apps/registration_app.cpp
+    apps/registration_app_helpers.cpp
+    apps/summary_csv_writer.cpp
 )
 
 target_link_libraries(registration_app

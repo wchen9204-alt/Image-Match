@@ -1,17 +1,17 @@
 # ---------------------------------------------------------------------------
 # SURF 配准流水线配置
-# 当前文件用于组织一条完整的特征配准流水线，可按需手动调整
-# keypoint / matcher / filters / geometry 等子配置
+# 当前文件用于组织一条完整的点特征配准流程，可按需调整
+# keypoint / matcher / filters / geometry 等子配置。
 # ---------------------------------------------------------------------------
 name: surf_pipeline
 
 # 支持的关键点方法：
 # akaze / brisk / kaze / orb / sift / surf
-keypoint:  ../../keypoint/surf.yaml
+keypoint: ../../keypoint/surf.yaml
 
 # 支持的匹配器：
 # bf / flann
-matcher:  ../../matcher/bf.yaml
+matcher: ../../matcher/bf.yaml
 
 # 支持的过滤器：
 # ratio_test / cross_check / distance_distribution /
@@ -19,12 +19,13 @@ matcher:  ../../matcher/bf.yaml
 filters:
   - ../../filter/ratio_test.yaml
   - ../../filter/cross_check.yaml
- # - ../../filter/distance_distribution.yaml
- # - ../../filter/distance_threshold.yaml
+# - ../../filter/distance_distribution.yaml
+# - ../../filter/distance_threshold.yaml
 
 # 支持的几何模型：
 # rigid / similarity / affine / homography
 geometry: ../../geometry/rigid.yaml
+evaluator: ../../evaluator/metrics.yaml
 
 io:
   image1: ../../../datasets/Test01/source.png
@@ -43,9 +44,24 @@ visualization:
   wait_key: 0
 
 validation:
-  # warp 后的 source 与 target 前景重合率校验。
-  # enabled=true 时，IoU 低于 min_iou 的样本不会进入 Successful samples。
   warp_overlap:
+    # 是否启用 warp 后的前景 IoU 验证。
     enabled: true
-    min_iou: 0.20
+    # 最低 IoU 阈值；低于该值时样本判失败。
+    min_iou: 0.10
+    # 前景二值化阈值。
     foreground_threshold: 10
+  match_quality:
+    # 是否启用匹配质量验证。
+    enabled: true
+    # 最少内点数；低于该值时样本判失败。
+    min_inliers: 4
+    # 最低内点率；低于该值时样本判失败。
+    min_inlier_ratio: 0.10
+    # 最大重投影误差；-1 表示不启用该项阈值。
+    max_reproj_error: -1
+  metric_quality:
+    # 是否启用评测指标质量验证。
+    enabled: true
+    # 最低 SSIM 阈值；低于该值时样本判失败。
+    min_ssim: 0.60

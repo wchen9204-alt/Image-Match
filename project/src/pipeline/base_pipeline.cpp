@@ -208,6 +208,111 @@ double computeMaskIou(const cv::Mat& a, const cv::Mat& b) {
            static_cast<double>(unionCount);
 }
 
+bool activeTransformMatrix(const RegistrationContext& ctx, cv::Mat& matrix) {
+    matrix.release();
+    if (!ctx.geometry_data.A.empty()) {
+        ctx.geometry_data.A.convertTo(matrix, CV_64F);
+        return matrix.rows >= 2 && matrix.cols >= 3;
+    }
+    if (!ctx.geometry_data.H.empty()) {
+        ctx.geometry_data.H.convertTo(matrix, CV_64F);
+        return matrix.rows >= 3 && matrix.cols >= 3;
+    }
+    if (!ctx.transform_data.M.empty()) {
+        ctx.transform_data.M.convertTo(matrix, CV_64F);
+        return (matrix.rows >= 2 && matrix.cols >= 3);
+    }
+    return false;
+}
+
+void dilateMaskIfRequested(cv::Mat& mask, int dilateSize) {
+    if (mask.empty() || dilateSize <= 1) {
+        return;
+    }
+    if (dilateSize % 2 == 0) {
+        ++dilateSize;
+    }
+    const cv::Mat kernel =
+        cv::getStructuringElement(cv::MORPH_RECT, cv::Size(dilateSize, dilateSize));
+    cv::dilate(mask, mask, kernel);
+}
+
+bool warpStructureMask(const RegistrationContext& ctx,
+                       const cv::Mat& sourceMask,
+                       const cv::Size& targetSize,
+                       cv::Mat& warpedMask) {
+    warpedMask.release();
+    cv::Mat matrix;
+    if (!activeTransformMatrix(ctx, matrix)) {
+        return false;
+    }
+
+    if (matrix.rows >= 3 && matrix.cols >= 3) {
+        cv::warpPerspective(sourceMask,
+                            warpedMask,
+                            matrix,
+                            targetSize,
+                            cv::INTER_NEAREST,
+                            cv::BORDER_CONSTANT,
+                            cv::Scalar(0));
+        return true;
+    }
+
+    if (matrix.rows >= 2 && matrix.cols >= 3) {
+        cv::Mat affine = matrix(cv::Rect(0, 0, 3, 2)).clone();
+        cv::warpAffine(sourceMask,
+                       warpedMask,
+                       affine,
+                       targetSize,
+                       cv::INTER_NEAREST,
+                       cv::BORDER_CONSTANT,
+                       cv::Scalar(0));
+        return true;
+    }
+    return false;
+}
+
+bool toGray8ForVisualization(const cv::Mat& image, cv::Mat& gray8) {
+    cv::Mat gray;
+    if (!toGrayPreserveDepth(image, gray)) {
+        return false;
+    }
+    return convertGrayTo8U(gray, gray8);
+}
+
+bool buildFalseColorOverlay(const cv::Mat& warped,
+                            const cv::Mat& target,
+                            int foregroundThreshold,
+                            cv::Mat& overlay) {
+    overlay.release();
+    if (warped.empty() || target.empty() || warped.size() != target.size()) {
+        return false;
+    }
+
+    cv::Mat warpedGray;
+    cv::Mat targetGray;
+    if (!toGray8ForVisualization(warped, warpedGray) ||
+        !toGray8ForVisualization(target, targetGray)) {
+        return false;
+    }
+
+    const int thresholdValue = std::clamp(foregroundThreshold, 0, 255);
+    cv::Mat warpedMask;
+    cv::Mat targetMask;
+    cv::threshold(warpedGray, warpedMask, thresholdValue, 255.0, cv::THRESH_BINARY);
+    cv::threshold(targetGray, targetMask, thresholdValue, 255.0, cv::THRESH_BINARY);
+
+    cv::Mat warpedRed = cv::Mat::zeros(warpedGray.size(), CV_8U);
+    cv::Mat targetGreen = cv::Mat::zeros(targetGray.size(), CV_8U);
+    warpedGray.copyTo(warpedRed, warpedMask);
+    targetGray.copyTo(targetGreen, targetMask);
+
+    cv::Mat blue = cv::Mat::zeros(warpedGray.size(), CV_8U);
+    cv::Mat channels[] = {blue, targetGreen, warpedRed};
+    cv::merge(channels, 3, overlay);
+    return true;
+}
+
 } // namespace
 
 bool BasePipeline::configure(const PipelineConfig& cfg) {
@@ -303,21 +408,209 @@ bool BasePipeline::runWarp(RegistrationContext& ctx) {
     return _warper->warp(ctx);
 }
 
+bool BasePipeline::validateRegistrationQuality(RegistrationContext& ctx) {
+    // 先重置可选验证结果。
+    ctx.result.structure_overlap_iou = -1.0;
+
+    // 顺序执行各项验证。
+    if (!validateMatchQuality(ctx)) {
+        return false;
+    }
+    if (!validateStructureOverlap(ctx)) {
+        return false;
+    }
+    if (!validateWarpQuality(ctx)) {
+        return false;
+    }
+    return validateMetricQuality(ctx);
+}
+
+bool BasePipeline::validateMatchQuality(RegistrationContext& ctx) {
+    if (!_config.validate_match_quality) {
+        return true;
+    }
+
+    // 统一读取结果对象里的匹配统计。
+    const auto& r = ctx.result;
+    IR_LOG_INFO("Match quality: inliers=",
+                r.num_inliers,
+                ", ratio=",
+                r.inlier_ratio,
+                ", reproj=",
+                r.mean_reproj_error);
+
+    // 条件1：最少内点数。
+    if (_config.min_match_inliers > 0 && r.num_inliers < _config.min_match_inliers) {
+        ctx.result.message = "match quality validation failed: inliers " +
+                             std::to_string(r.num_inliers) + " < " +
+                             std::to_string(_config.min_match_inliers);
+        IR_LOG_WARN(ctx.result.message);
+        return false;
+    }
+
+    // 条件2：最小内点率。
+    if (_config.min_match_inlier_ratio >= 0.0 &&
+        r.inlier_ratio < _config.min_match_inlier_ratio) {
+        ctx.result.message = "match quality validation failed: inlier ratio " +
+                             std::to_string(r.inlier_ratio) + " < " +
+                             std::to_string(_config.min_match_inlier_ratio);
+        IR_LOG_WARN(ctx.result.message);
+        return false;
+    }
+
+    // 条件3：最大重投影误差。
+    if (_config.max_match_reproj_error >= 0.0 &&
+        r.mean_reproj_error > _config.max_match_reproj_error) {
+        ctx.result.message = "match quality validation failed: reprojection error " +
+                             std::to_string(r.mean_reproj_error) + " > " +
+                             std::to_string(_config.max_match_reproj_error);
+        IR_LOG_WARN(ctx.result.message);
+        return false;
+    }
+
+    return true;
+}
+
+bool BasePipeline::validateStructureOverlap(RegistrationContext& ctx) {
+    if (!_config.validate_structure_overlap) {
+        return true;
+    }
+
+    // 条件1：必须有结构响应图。
+    if (ctx.structure_data.first.response.empty() || ctx.structure_data.second.response.empty()) {
+        ctx.result.message = "structure overlap validation failed: missing structure response";
+        IR_LOG_WARN(ctx.result.message);
+        return false;
+    }
+
+    cv::Mat sourceMask;
+    cv::Mat targetMask;
+    const int thresholdValue = _config.structure_overlap_foreground_threshold;
+
+    // 条件2：结构响应图要能转成前景 mask。
+    if (!buildForegroundMask(ctx.structure_data.first.response, thresholdValue, sourceMask) ||
+        !buildForegroundMask(ctx.structure_data.second.response, thresholdValue, targetMask)) {
+        ctx.result.message = "structure overlap validation failed: cannot build masks";
+        IR_LOG_WARN(ctx.result.message);
+        return false;
+    }
+
+    dilateMaskIfRequested(sourceMask, _config.structure_overlap_dilate_size);
+    dilateMaskIfRequested(targetMask, _config.structure_overlap_dilate_size);
+
+    cv::Mat warpedSourceMask;
+
+    // 条件3：source mask 要能 warp 到 target 坐标系。
+    if (!warpStructureMask(ctx, sourceMask, targetMask.size(), warpedSourceMask)) {
+        ctx.result.message = "structure overlap validation failed: cannot warp source mask";
+        IR_LOG_WARN(ctx.result.message);
+        return false;
+    }
+
+    const double iou = computeMaskIou(warpedSourceMask, targetMask);
+    ctx.result.structure_overlap_iou = iou;
+    if (iou < 0.0) {
+        ctx.result.message = "structure overlap IoU failed: empty structure union";
+        IR_LOG_WARN(ctx.result.message);
+        return false;
+    }
+
+    // 条件4：结构重叠 IoU 要达到阈值。
+    IR_LOG_INFO("Structure overlap IoU=", iou, ", min=", _config.min_structure_overlap_iou);
+    if (iou < _config.min_structure_overlap_iou) {
+        ctx.result.message = "structure overlap IoU below threshold: " +
+                             std::to_string(iou) + " < " +
+                             std::to_string(_config.min_structure_overlap_iou);
+        IR_LOG_WARN(ctx.result.message);
+        return false;
+    }
+
+    return true;
+}
+
+bool BasePipeline::validateMetricQuality(RegistrationContext& ctx) {
+    if (!_config.validate_metric_quality) {
+        return true;
+    }
+
+    // 统一读取 evaluator 产出的指标。
+    auto findRequiredMetric = [&](const std::string& name) -> const MetricResult* {
+        const MetricResult* metric = ctx.evaluation.find(name);
+        if (!metric || !metric->valid) {
+            ctx.result.message = "metric quality validation failed: missing metric " + name;
+            IR_LOG_WARN(ctx.result.message);
+            return nullptr;
+        }
+        return metric;
+    };
+
+    // 条件1：PSNR 不低于阈值。
+    if (_config.min_metric_psnr >= 0.0) {
+        const MetricResult* metric = findRequiredMetric("PSNR");
+        if (!metric) {
+            return false;
+        }
+        IR_LOG_INFO("Metric quality PSNR=", metric->value, ", min=", _config.min_metric_psnr);
+        if (metric->value < _config.min_metric_psnr) {
+            ctx.result.message = "metric quality validation failed: PSNR " +
+                                 std::to_string(metric->value) + " < " +
+                                 std::to_string(_config.min_metric_psnr);
+            IR_LOG_WARN(ctx.result.message);
+            return false;
+        }
+    }
+
+    // 条件2：SSIM 不低于阈值。
+    if (_config.min_metric_ssim >= 0.0) {
+        const MetricResult* metric = findRequiredMetric("SSIM");
+        if (!metric) {
+            return false;
+        }
+        IR_LOG_INFO("Metric quality SSIM=", metric->value, ", min=", _config.min_metric_ssim);
+        if (metric->value < _config.min_metric_ssim) {
+            ctx.result.message = "metric quality validation failed: SSIM " +
+                                 std::to_string(metric->value) + " < " +
+                                 std::to_string(_config.min_metric_ssim);
+            IR_LOG_WARN(ctx.result.message);
+            return false;
+        }
+    }
+
+    // 条件3：RMSE 不高于阈值。
+    if (_config.max_metric_rmse >= 0.0) {
+        const MetricResult* metric = findRequiredMetric("RMSE");
+        if (!metric) {
+            return false;
+        }
+        IR_LOG_INFO("Metric quality RMSE=", metric->value, ", max=", _config.max_metric_rmse);
+        if (metric->value > _config.max_metric_rmse) {
+            ctx.result.message = "metric quality validation failed: RMSE " +
+                                 std::to_string(metric->value) + " > " +
+                                 std::to_string(_config.max_metric_rmse);
+            IR_LOG_WARN(ctx.result.message);
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool BasePipeline::validateWarpQuality(RegistrationContext& ctx) {
     ctx.result.warp_overlap_iou = -1.0;
     ctx.result.warp_photometric_error = -1.0;
 
-    // 1. 若两项验证均未开启，直接通过，兼容旧配置。
     if (!_config.validate_warp_overlap && !_config.validate_warp_photometric) {
         return true;
     }
 
-    // 2. 公共前置检查：warp 图像是否有效，尺寸是否与 target 一致。
+    // 条件1：warp 结果必须存在。
     if (!_config.warp || ctx.warped_image.empty()) {
         ctx.result.message = "warp validation failed: warped image is empty";
         IR_LOG_WARN(ctx.result.message);
         return false;
     }
+
+    // 条件2：warp 和 target 尺寸必须一致。
     if (ctx.images.second.empty() || ctx.warped_image.size() != ctx.images.second.size()) {
         ctx.result.message =
             "warp validation failed: warped image and target have different sizes";
@@ -325,7 +618,7 @@ bool BasePipeline::validateWarpQuality(RegistrationContext& ctx) {
         return false;
     }
 
-    // 3. 构建前景 mask，IoU 和光度差检查共用。
+    // 条件3：两张图都要能提取前景 mask。
     cv::Mat warpedMask;
     cv::Mat targetMask;
     const int thresholdValue = _config.warp_overlap_foreground_threshold;
@@ -336,7 +629,7 @@ bool BasePipeline::validateWarpQuality(RegistrationContext& ctx) {
         return false;
     }
 
-    // 4. 前景 IoU 检查。
+    // 条件4：前景 IoU 要达到阈值。
     if (_config.validate_warp_overlap) {
         const double iou = computeMaskIou(warpedMask, targetMask);
         ctx.result.warp_overlap_iou = iou;
@@ -355,7 +648,7 @@ bool BasePipeline::validateWarpQuality(RegistrationContext& ctx) {
         }
     }
 
-    // 5. 重叠区域光度差检查（NMAD）。
+    // 条件5：重叠区域光度误差不能过大。
     if (_config.validate_warp_photometric) {
         cv::Mat overlapMask;
         cv::bitwise_and(warpedMask, targetMask, overlapMask);
@@ -396,10 +689,12 @@ bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
     const fs::path originals_dir = _config.output_dir / "originals";
     const fs::path warped_dir = _config.output_dir / "warped";
     const fs::path blend_dir = _config.output_dir / "blend";
+    const fs::path false_color_overlay_dir = _config.output_dir / "false_color_overlay";
     std::error_code ec;
     fs::create_directories(originals_dir, ec);
     fs::create_directories(warped_dir, ec);
     fs::create_directories(blend_dir, ec);
+    fs::create_directories(false_color_overlay_dir, ec);
 
     const std::string stem = buildOutputStem(ctx);
     const std::string sampleStem = ctx.image1_path.stem().string() + "_" +
@@ -436,6 +731,21 @@ bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
             const fs::path blend_out = blend_dir / (stem + "_blend.png");
             cv::imwrite(blend_out.string(), blend);
             IR_LOG_INFO("Wrote blend image: ", blend_out.string());
+        }
+
+        if (ctx.warped_image.size() == ctx.images.second.size()) {
+            cv::Mat falseColorOverlay;
+            if (buildFalseColorOverlay(ctx.warped_image,
+                                       ctx.images.second,
+                                       _config.warp_overlap_foreground_threshold,
+                                       falseColorOverlay)) {
+                const fs::path false_color_out =
+                    false_color_overlay_dir / (stem + "_false_color_overlay.png");
+                cv::imwrite(false_color_out.string(), falseColorOverlay);
+                IR_LOG_INFO("Wrote false-color overlay image: ", false_color_out.string());
+            } else {
+                IR_LOG_WARN("Failed to build false-color overlay image for: ", stem);
+            }
         }
     }
 
@@ -523,14 +833,14 @@ bool BasePipeline::run(RegistrationContext& ctx) {
     if (_config.warp && ctx.warped_image.empty()) {
         return fail("warp failed: warped image is empty");
     }
-    if (!validateWarpQuality(ctx)) {
-        return fail(ctx.result.message.empty() ? "warp validation failed" : ctx.result.message);
-    }
-
     // 运行评测指标（仅成功时计算）
     if (!_evaluator.metrics().empty()) {
         Sample dummySample;
         _evaluator.evaluate(ctx, dummySample);
+    }
+    if (!validateRegistrationQuality(ctx)) {
+        return fail(ctx.result.message.empty() ? "registration validation failed"
+                                              : ctx.result.message);
     }
 
     saveOutputs(ctx);

@@ -63,7 +63,7 @@ association:
       #   MATCH   只保留每个源轮廓的最佳匹配
       #   RADIUS  保留距离阈值内的所有匹配，配合 match_radius 使用
       # 默认值：KNN
-      match_mode: KNN
+      match_mode: MATCH
       # KNN 模式参数：保留前 k 个近邻
       # 默认值：2
       knn_k: 2

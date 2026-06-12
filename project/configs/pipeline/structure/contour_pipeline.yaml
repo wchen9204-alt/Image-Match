@@ -41,10 +41,18 @@ visualization:
 validation:
   warp_overlap:
     # 默认值：false / 0.20 / 10
-    enabled: false
+    enabled: true
     min_iou: 0.20
     foreground_threshold: 10
+  structure_overlap:
+    enabled: true
+    min_iou: 0.12
+    foreground_threshold: 0
+    dilate_size: 7
+  metric_quality:
+    enabled: true
+    min_ssim: 0.66
   photometric:
     # 默认值：false / 0.15
-    enabled: false
+    enabled: true
     max_nmad: 0.15

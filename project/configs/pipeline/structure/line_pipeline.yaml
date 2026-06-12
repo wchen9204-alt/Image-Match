@@ -32,8 +32,16 @@ validation:
     enabled: true
     min_iou: 0.20
     foreground_threshold: 10
+  structure_overlap:
+    enabled: true
+    min_iou: 0.12
+    foreground_threshold: 0
+    dilate_size: 7
+  metric_quality:
+    enabled: true
+    min_ssim: 0.66
   photometric:
-    enabled: false
+    enabled: true
     max_nmad: 0.15
 
 evaluator: ../../evaluator/metrics.yaml

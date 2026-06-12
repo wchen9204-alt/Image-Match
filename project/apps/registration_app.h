@@ -44,6 +44,13 @@ private:
         BATCH
     };
 
+    /// 输入 YAML 对应的运行模式。
+    enum class RunMode {
+        SINGLE,
+        BATCH,
+        COMPARE
+    };
+
     /// 批量评测模式使用的配置快照。
     struct BatchConfig {
         std::string name;
@@ -60,11 +67,8 @@ private:
     /// 执行一个 batch.yaml 中定义的批量任务。
     static int runBatch(const std::filesystem::path& batch_yaml);
 
-    /// 判断 YAML 是否符合批处理配置结构。
-    static bool isBatchYaml(const YAML::Node& node);
-
-    /// 判断 YAML 是否符合对比配置结构。
-    static bool isCompareYaml(const YAML::Node& node);
+    /// 根据 YAML 顶层结构识别单次、批处理或对比运行模式。
+    static RunMode detectRunMode(const YAML::Node& node);
 
     /// 执行对比任务，遍历配置中的方法组合输出总表。
     static int runCompare(const std::filesystem::path& compare_yaml);

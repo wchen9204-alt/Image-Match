@@ -77,6 +77,21 @@ struct PipelineConfig {
     bool validate_warp_photometric = false;
     double max_warp_photometric_error = 0.15;
 
+    bool validate_match_quality = false;
+    int min_match_inliers = 0;
+    double min_match_inlier_ratio = -1.0;
+    double max_match_reproj_error = -1.0;
+
+    bool validate_structure_overlap = false;
+    double min_structure_overlap_iou = 0.20;
+    int structure_overlap_foreground_threshold = 0;
+    int structure_overlap_dilate_size = 3;
+
+    bool validate_metric_quality = false;
+    double min_metric_psnr = -1.0;
+    double min_metric_ssim = -1.0;
+    double max_metric_rmse = -1.0;
+
     MethodFamily methodFamily() const { return method_family; }
 };
 

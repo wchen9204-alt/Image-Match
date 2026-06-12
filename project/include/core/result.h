@@ -27,7 +27,7 @@ struct RegistrationResult {
     double mean_reproj_error = 0.0;
     double warp_overlap_iou = -1.0;
     double warp_photometric_error = -1.0;
-
+    double structure_overlap_iou = -1.0;
     /// 各阶段耗时，单位毫秒。
     double t_load_ms = 0.0;
     double t_extract_ms = 0.0;

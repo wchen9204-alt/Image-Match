@@ -1,0 +1,39 @@
+# ---------------------------------------------------------------------------
+# Keypoint method comparison config.
+# Runs six keypoint pipelines on all dataset samples and writes comparison.csv.
+# ---------------------------------------------------------------------------
+name: compare_keypoint_methods
+
+base_pipeline: ../keypoint/akaze_pipeline.yaml
+
+combinations:
+  - label: akaze
+    pipeline: ../keypoint/akaze_pipeline.yaml
+  - label: brisk
+    pipeline: ../keypoint/brisk_pipeline.yaml
+  - label: kaze
+    pipeline: ../keypoint/kaze_pipeline.yaml
+  - label: orb
+    pipeline: ../keypoint/orb_pipeline.yaml
+  - label: sift
+    pipeline: ../keypoint/sift_pipeline.yaml
+  - label: surf
+    pipeline: ../keypoint/surf_pipeline.yaml
+
+dataset:
+  root: ../../../datasets
+  pattern_sources: [source, moving]
+  pattern_targets: [target, reference]
+  include: []
+
+output:
+  root: ../../../outputs/compare/keypoint
+  save_visuals: true
+  summary_csv: true
+
+visualization:
+  draw_matches: true
+  warp: true
+  show_source_window: false
+  show_target_window: false
+  show_warped_window: false

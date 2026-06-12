@@ -232,6 +232,7 @@ Typical files include:
 - inlier visualization
 - warped image
 - blend image
+- false-color overlay image
 - `run_summary.txt`
 - `run_summary.json`
 - batch `summary.csv`
