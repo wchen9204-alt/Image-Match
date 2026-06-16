@@ -10,9 +10,10 @@ type: FLANN
 
 params:
   # MATCH / KNN / RADIUS，默认 knn
-  method: knn
-
-  # L2 / HAMMING / HAMMING2 / AUTO，默认 AUTO
+  method: match
+  # L2 / L1 / HAMMING / HAMMING2 / AUTO
+  # 优先级：matcher 显式 norm_type 最高；AUTO 时使用 keypoint 的 descriptor_norm。
+  # 若两者都是 AUTO/UNKNOWN，则按描述子矩阵类型兜底推断。
   norm_type: AUTO
 
   # 当 method: knn 时使用，默认 2

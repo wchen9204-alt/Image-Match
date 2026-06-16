@@ -1,4 +1,4 @@
-#include "filter/distance_distribution_filter.h"
+﻿#include "filter/distance_distribution_filter.h"
 
 #include <algorithm>
 #include <cmath>
@@ -17,7 +17,7 @@ namespace {
 
 // 点特征法路径统一从当前筛选结果集合读取输入。
 std::vector<cv::DMatch> collectInputMatches(const KeypointMatchData& md) {
-    return md.filtered;
+    return md.filtered_matches;
 }
 
 // 将配置中的模式名称映射为具体的阈值估计策略。
@@ -127,7 +127,7 @@ bool DistanceDistributionFilter::apply(RegistrationContext& ctx) {
     const std::vector<cv::DMatch> input = collectInputMatches(md);
     if (input.empty()) {
         IR_LOG_WARN("DistanceDistributionFilter: no matches available to filter.");
-        md.filtered.clear();
+        md.filtered_matches.clear();
         return false;
     }
 
@@ -174,8 +174,10 @@ bool DistanceDistributionFilter::apply(RegistrationContext& ctx) {
                 ")");
 
     // 步骤四：将筛选结果写回，供后续阶段继续使用。
-    md.filtered = std::move(kept);
+    md.filtered_matches = std::move(kept);
     return true;
 }
 
 }
+
+

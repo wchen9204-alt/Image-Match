@@ -1,4 +1,4 @@
-#include "core/factory.h"
+﻿#include "core/factory.h"
 
 #include <algorithm>
 #include <stdexcept>
@@ -246,3 +246,4 @@ std::shared_ptr<IGeometryEstimator> Factory::createGeometryEstimator(const YAML:
 }
 
 } // namespace ir
+

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <filesystem>
 #include <opencv2/core.hpp>
@@ -23,3 +23,4 @@ struct Sample {
 };
 
 } // namespace ir
+

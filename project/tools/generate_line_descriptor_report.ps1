@@ -205,7 +205,7 @@ visualization:
 validation:
   warp_overlap:
     enabled: true
-    min_iou: 0.10
+    min_iou: 0.20
     foreground_threshold: 10
   structure_overlap:
     enabled: true
@@ -216,7 +216,7 @@ validation:
     enabled: true
     min_ssim: 0.66
   photometric:
-    enabled: false
+    enabled: true
     max_nmad: 0.15
 "@
         Write-Utf8NoBom $pipelineYaml $pipelineText

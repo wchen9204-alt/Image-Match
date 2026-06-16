@@ -1,4 +1,4 @@
-#include "pipeline/learning_pipeline.h"
+﻿#include "pipeline/learning_pipeline.h"
 
 #include <filesystem>
 #include <string>
@@ -73,13 +73,13 @@ bool LearningPipeline::runAssociation(RegistrationContext& ctx) {
 
     // 3. 将学习点对数量同步到通用结果字段，便于 summary/CSV 复用已有列。
     int rawCount = 0;
-    for (const auto& row : ctx.keypoint_match_data.raw_knn) {
+    for (const auto& row : ctx.keypoint_match_data.raw_matches_by_query) {
         rawCount += static_cast<int>(row.size());
     }
     ctx.result.num_keypoints_first = static_cast<int>(ctx.keypoint_data.first.keypoints.size());
     ctx.result.num_keypoints_second = static_cast<int>(ctx.keypoint_data.second.keypoints.size());
     ctx.result.num_raw_matches = rawCount;
-    ctx.result.num_filtered_matches = static_cast<int>(ctx.keypoint_match_data.filtered.size());
+    ctx.result.num_filtered_matches = static_cast<int>(ctx.keypoint_match_data.filtered_matches.size());
     return true;
 }
 
@@ -125,7 +125,7 @@ bool LearningPipeline::saveOutputs(RegistrationContext& ctx) {
     if (_config.draw_matches) {
         // 2. 保存全部学习匹配，便于观察模型原始输出的空间分布。
         DrawMatches::Options allOpt;
-        allOpt.draw_inliers_only = false;
+        allOpt.draw_raw_matches = true;
         allOpt.max_matches = _config.max_matches_drawn;
         const cv::Mat allVis = DrawMatches::render(ctx, allOpt);
         if (!allVis.empty()) {
@@ -137,7 +137,6 @@ bool LearningPipeline::saveOutputs(RegistrationContext& ctx) {
         // 3. 保存几何估计接受的内点，便于诊断匹配质量和模型筛选效果。
         DrawInliers::Options inlierOpt;
         inlierOpt.max_inliers = _config.max_matches_drawn;
-        inlierOpt.draw_outliers = false;
         const cv::Mat inlierVis = DrawInliers::render(ctx, inlierOpt);
         if (!inlierVis.empty()) {
             const fs::path out = learningDir / (stem + "_inlier_match.png");
@@ -151,3 +150,5 @@ bool LearningPipeline::saveOutputs(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+
+

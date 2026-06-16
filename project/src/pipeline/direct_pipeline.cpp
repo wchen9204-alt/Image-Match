@@ -1,4 +1,4 @@
-#include "pipeline/direct_pipeline.h"
+﻿#include "pipeline/direct_pipeline.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -12,6 +12,7 @@
 #include "core/factory.h"
 #include "utils/logger.h"
 #include "utils/timer.h"
+#include "utils/visualization/direct/draw_warp_difference.h"
 #include "utils/visualization/draw_matches.h"
 #include "utils/yaml_utils.h"
 
@@ -20,40 +21,6 @@ namespace fs = std::filesystem;
 namespace ir {
 
 namespace {
-
-/// 将 warped 与 target 的绝对差渲染成伪彩色热力图，便于肉眼观察局部配准误差。
-cv::Mat renderWarpDifference(const cv::Mat& warped, const cv::Mat& target) {
-    if (warped.empty() || target.empty() || warped.size() != target.size()) {
-        return {};
-    }
-
-    cv::Mat warpedGray;
-    cv::Mat targetGray;
-    if (warped.channels() == 1) {
-        warpedGray = warped;
-    } else {
-        cv::cvtColor(warped, warpedGray, cv::COLOR_BGR2GRAY);
-    }
-    if (target.channels() == 1) {
-        targetGray = target;
-    } else {
-        cv::cvtColor(target, targetGray, cv::COLOR_BGR2GRAY);
-    }
-
-    cv::Mat diff;
-    cv::absdiff(warpedGray, targetGray, diff);
-
-    cv::Mat diff8;
-    if (diff.depth() == CV_8U) {
-        diff8 = diff;
-    } else {
-        cv::normalize(diff, diff8, 0, 255, cv::NORM_MINMAX, CV_8U);
-    }
-
-    cv::Mat colored;
-    cv::applyColorMap(diff8, colored, cv::COLORMAP_TURBO);
-    return colored;
-}
 
 void removeStaleDirectOutput(const fs::path& out) {
     std::error_code ec;
@@ -144,7 +111,6 @@ bool DirectPipeline::saveOutputs(RegistrationContext& ctx) {
     const fs::path matchesOut = directDir / (stem + "_matches.png");
     if (_config.draw_matches && hasPointPairs) {
         DrawMatches::Options matchOpt;
-        matchOpt.draw_inliers_only = !ctx.direct_data.inlier_mask.empty();
         matchOpt.max_matches = _config.max_matches_drawn;
         const cv::Mat matchesVis = DrawMatches::render(ctx, matchOpt);
         if (!matchesVis.empty()) {
@@ -172,3 +138,4 @@ bool DirectPipeline::saveOutputs(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

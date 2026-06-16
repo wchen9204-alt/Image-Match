@@ -1,4 +1,4 @@
-#include "direct/dense/dense_flow_common.h"
+﻿#include "direct/dense/dense_flow_common.h"
 
 #include <algorithm>
 #include <cmath>
@@ -352,3 +352,4 @@ bool finalizeFlowAlignment(RegistrationContext& ctx,
 
 } // namespace dense_flow_common
 } // namespace ir
+

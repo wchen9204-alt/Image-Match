@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <opencv2/features2d.hpp>
 #include <yaml-cpp/yaml.h>
@@ -7,17 +7,17 @@
 
 namespace ir {
 
-/// KAZE ÌØÕ÷ÌáÈ¡Æ÷¡£
+/// KAZE ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½
 class KazeExtractor : public IKeypointExtractor {
 public:
-    /// ¸ù¾Ý YAML ÅäÖÃ³õÊ¼»¯ KAZE ²ÎÊý¡£
+    /// ï¿½ï¿½ï¿½ï¿½ YAML ï¿½ï¿½Ê¼ï¿½ï¿½ KAZE ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     explicit KazeExtractor(const YAML::Node& cfg);
 
     std::string name() const override { return "KAZE"; }
     KeypointType type() const override { return KeypointType::KAZE; }
-    NormType normType() const override { return NormType::L2; }
+    NormType normType() const override { return _norm; }
 
-    /// ÔÚÉÏÏÂÎÄÖÐÌáÈ¡ KAZE ¹Ø¼üµãºÍÃèÊö×Ó¡£
+    /// ï¿½ï¿½ï¿½Ø¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¡ï¿½ï¿½ï¿½Ð´ï¿½ï¿½ï¿½ï¿½×¼ï¿½ï¿½ï¿½ï¿½ï¿½Ä¡ï¿½
     bool extract(RegistrationContext& ctx) override;
 
 private:
@@ -28,6 +28,7 @@ private:
     int _nOctaveLayers = 4;
     int _diffusivity = static_cast<int>(cv::KAZE::DIFF_PM_G2);
 
+    NormType _norm = NormType::L2;
     cv::Ptr<cv::KAZE> _impl;
 };
 

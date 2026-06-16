@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <string>
 
@@ -23,3 +23,4 @@ public:
 };
 
 } // namespace ir
+

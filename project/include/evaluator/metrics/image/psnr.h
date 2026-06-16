@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <cmath>
 #include <opencv2/core.hpp>
@@ -50,3 +50,4 @@ private:
 };
 
 } // namespace ir
+

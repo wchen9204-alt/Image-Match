@@ -1,4 +1,4 @@
-#include "direct/dense/tvl1_flow_aligner.h"
+﻿#include "direct/dense/tvl1_flow_aligner.h"
 
 #include <algorithm>
 
@@ -105,3 +105,4 @@ bool Tvl1FlowAligner::align(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

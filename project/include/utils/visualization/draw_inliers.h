@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <opencv2/core.hpp>
 
@@ -13,8 +13,6 @@ public:
     struct Options {
         int max_inliers = 200;
         cv::Scalar inlier_color = cv::Scalar(0, 255, 0);
-        cv::Scalar non_inlier_color = cv::Scalar(0, 0, 255);
-        bool draw_outliers = false;
     };
 
     /// 渲染内点可视化图。
@@ -22,3 +20,4 @@ public:
 };
 
 } // namespace ir
+

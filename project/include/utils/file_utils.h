@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <filesystem>
 #include <fstream>
@@ -33,3 +33,4 @@ std::vector<std::filesystem::path> listSubdirectories(const std::filesystem::pat
 
 } // namespace file_utils
 } // namespace ir
+

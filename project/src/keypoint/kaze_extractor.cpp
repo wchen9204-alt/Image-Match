@@ -1,5 +1,6 @@
-#include "keypoint/kaze_extractor.h"
+﻿#include "keypoint/kaze_extractor.h"
 
+#include "utils/descriptor_norm_utils.h"
 #include "utils/image_utils.h"
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
@@ -16,6 +17,7 @@ KazeExtractor::KazeExtractor(const YAML::Node& cfg) {
     _nOctaveLayers = yaml_utils::getInt(params, "nOctaveLayers", 4);
     _diffusivity =
         yaml_utils::getInt(params, "diffusivity", static_cast<int>(cv::KAZE::DIFF_PM_G2));
+    _norm = descriptor_norm_utils::readConfiguredNorm(cfg, NormType::L2);
 
     _impl = cv::KAZE::create(_extended,
                              _upright,
@@ -35,7 +37,9 @@ KazeExtractor::KazeExtractor(const YAML::Node& cfg) {
                 ", nOctaveLayers=",
                 _nOctaveLayers,
                 ", diffusivity=",
-                _diffusivity);
+                _diffusivity,
+                ", norm=",
+                toString(_norm));
 }
 
 bool KazeExtractor::extract(RegistrationContext& ctx) {
@@ -47,7 +51,7 @@ bool KazeExtractor::extract(RegistrationContext& ctx) {
     auto& fd = ctx.keypoint_data;
     auto& images = ctx.images;
     fd.type = KeypointType::KAZE;
-    fd.norm_type = NormType::L2;
+    fd.norm_type = _norm;
 
     if (images.first.empty() || images.second.empty()) {
         IR_LOG_ERROR("KAZE::extract - source images are empty.");
@@ -73,3 +77,4 @@ bool KazeExtractor::extract(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

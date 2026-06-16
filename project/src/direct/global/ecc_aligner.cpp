@@ -1,4 +1,4 @@
-#include "direct/global/ecc_aligner.h"
+﻿#include "direct/global/ecc_aligner.h"
 
 #include <cmath>
 #include <string>
@@ -139,3 +139,4 @@ bool EccAligner::align(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

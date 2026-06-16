@@ -21,6 +21,7 @@ private:
     bool _withRotation = false;
     bool _withScale = false;
     double _thresholdFactor = 6.0;
+    bool _fallbackToInputIfEmpty = true;
 };
 
 }

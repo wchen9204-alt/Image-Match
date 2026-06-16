@@ -1,4 +1,4 @@
-#include "structure/edge_extractor.h"
+﻿#include "structure/edge_extractor.h"
 
 #include <algorithm>
 #include <string>
@@ -199,3 +199,4 @@ bool EdgeExtractor::extract(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

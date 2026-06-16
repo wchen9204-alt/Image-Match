@@ -227,6 +227,9 @@ int robustMethodFromString(const std::string& s) {
     if (u == "RHO") {
         return cv::RHO;
     }
+    if (u == "USAC_MAGSAC" || u == "MAGSAC" || u == "MAGSAC++") {
+        return cv::USAC_MAGSAC;
+    }
     if (u == "7POINT") {
         return cv::FM_7POINT;
     }

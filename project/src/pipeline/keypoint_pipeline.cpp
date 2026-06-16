@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include <opencv2/features2d.hpp>
 #include <opencv2/imgcodecs.hpp>
@@ -119,6 +120,13 @@ void removeStaleKeypointVariants(const fs::path& dir,
     }
 }
 
+struct MatchViewOutput {
+    MatchView view;
+    fs::path dir;
+    std::string suffix;
+    std::string log_label;
+};
+
 } // namespace
 
 void KeypointPipeline::resetStages() {
@@ -172,7 +180,7 @@ bool KeypointPipeline::runExtraction(RegistrationContext& ctx) {
 }
 
 bool KeypointPipeline::runAssociation(RegistrationContext& ctx) {
-    // 1. 先执行描述子匹配，生成 raw_knn 或初始 filtered 匹配。
+    // 1. 先执行描述子匹配，生成 raw_matches_by_query 或初始 filtered 匹配。
     if (!runMatch(ctx)) {
         return false;
     }
@@ -197,9 +205,9 @@ bool KeypointPipeline::runMatch(RegistrationContext& ctx) {
     // 2. 调用匹配器生成原始匹配结果。
     const bool ok = _matcher->match(ctx);
 
-    // 3. 统计 raw_knn 中的候选匹配数量，兼容 match / knn / radius 三类输出。
+    // 3. 统计 raw_matches_by_query 中的候选匹配数量，兼容 match / knn / radius 三类输出。
     int raw_match_count = 0;
-    for (const auto& neighbours : ctx.keypoint_match_data.raw_knn) {
+    for (const auto& neighbours : ctx.keypoint_match_data.raw_matches_by_query) {
         raw_match_count += static_cast<int>(neighbours.size());
     }
     ctx.result.num_raw_matches = raw_match_count;
@@ -210,18 +218,18 @@ bool KeypointPipeline::runFilters(RegistrationContext& ctx) {
     ScopedTimer st(ctx.result.t_filter_ms);
     auto& md = ctx.keypoint_match_data;
 
-    // 1. 若匹配器只写了 raw_knn，则先用每行 top-1 初始化 filtered。
-    if (!md.raw_knn.empty() && md.filtered.empty()) {
-        md.filtered.reserve(md.raw_knn.size());
-        for (const auto& nb : md.raw_knn) {
+    // 1. 若匹配器只写了 raw_matches_by_query，则先用每行 top-1 初始化 filtered。
+    if (!md.raw_matches_by_query.empty() && md.filtered_matches.empty()) {
+        md.filtered_matches.reserve(md.raw_matches_by_query.size());
+        for (const auto& nb : md.raw_matches_by_query) {
             if (!nb.empty()) {
-                md.filtered.push_back(nb.front());
+                md.filtered_matches.push_back(nb.front());
             }
         }
-        IR_LOG_INFO("Seeded filtered matches from raw_knn top-1: ",
-                    md.filtered.size(),
+        IR_LOG_INFO("Seeded filtered matches from raw_matches_by_query top-1: ",
+                    md.filtered_matches.size(),
                     " / ",
-                    md.raw_knn.size());
+                    md.raw_matches_by_query.size());
     }
 
     // 2. 按 YAML 顺序执行过滤器，每个过滤器都基于当前 filtered 继续筛选。
@@ -237,7 +245,7 @@ bool KeypointPipeline::runFilters(RegistrationContext& ctx) {
     }
 
     // 3. 记录最终进入几何估计的匹配数量。
-    ctx.result.num_filtered_matches = static_cast<int>(md.filtered.size());
+    ctx.result.num_filtered_matches = static_cast<int>(md.filtered_matches.size());
     return ok;
 }
 
@@ -276,10 +284,12 @@ bool KeypointPipeline::saveOutputs(RegistrationContext& ctx) {
     // 1. 准备点特征专属输出目录。
     const fs::path keypoints_dir = _config.output_dir / "keypoints";
     const fs::path all_match_dir = _config.output_dir / "all_match";
+    const fs::path filter_match_dir = _config.output_dir / "filter_match";
     const fs::path inlier_match_dir = _config.output_dir / "inlier_match";
     std::error_code ec;
     fs::create_directories(keypoints_dir, ec);
     fs::create_directories(all_match_dir, ec);
+    fs::create_directories(filter_match_dir, ec);
     fs::create_directories(inlier_match_dir, ec);
 
     const std::string stem = buildOutputStem(ctx);
@@ -338,28 +348,39 @@ bool KeypointPipeline::saveOutputs(RegistrationContext& ctx) {
             }
         };
 
-        DrawMatches::Options allOpt;
-        allOpt.draw_inliers_only = false;
-        allOpt.max_matches = _config.max_matches_drawn;
-        cv::Mat allVis = DrawMatches::render(ctx, allOpt);
-        const fs::path allOut = all_match_dir / (stem + "_all_match.png");
-        if (!allVis.empty()) {
-            cv::imwrite(allOut.string(), allVis);
-            IR_LOG_INFO("Wrote all matches visualization: ", allOut.string());
-        } else {
-            removeStale(allOut);
-        }
+        const std::vector<MatchViewOutput> outputs = {
+            {MatchView::RAW, all_match_dir, "_all_match.png", "all matches"},
+            {MatchView::FILTERED, filter_match_dir, "_filter_match.png", "filtered matches"},
+            {MatchView::INLIERS, inlier_match_dir, "_inlier_match.png", "inlier matches"}
+        };
 
-        DrawInliers::Options inlierOpt;
-        inlierOpt.max_inliers = _config.max_matches_drawn;
-        inlierOpt.draw_outliers = false;
-        cv::Mat inlierVis = DrawInliers::render(ctx, inlierOpt);
-        const fs::path inlierOut = inlier_match_dir / (stem + "_inlier_match.png");
-        if (!inlierVis.empty()) {
-            cv::imwrite(inlierOut.string(), inlierVis);
-            IR_LOG_INFO("Wrote inlier matches visualization: ", inlierOut.string());
-        } else {
-            removeStale(inlierOut);
+        for (const MatchView view : _config.match_views) {
+            const auto it = std::find_if(outputs.begin(), outputs.end(), [&](const MatchViewOutput& output) {
+                return output.view == view;
+            });
+            if (it == outputs.end()) {
+                continue;
+            }
+
+            const fs::path out = it->dir / (stem + it->suffix);
+            cv::Mat vis;
+            if (view == MatchView::INLIERS) {
+                DrawInliers::Options inlierOpt;
+                inlierOpt.max_inliers = _config.max_matches_drawn;
+                vis = DrawInliers::render(ctx, inlierOpt);
+            } else {
+                DrawMatches::Options matchOpt;
+                matchOpt.draw_raw_matches = view == MatchView::RAW;
+                matchOpt.max_matches = _config.max_matches_drawn;
+                vis = DrawMatches::render(ctx, matchOpt);
+            }
+
+            if (!vis.empty()) {
+                cv::imwrite(out.string(), vis);
+                IR_LOG_INFO("Wrote ", it->log_label, " visualization: ", out.string());
+            } else {
+                removeStale(out);
+            }
         }
 
         const fs::path old_matches_dir = _config.output_dir / "matches";
@@ -373,4 +394,6 @@ bool KeypointPipeline::saveOutputs(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+
+
 

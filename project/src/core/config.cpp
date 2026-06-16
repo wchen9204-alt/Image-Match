@@ -2,13 +2,41 @@
 
 #include <fstream>
 #include <stdexcept>
+#include <vector>
 
 #include "utils/logger.h"
+#include "utils/string_utils.h"
 #include "utils/yaml_utils.h"
 
 namespace fs = std::filesystem;
 
 namespace ir {
+
+namespace {
+
+std::vector<MatchView> parseMatchViews(const YAML::Node& vis,
+                                       const std::vector<MatchView>& fallback) {
+    if (!vis || !vis.IsMap() || !vis["match_views"] || !vis["match_views"].IsSequence()) {
+        return fallback;
+    }
+
+    std::vector<MatchView> out;
+    for (const auto& item : vis["match_views"]) {
+        const std::string key = string_utils::toUpperAscii(item.as<std::string>());
+        if (key == "RAW" || key == "ALL") {
+            out.push_back(MatchView::RAW);
+        } else if (key == "FILTERED" || key == "FILTER" || key == "FILTER_MATCH") {
+            out.push_back(MatchView::FILTERED);
+        } else if (key == "INLIERS" || key == "INLIER" || key == "INLIER_MATCH") {
+            out.push_back(MatchView::INLIERS);
+        } else {
+            IR_LOG_WARN("Unknown visualization.match_views entry ignored: ", key);
+        }
+    }
+    return out.empty() ? fallback : out;
+}
+
+} // namespace
 
 YAML::Node Config::load(const fs::path& path) {
     if (!fs::exists(path)) {
@@ -109,6 +137,7 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
         cfg.draw_keypoints = yaml_utils::getBool(vis, "draw_keypoints", false);
         cfg.draw_matches = yaml_utils::getBool(vis, "draw_matches", true);
         cfg.draw_inliers_only = yaml_utils::getBool(vis, "draw_inliers_only", false);
+        cfg.match_views = parseMatchViews(vis, cfg.match_views);
         cfg.max_matches_drawn = yaml_utils::getInt(vis, "max_matches_drawn", 100);
         cfg.warp = yaml_utils::getBool(vis, "warp", true);
         cfg.show_source_window = yaml_utils::getBool(vis, "show_source_window", false);
@@ -136,6 +165,8 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
         if (validation["match_quality"] && validation["match_quality"].IsMap()) {
             const auto& matchQuality = validation["match_quality"];
             cfg.validate_match_quality = yaml_utils::getBool(matchQuality, "enabled", false);
+            cfg.fail_on_match_quality =
+                yaml_utils::getBool(matchQuality, "fail_on_violation", false);
             cfg.min_match_inliers = yaml_utils::getInt(matchQuality, "min_inliers", 0);
             cfg.min_match_inlier_ratio =
                 yaml_utils::getDouble(matchQuality, "min_inlier_ratio", -1.0);
@@ -150,14 +181,6 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
                 yaml_utils::getInt(overlap, "foreground_threshold", 0);
             cfg.structure_overlap_dilate_size =
                 yaml_utils::getInt(overlap, "dilate_size", 3);
-        }
-        if (validation["metric_quality"] && validation["metric_quality"].IsMap()) {
-            const auto& metricQuality = validation["metric_quality"];
-            cfg.validate_metric_quality =
-                yaml_utils::getBool(metricQuality, "enabled", false);
-            cfg.min_metric_psnr = yaml_utils::getDouble(metricQuality, "min_psnr", -1.0);
-            cfg.min_metric_ssim = yaml_utils::getDouble(metricQuality, "min_ssim", -1.0);
-            cfg.max_metric_rmse = yaml_utils::getDouble(metricQuality, "max_rmse", -1.0);
         }
     }
 
@@ -178,3 +201,4 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
 }
 
 } // namespace ir
+

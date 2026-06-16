@@ -1,5 +1,6 @@
-#include "keypoint/brisk_extractor.h"
+﻿#include "keypoint/brisk_extractor.h"
 
+#include "utils/descriptor_norm_utils.h"
 #include "utils/image_utils.h"
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
@@ -12,6 +13,7 @@ BriskExtractor::BriskExtractor(const YAML::Node& cfg) {
     _thresh = yaml_utils::getInt(params, "thresh", 30);
     _octaves = yaml_utils::getInt(params, "octaves", 3);
     _patternScale = yaml_utils::getFloat(params, "patternScale", 1.0f);
+    _norm = descriptor_norm_utils::readConfiguredNorm(cfg, NormType::HAMMING);
 
     _impl = cv::BRISK::create(_thresh, _octaves, _patternScale);
 
@@ -20,7 +22,9 @@ BriskExtractor::BriskExtractor(const YAML::Node& cfg) {
                 ", octaves=",
                 _octaves,
                 ", patternScale=",
-                _patternScale);
+                _patternScale,
+                ", norm=",
+                toString(_norm));
 }
 
 bool BriskExtractor::extract(RegistrationContext& ctx) {
@@ -32,7 +36,7 @@ bool BriskExtractor::extract(RegistrationContext& ctx) {
     auto& fd = ctx.keypoint_data;
     auto& images = ctx.images;
     fd.type = KeypointType::BRISK;
-    fd.norm_type = NormType::HAMMING;
+    fd.norm_type = _norm;
 
     if (images.first.empty() || images.second.empty()) {
         IR_LOG_ERROR("BRISK::extract - source images are empty.");
@@ -58,3 +62,4 @@ bool BriskExtractor::extract(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

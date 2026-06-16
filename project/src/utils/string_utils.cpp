@@ -1,4 +1,4 @@
-#include "utils/string_utils.h"
+﻿#include "utils/string_utils.h"
 
 #include <cctype>
 
@@ -25,3 +25,4 @@ std::string normalizedKey(std::string_view value) {
 
 } // namespace string_utils
 } // namespace ir
+

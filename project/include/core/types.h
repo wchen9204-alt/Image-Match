@@ -68,6 +68,7 @@ TransformType toTransformType(GeometryType g);
 enum class ImageIndex : std::uint8_t { First = 0, Second = 1 };
 
 /// 将鲁棒估计方法名称转换为 OpenCV 常量；未知时返回 `-1`。
+/// 常用可选项：RANSAC / LMEDS / RHO / USAC_MAGSAC。
 int robustMethodFromString(const std::string& s);
 
 } // namespace ir

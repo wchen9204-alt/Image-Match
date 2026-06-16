@@ -1,4 +1,4 @@
-#include "transform/affine_warper.h"
+﻿#include "transform/affine_warper.h"
 
 #include <opencv2/imgproc.hpp>
 
@@ -47,3 +47,4 @@ bool AffineWarper::warp(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

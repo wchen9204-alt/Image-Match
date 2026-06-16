@@ -1,4 +1,4 @@
-#include "direct/sparse/klt_sparse_aligner.h"
+﻿#include "direct/sparse/klt_sparse_aligner.h"
 
 #include <algorithm>
 #include <string>
@@ -430,3 +430,4 @@ bool KltSparseAligner::align(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

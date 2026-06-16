@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <cmath>
 #include <opencv2/core.hpp>
@@ -35,6 +35,7 @@ public:
         cv::Mat diff;
         cv::absdiff(s, t, diff);
         diff = diff.mul(diff);
+
         r.value = std::sqrt(cv::mean(diff)[0]);
         r.valid = true;
         return r;
@@ -42,3 +43,4 @@ public:
 };
 
 } // namespace ir
+

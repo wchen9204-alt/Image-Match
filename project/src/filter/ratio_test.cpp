@@ -1,4 +1,4 @@
-#include "filter/ratio_test.h"
+﻿#include "filter/ratio_test.h"
 
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
@@ -44,16 +44,16 @@ bool RatioTestFilter::apply(RegistrationContext& ctx) {
 
     // 点特征法路径：将原始近邻候选过滤为当前筛选结果。
     auto& md = ctx.keypoint_match_data;
-    if (md.raw_knn.empty()) {
-        IR_LOG_WARN("RatioTestFilter: no raw_knn matches to filter.");
-        md.filtered.clear();
+    if (md.raw_matches_by_query.empty()) {
+        IR_LOG_WARN("RatioTestFilter: no raw_matches_by_query matches to filter.");
+        md.filtered_matches.clear();
         return false;
     }
 
     std::vector<cv::DMatch> kept;
-    kept.reserve(md.raw_knn.size());
+    kept.reserve(md.raw_matches_by_query.size());
     // 步骤一：逐行对点特征近邻候选执行比值检验。
-    for (const auto& neighbours : md.raw_knn) {
+    for (const auto& neighbours : md.raw_matches_by_query) {
         if (neighbours.size() < 2) {
             if (!neighbours.empty()) {
                 kept.push_back(neighbours.front());
@@ -68,13 +68,15 @@ bool RatioTestFilter::apply(RegistrationContext& ctx) {
     }
 
     // 步骤二：用通过检验的结果覆盖当前筛选结果。
-    md.filtered = std::move(kept);
+    md.filtered_matches = std::move(kept);
     IR_LOG_INFO("RatioTestFilter [keypoint] kept ",
-                md.filtered.size(),
+                md.filtered_matches.size(),
                 " / ",
-                md.raw_knn.size(),
+                md.raw_matches_by_query.size(),
                 " matches");
     return true;
 }
 
 }
+
+

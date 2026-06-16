@@ -31,9 +31,11 @@ protected:
     bool runExtraction(RegistrationContext& ctx) override;
 
     /// 执行匹配与过滤阶段，生成进入几何估计的候选匹配。
+    /// 其中 raw 来自匹配器原始输出，filtered 来自 runFilters() 的最终结果。
     bool runAssociation(RegistrationContext& ctx) override;
 
     /// 基于过滤后的匹配估计几何模型，并回填内点统计。
+    /// 几何阶段会把最终确认的 inliers / inlier_mask 写回上下文。
     bool runEstimation(RegistrationContext& ctx) override;
 
     /// 保存点特征专属可视化输出，再委托基类保存通用 warp 输出。
@@ -44,9 +46,11 @@ protected:
 
 private:
     /// 调用匹配器生成原始匹配结果，并统计原始候选规模。
+    /// 结果写入 KeypointMatchData::raw_matches_by_query，必要时也可直接写 filtered。
     bool runMatch(RegistrationContext& ctx);
 
     /// 按配置顺序执行匹配过滤器链，并统计过滤后规模。
+    /// 若匹配器只提供按 query 分组的候选，会先以每行 top-1 种子生成 filtered。
     bool runFilters(RegistrationContext& ctx);
 
     std::shared_ptr<IKeypointExtractor> _extractor;
@@ -56,3 +60,4 @@ private:
 };
 
 } // namespace ir
+

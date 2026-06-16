@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if ([string]::IsNullOrWhiteSpace($OutputFile)) {
-    $OutputFile = Join-Path $ProjectRoot 'TEST_CASES_REPORT_CN.html'
+    $OutputFile = Join-Path $ProjectRoot 'reports\direct\TEST_CASES_REPORT_CN.html'
 }
 
 $BatchRoot = Join-Path $ProjectRoot 'outputs\batch'
@@ -427,6 +427,7 @@ foreach ($key in $replacements.Keys) {
 }
 
 $encoding = [System.Text.UTF8Encoding]::new($false)
+[System.IO.Directory]::CreateDirectory((Split-Path -Path $OutputFile -Parent)) | Out-Null
 [System.IO.File]::WriteAllText($OutputFile, $html, $encoding)
 
 Write-Output "Generated: $OutputFile"

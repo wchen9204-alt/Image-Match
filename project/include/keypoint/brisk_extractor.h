@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <opencv2/features2d.hpp>
 #include <yaml-cpp/yaml.h>
@@ -7,17 +7,17 @@
 
 namespace ir {
 
-/// BRISK ÌØÕ÷ÌáÈ¡Æ÷¡£
+/// BRISK ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½
 class BriskExtractor : public IKeypointExtractor {
 public:
-    /// ¸ù¾Ý YAML ÅäÖÃ³õÊ¼»¯ BRISK ²ÎÊý¡£
+    /// ï¿½ï¿½ï¿½ï¿½ YAML ï¿½ï¿½Ê¼ï¿½ï¿½ BRISK ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     explicit BriskExtractor(const YAML::Node& cfg);
 
     std::string name() const override { return "BRISK"; }
     KeypointType type() const override { return KeypointType::BRISK; }
-    NormType normType() const override { return NormType::HAMMING; }
+    NormType normType() const override { return _norm; }
 
-    /// ÔÚÉÏÏÂÎÄÖÐÌáÈ¡ BRISK ¹Ø¼üµãºÍÃèÊö×Ó¡£
+    /// ï¿½ï¿½ï¿½Ø¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¡ï¿½ï¿½ï¿½Ð´ï¿½ï¿½ï¿½ï¿½×¼ï¿½ï¿½ï¿½ï¿½ï¿½Ä¡ï¿½
     bool extract(RegistrationContext& ctx) override;
 
 private:
@@ -25,6 +25,7 @@ private:
     int _octaves = 3;
     float _patternScale = 1.0f;
 
+    NormType _norm = NormType::HAMMING;
     cv::Ptr<cv::BRISK> _impl;
 };
 

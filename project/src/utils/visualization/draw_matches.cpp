@@ -27,8 +27,10 @@ cv::Mat DrawMatches::render(const RegistrationContext& ctx, const Options& opt) 
         return {};
     }
 
-    // `draw_inliers_only` 为 true 时严格只绘制真实内点，不再回退到 filtered。
-    const std::vector<cv::DMatch>& matches = opt.draw_inliers_only ? view.inliers : view.filtered;
+    // DrawMatches 只负责画匹配阶段的数据层级：raw 表示匹配器原始输出，filtered 表示过滤链结果。
+    // 几何内点由 DrawInliers 单独渲染，避免匹配图和内点图语义混用。
+    const std::vector<cv::DMatch>& matches =
+        opt.draw_raw_matches ? view.raw : view.filtered;
     if (matches.empty()) {
         IR_LOG_WARN("DrawMatches::render - no matches available for current draw mode.");
         return {};
@@ -63,3 +65,4 @@ cv::Mat DrawMatches::render(const RegistrationContext& ctx, const Options& opt) 
 }
 
 } // namespace ir
+

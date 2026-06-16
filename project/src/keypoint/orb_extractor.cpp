@@ -1,5 +1,6 @@
-#include "keypoint/orb_extractor.h"
+﻿#include "keypoint/orb_extractor.h"
 
+#include "utils/descriptor_norm_utils.h"
 #include "utils/image_utils.h"
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
@@ -23,7 +24,9 @@ OrbExtractor::OrbExtractor(const YAML::Node& cfg) {
         IR_LOG_WARN("ORB WTA_K must be 2, 3, or 4; using 2 instead of ", _wtaK);
         _wtaK = 2;
     }
-    _norm = (_wtaK == 3 || _wtaK == 4) ? NormType::HAMMING2 : NormType::HAMMING;
+    const NormType default_norm =
+        (_wtaK == 3 || _wtaK == 4) ? NormType::HAMMING2 : NormType::HAMMING;
+    _norm = descriptor_norm_utils::readConfiguredNorm(cfg, default_norm);
 
     _impl = cv::ORB::create(_nfeatures,
                             _scaleFactor,
@@ -84,3 +87,4 @@ bool OrbExtractor::extract(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

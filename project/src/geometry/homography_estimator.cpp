@@ -92,3 +92,4 @@ bool HomographyEstimator::estimate(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

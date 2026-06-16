@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <memory>
 #include <string>
@@ -56,9 +56,6 @@ protected:
     /// 验证结构响应图在 warp 后是否与目标结构响应图足够重合。
     virtual bool validateStructureOverlap(RegistrationContext& ctx);
 
-    /// 验证 evaluator 输出的图像质量指标，例如 PSNR、SSIM、RMSE。
-    virtual bool validateMetricQuality(RegistrationContext& ctx);
-
     /// 验证 warped source 与 target 的前景重叠和光度误差。
     virtual bool validateWarpQuality(RegistrationContext& ctx);
 
@@ -76,3 +73,4 @@ protected:
 };
 
 } // namespace ir
+

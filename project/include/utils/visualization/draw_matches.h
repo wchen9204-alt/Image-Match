@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <opencv2/core.hpp>
 
@@ -11,7 +11,7 @@ class DrawMatches {
 public:
     /// 绘制选项。
     struct Options {
-        bool draw_inliers_only = true;
+        bool draw_raw_matches = false;
         int max_matches = 100;
         cv::Scalar match_color = cv::Scalar(0, 255, 0);
         cv::Scalar single_point = cv::Scalar(0, 0, 255);
@@ -22,3 +22,4 @@ public:
 };
 
 } // namespace ir
+

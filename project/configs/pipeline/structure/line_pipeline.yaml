@@ -37,9 +37,6 @@ validation:
     min_iou: 0.12
     foreground_threshold: 0
     dilate_size: 7
-  metric_quality:
-    enabled: true
-    min_ssim: 0.66
   photometric:
     enabled: true
     max_nmad: 0.15

@@ -1,4 +1,4 @@
-#include "data/correspondence_view.h"
+﻿#include "data/correspondence_view.h"
 
 #include <algorithm>
 #include <cmath>
@@ -12,7 +12,16 @@ namespace ir {
 
 namespace {
 
-/// 根据掩码（inlier_mask），从所有匹配对（filtered）里筛选出内点，存入 inliers 列表。
+std::vector<cv::DMatch> collectRawMatches(const std::vector<std::vector<cv::DMatch>>& raw_matches_by_query) {
+    std::vector<cv::DMatch> out;
+    for (const auto& neighbours : raw_matches_by_query) {
+        out.insert(out.end(), neighbours.begin(), neighbours.end());
+    }
+    return out;
+}
+
+/// 根据掩码（inlier_mask），从 filtered 中重建内点列表。
+/// 该逻辑仅保留给直接法等仍只写 mask、不单独写 inliers 的来源使用。
 void fillInliersFromMask(CorrespondenceView& view) {
     view.inliers.clear();
     if (view.filtered.empty()) {
@@ -69,19 +78,22 @@ bool isStructureInlierMatch(const cv::DMatch& match, const std::vector<cv::DMatc
 
 /// 往匹配数据里添加一对线段端点匹配
 void appendLineEndpointPair(CorrespondenceView& view,
+                            std::vector<cv::DMatch>& matches,
                             const cv::Point2f& srcPt,
                             const cv::Point2f& dstPt,
                             float distance,
                             int structureMatchIndex,
-                            bool inlier) {
+                            int inlierFlag) {
     const int idx = static_cast<int>(view.first_keypoints.size());
     view.first_keypoints.emplace_back(srcPt, 1.0f);
     view.second_keypoints.emplace_back(dstPt, 1.0f);
-    view.filtered.emplace_back(idx, idx, distance);
-    view.filtered.back().imgIdx = structureMatchIndex;
-    view.inlier_mask.push_back(inlier ? 1 : 0);
-    if (inlier) {
-        view.inliers.push_back(view.filtered.back());
+    matches.emplace_back(idx, idx, distance);
+    matches.back().imgIdx = structureMatchIndex;
+    if (inlierFlag >= 0) {
+        view.inlier_mask.push_back(inlierFlag ? 1 : 0);
+        if (inlierFlag) {
+            view.inliers.push_back(matches.back());
+        }
     }
 }
 /// 计算轮廓的质心，辅助结构法轮廓匹配的内点验证。
@@ -136,7 +148,9 @@ CorrespondenceSource correspondenceSourceFromContext(const RegistrationContext& 
 CorrespondenceView buildKeypointCorrespondenceView(const RegistrationContext& ctx) {
     const auto& kd = ctx.keypoint_data;
     const auto& md = ctx.keypoint_match_data;
-    if (md.filtered.empty() || kd.first.keypoints.empty() || kd.second.keypoints.empty()) {
+    if ((md.raw_matches_by_query.empty() && md.filtered_matches.empty()) ||
+        kd.first.keypoints.empty() ||
+        kd.second.keypoints.empty()) {
         return emptyView();
     }
 
@@ -145,12 +159,11 @@ CorrespondenceView buildKeypointCorrespondenceView(const RegistrationContext& ct
     view.source_name = toString(view.source);
     view.first_keypoints = kd.first.keypoints;
     view.second_keypoints = kd.second.keypoints;
-    view.filtered = md.filtered;
+    view.raw = collectRawMatches(md.raw_matches_by_query);
+    view.filtered = md.filtered_matches;
     view.inlier_mask = md.inlier_mask;
-    view.inliers = md.inliers;
-    if (view.inliers.empty()) {
-        fillInliersFromMask(view);
-    }
+    view.inliers = md.inlier_matches;
+    // 点特征法内点由几何阶段显式写回 md.inlier_matches，这里直接沿用，不再从 mask 二次推导。
     return view;
 }
 
@@ -170,7 +183,7 @@ CorrespondenceView buildLearningCorrespondenceView(const RegistrationContext& ct
 CorrespondenceView buildStructureCorrespondenceView(const RegistrationContext& ctx) {
     const auto& sd = ctx.structure_data;
     const auto& md = ctx.structure_match_data;
-    if (md.line_matches.empty()) {
+    if (md.raw_matches_knn.empty() && md.line_matches.empty()) {
         return emptyView();
     }
 
@@ -181,12 +194,14 @@ CorrespondenceView buildStructureCorrespondenceView(const RegistrationContext& c
     if (sd.type == StructureType::LINE) {
         const auto& srcLines = sd.first.lines;
         const auto& dstLines = sd.second.lines;
-        for (size_t i = 0; i < md.line_matches.size(); ++i) {
-            const cv::DMatch& lm = md.line_matches[i];
+        const auto appendLineMatch = [&](const cv::DMatch& lm,
+                                         int structureMatchIndex,
+                                         std::vector<cv::DMatch>& matches,
+                                         int inlierFlag) {
             if (lm.queryIdx < 0 || lm.trainIdx < 0 ||
                 lm.queryIdx >= static_cast<int>(srcLines.size()) ||
                 lm.trainIdx >= static_cast<int>(dstLines.size())) {
-                continue;
+                return;
             }
 
             const cv::Vec4i& srcLine = srcLines[static_cast<size_t>(lm.queryIdx)];
@@ -199,33 +214,64 @@ CorrespondenceView buildStructureCorrespondenceView(const RegistrationContext& c
                 std::swap(dp1, dp2);
             }
 
+            appendLineEndpointPair(view, matches, sp1, dp1, lm.distance, structureMatchIndex, inlierFlag);
+            appendLineEndpointPair(view, matches, sp2, dp2, lm.distance, structureMatchIndex, inlierFlag);
+        };
+
+        int rawIndex = 0;
+        for (const auto& neighbours : md.raw_matches_knn) {
+            for (const cv::DMatch& lm : neighbours) {
+                appendLineMatch(lm, rawIndex++, view.raw, -1);
+            }
+        }
+
+        for (size_t i = 0; i < md.line_matches.size(); ++i) {
+            const cv::DMatch& lm = md.line_matches[i];
             // 线段匹配转为两个端点点对，保持与结构几何估计阶段相同的点对语义。
             const bool inlier = isStructureInlierMatch(lm, md.inlier_line_matches);
-            appendLineEndpointPair(view, sp1, dp1, lm.distance, static_cast<int>(i), inlier);
-            appendLineEndpointPair(view, sp2, dp2, lm.distance, static_cast<int>(i), inlier);
+            appendLineMatch(lm, static_cast<int>(i), view.filtered, inlier ? 1 : 0);
         }
     } else if (sd.type == StructureType::CONTOUR) {
         const auto& srcContours = sd.first.contours;
         const auto& dstContours = sd.second.contours;
-        for (size_t i = 0; i < md.line_matches.size(); ++i) {
-            const cv::DMatch& lm = md.line_matches[i];
+        const auto appendContourMatch = [&](const cv::DMatch& lm,
+                                            int structureMatchIndex,
+                                            std::vector<cv::DMatch>& matches,
+                                            int inlierFlag) {
             if (lm.queryIdx < 0 || lm.trainIdx < 0 ||
                 lm.queryIdx >= static_cast<int>(srcContours.size()) ||
                 lm.trainIdx >= static_cast<int>(dstContours.size())) {
-                continue;
+                return;
             }
 
             const cv::Point2f srcCentroid = contourCentroid(srcContours[static_cast<size_t>(lm.queryIdx)]);
             const cv::Point2f dstCentroid = contourCentroid(dstContours[static_cast<size_t>(lm.trainIdx)]);
             if (srcCentroid.x < 0.0f || srcCentroid.y < 0.0f ||
                 dstCentroid.x < 0.0f || dstCentroid.y < 0.0f) {
-                continue;
+                return;
             }
 
+            appendLineEndpointPair(
+                view, matches, srcCentroid, dstCentroid, lm.distance, structureMatchIndex, inlierFlag);
+        };
+
+        int rawIndex = 0;
+        for (const auto& neighbours : md.raw_matches_knn) {
+            for (const cv::DMatch& lm : neighbours) {
+                appendContourMatch(lm, rawIndex++, view.raw, -1);
+            }
+        }
+
+        for (size_t i = 0; i < md.line_matches.size(); ++i) {
+            const cv::DMatch& lm = md.line_matches[i];
             // 轮廓匹配转为质心点对，保持与结构几何估计阶段相同的点对语义。
             const bool inlier = isStructureInlierMatch(lm, md.inlier_line_matches);
-            appendLineEndpointPair(view, srcCentroid, dstCentroid, lm.distance, static_cast<int>(i), inlier);
+            appendContourMatch(lm, static_cast<int>(i), view.filtered, inlier ? 1 : 0);
         }
+    }
+
+    if (view.raw.empty()) {
+        view.raw = view.filtered;
     }
 
     return view.empty() ? emptyView() : view;
@@ -256,6 +302,7 @@ CorrespondenceView buildDirectCorrespondenceView(const RegistrationContext& ctx)
         view.filtered.emplace_back(static_cast<int>(i), static_cast<int>(i), distance);
     }
 
+    view.raw = view.filtered;
     view.inlier_mask = dd.inlier_mask;
     fillInliersFromMask(view);
     return view;
@@ -307,3 +354,5 @@ CorrespondenceView buildBestCorrespondenceView(const RegistrationContext& ctx) {
 }
 
 } // namespace ir
+
+

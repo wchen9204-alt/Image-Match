@@ -1,4 +1,4 @@
-#include "filter/gms_filter.h"
+﻿#include "filter/gms_filter.h"
 
 #include <opencv2/xfeatures2d.hpp>
 
@@ -13,13 +13,16 @@ GmsFilter::GmsFilter(const YAML::Node& cfg) {
     _withRotation = yaml_utils::getBool(params, "withRotation", false);
     _withScale = yaml_utils::getBool(params, "withScale", false);
     _thresholdFactor = yaml_utils::getDouble(params, "thresholdFactor", 6.0);
+    _fallbackToInputIfEmpty = yaml_utils::getBool(params, "fallbackToInputIfEmpty", true);
 
     IR_LOG_INFO("GmsFilter: withRotation=",
                 _withRotation,
                 ", withScale=",
                 _withScale,
                 ", thresholdFactor=",
-                _thresholdFactor);
+                _thresholdFactor,
+                ", fallbackToInputIfEmpty=",
+                _fallbackToInputIfEmpty);
 }
 
 bool GmsFilter::apply(RegistrationContext& ctx) {
@@ -39,28 +42,55 @@ bool GmsFilter::apply(RegistrationContext& ctx) {
         return false;
     }
 
-    std::vector<cv::DMatch> input = md.filtered;
+    std::vector<cv::DMatch> input = md.filtered_matches;
     if (input.empty()) {
         IR_LOG_WARN("GMS: no input matches.");
         return false;
     }
 
-    // 步骤一：调用网格运动统计，保留局部运动一致的匹配。
+    // 步骤一：过滤掉越界匹配，避免外部匹配器或旧缓存导致 matchGMS 访问非法 keypoint。
+    std::vector<cv::DMatch> validInput;
+    validInput.reserve(input.size());
+    for (const auto& m : input) {
+        if (m.queryIdx >= 0 &&
+            m.trainIdx >= 0 &&
+            m.queryIdx < static_cast<int>(fd.first.keypoints.size()) &&
+            m.trainIdx < static_cast<int>(fd.second.keypoints.size())) {
+            validInput.push_back(m);
+        }
+    }
+    if (validInput.empty()) {
+        IR_LOG_WARN("GMS: no valid keypoint matches after index check.");
+        return false;
+    }
+    if (validInput.size() != input.size()) {
+        IR_LOG_WARN("GMS ignored ",
+                    input.size() - validInput.size(),
+                    " matches with invalid keypoint indices.");
+    }
+
+    // 步骤二：调用网格运动统计，保留局部运动一致的匹配。
     std::vector<cv::DMatch> kept;
     cv::xfeatures2d::matchGMS(images.first.size(),
                               images.second.size(),
                               fd.first.keypoints,
                               fd.second.keypoints,
-                              input,
+                              validInput,
                               kept,
                               _withRotation,
                               _withScale,
                               _thresholdFactor);
 
-    IR_LOG_INFO("GMS kept ", kept.size(), " / ", input.size(), " matches");
+    IR_LOG_INFO("GMS kept ", kept.size(), " / ", validInput.size(), " matches");
 
-    // 步骤二：用网格运动统计精炼后的结果覆盖当前筛选结果。
-    md.filtered = std::move(kept);
+    if (kept.empty() && _fallbackToInputIfEmpty) {
+        IR_LOG_WARN("GMS kept 0 matches; fallbackToInputIfEmpty enabled, keeping input matches.");
+        md.filtered_matches = std::move(validInput);
+        return true;
+    }
+
+    // 步骤三：用网格运动统计精炼后的结果覆盖当前筛选结果。
+    md.filtered_matches = std::move(kept);
     return true;
 }
 

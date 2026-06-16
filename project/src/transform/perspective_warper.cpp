@@ -1,4 +1,4 @@
-#include "transform/perspective_warper.h"
+﻿#include "transform/perspective_warper.h"
 
 #include <cmath>
 
@@ -70,3 +70,4 @@ bool PerspectiveWarper::warp(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

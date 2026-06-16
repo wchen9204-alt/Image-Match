@@ -62,8 +62,12 @@ public:
                 ++blocks;
             }
         }
-        r.value = blocks > 0 ? ssimSum / blocks : 0.0;
-        r.valid = blocks > 0;
+        if (blocks == 0) {
+            r.note = "no valid blocks";
+            return r;
+        }
+        r.value = ssimSum / blocks;
+        r.valid = true;
         return r;
     }
 
@@ -73,3 +77,4 @@ private:
 };
 
 } // namespace ir
+

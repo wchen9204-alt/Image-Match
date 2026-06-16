@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <memory>
 #include <string>
@@ -41,3 +41,4 @@ private:
 };
 
 } // namespace ir
+

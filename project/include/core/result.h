@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <string>
 
@@ -39,3 +39,4 @@ struct RegistrationResult {
 };
 
 } // namespace ir
+

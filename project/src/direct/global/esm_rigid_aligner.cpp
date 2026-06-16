@@ -1,4 +1,4 @@
-#include "direct/global/esm_rigid_aligner.h"
+﻿#include "direct/global/esm_rigid_aligner.h"
 
 #include <algorithm>
 #include <cmath>
@@ -154,3 +154,4 @@ bool EsmRigidAligner::align(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

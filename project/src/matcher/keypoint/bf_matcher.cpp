@@ -1,27 +1,12 @@
-#include "matcher/keypoint/bf_matcher.h"
+ï»¿#include "matcher/keypoint/bf_matcher.h"
 
 #include <opencv2/features2d.hpp>
 
+#include "utils/descriptor_norm_utils.h"
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
 
 namespace ir {
-
-namespace {
-
-// ¾àÀëÀàĞÍÓÅÏÈÊ¹ÓÃÏÔÊ½ÅäÖÃ£¬Æä´Î¼Ì³ĞÌØÕ÷ÌáÈ¡½×¶ÎÔ¼¶¨£¬×îºó°´ÃèÊö×ÓÀàĞÍ¶µµ×ÍÆ¶Ï¡£
-NormType resolveNormType(const KeypointData& fd, NormType configuredNorm) {
-    NormType effective = configuredNorm;
-    if (effective == NormType::UNKNOWN) {
-        effective = fd.norm_type;
-    }
-    if (effective == NormType::UNKNOWN) {
-        effective = (fd.first.descriptors.type() == CV_8U) ? NormType::HAMMING : NormType::L2;
-    }
-    return effective;
-}
-
-} // namespace
 
 BfMatcher::BfMatcher(const YAML::Node& cfg) {
     const auto params = cfg["params"];
@@ -46,7 +31,7 @@ BfMatcher::BfMatcher(const YAML::Node& cfg) {
 
     _crossCheck = yaml_utils::getBool(params, "crossCheck", false);
     if (_crossCheck && _method != MatchMethod::MATCH) {
-        // Cross-check Ö»ÊÊÓÃÓÚÒ»¶ÔÒ»×î½üÁÚ£¬²»ÊÊºÏ k-NN ºÍ radius ½á¹û¡£
+        // Cross-check åªé€‚ç”¨äºä¸€å¯¹ä¸€æœ€è¿‘é‚»åŒ¹é…ã€‚
         IR_LOG_WARN("BFMatcher crossCheck only applies to method=MATCH; disabling it for method=",
                     toString(_method));
         _crossCheck = false;
@@ -71,7 +56,7 @@ bool BfMatcher::match(RegistrationContext& ctx) {
     auto& fd = ctx.keypoint_data;
     auto& md = ctx.keypoint_match_data;
 
-    // Ã¿´ÎÆ¥ÅäÇ°Çå¿Õ¾É½á¹û£¬±ÜÃâ¸´ÓÃÉÏÏÂÎÄÊ±»ìÈëÉÏÒ»×éÍ¼Ïñ¶ÔµÄÊı¾İ¡£
+    // æ¯æ¬¡åŒ¹é…å‰æ¸…ç©ºæ—§ç»“æœï¼Œé¿å…å¤ç”¨ä¸Šä¸‹æ–‡æ—¶æ··å…¥ä¸Šä¸€ç»„æ•°æ®ã€‚
     md.clear();
 
     if (fd.first.descriptors.empty() || fd.second.descriptors.empty()) {
@@ -79,7 +64,8 @@ bool BfMatcher::match(RegistrationContext& ctx) {
         return false;
     }
 
-    const NormType effective = resolveNormType(fd, _normType);
+    const NormType effective =
+        descriptor_norm_utils::resolve(_normType, fd.norm_type, fd.first.descriptors);
     const int cv_norm = toCvNorm(effective);
 
     IR_LOG_INFO("BFMatcher matching with norm=",
@@ -101,38 +87,38 @@ bool BfMatcher::match(RegistrationContext& ctx) {
 
     switch (_method) {
     case MatchMethod::MATCH: {
-        // MATCH ·ÖÖ§Í³Ò»°ü×°³Éµ¥ÔªËØ knn ĞĞ£¬±ãÓÚºóĞø¹ıÂËÆ÷¸´ÓÃÍ¬Ò»Êı¾İ½á¹¹¡£
+        // å°† MATCH ç»“æœåŒ…è£…æˆå•å…ƒç´  KNN è¡Œï¼Œä¾¿äºåç»­è¿‡æ»¤å™¨å¤ç”¨ã€‚
         std::vector<cv::DMatch> matches;
         matcher->match(fd.first.descriptors, fd.second.descriptors, matches);
 
-        md.raw_knn.reserve(matches.size());
+        md.raw_matches_by_query.reserve(matches.size());
         for (const auto& match : matches) {
-            md.raw_knn.push_back({match});
+            md.raw_matches_by_query.push_back({match});
         }
-        md.filtered = matches;
+        md.filtered_matches = matches;
 
         IR_LOG_INFO("BFMatcher produced ",
-                    md.filtered.size(),
+                    md.filtered_matches.size(),
                     " matches (method=MATCH, crossCheck=",
                     _crossCheck,
                     ")");
-        return !md.filtered.empty();
+        return !md.filtered_matches.empty();
     }
     case MatchMethod::KNN:
-        // k-NN ±£ÁôºòÑ¡ÁÚ¾ÓÅÅĞòĞÅÏ¢£¬¹© ratio test µÈ¹ıÂËÆ÷¼ÌĞøÊ¹ÓÃ¡£
-        matcher->knnMatch(fd.first.descriptors, fd.second.descriptors, md.raw_knn, _knnK);
+        // KNN ä¿ç•™é‚»å±…æ’åºä¿¡æ¯ï¼Œä¾› ratio test ç­‰è¿‡æ»¤å™¨ä½¿ç”¨ã€‚
+        matcher->knnMatch(fd.first.descriptors, fd.second.descriptors, md.raw_matches_by_query, _knnK);
         IR_LOG_INFO(
-            "BFMatcher produced ", md.raw_knn.size(), " query rows (method=KNN, k=", _knnK, ")");
-        return !md.raw_knn.empty();
+            "BFMatcher produced ", md.raw_matches_by_query.size(), " query rows (method=KNN, k=", _knnK, ")");
+        return !md.raw_matches_by_query.empty();
     case MatchMethod::RADIUS:
-        // °ë¾¶ËÑË÷¸üÊÊºÏ±£Áô¾Ö²¿ÁÚÓòÃÜ¶ÈĞÅÏ¢£¬ºóĞø½×¶ÎÔÙ¾ö¶¨ÈçºÎ²Ã¼ô¡£
-        matcher->radiusMatch(fd.first.descriptors, fd.second.descriptors, md.raw_knn, _radius);
+        // åŠå¾„åŒ¹é…ä¿ç•™å±€éƒ¨é‚»åŸŸå€™é€‰ï¼Œåç»­é˜¶æ®µå†å†³å®šå¦‚ä½•ç­›é€‰ã€‚
+        matcher->radiusMatch(fd.first.descriptors, fd.second.descriptors, md.raw_matches_by_query, _radius);
         IR_LOG_INFO("BFMatcher produced ",
-                    md.raw_knn.size(),
+                    md.raw_matches_by_query.size(),
                     " query rows (method=RADIUS, radius=",
                     _radius,
                     ")");
-        return !md.raw_knn.empty();
+        return !md.raw_matches_by_query.empty();
     case MatchMethod::UNKNOWN:
     default:
         IR_LOG_ERROR("BFMatcher::match - unsupported method: ", toString(_method));
@@ -141,3 +127,5 @@ bool BfMatcher::match(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+
+

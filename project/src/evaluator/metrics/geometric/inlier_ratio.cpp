@@ -1,4 +1,4 @@
-#include "evaluator/metrics/geometric/inlier_ratio.h"
+﻿#include "evaluator/metrics/geometric/inlier_ratio.h"
 
 #include "data/correspondence_view.h"
 
@@ -31,4 +31,5 @@ MetricResult InlierRatioMetric::compute(const RegistrationContext& ctx, const Sa
 }
 
 } // namespace ir
+
 

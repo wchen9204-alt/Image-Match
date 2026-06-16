@@ -1,4 +1,4 @@
-#include "structure/contour_extractor.h"
+﻿#include "structure/contour_extractor.h"
 
 #include <algorithm>
 #include <string>
@@ -151,3 +151,4 @@ bool ContourExtractor::extract(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

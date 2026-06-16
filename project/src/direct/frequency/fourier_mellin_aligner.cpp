@@ -1,4 +1,4 @@
-#include "direct/frequency/fourier_mellin_aligner.h"
+﻿#include "direct/frequency/fourier_mellin_aligner.h"
 
 #include <algorithm>
 #include <cmath>
@@ -578,3 +578,4 @@ bool DirectFourierMellinAligner::align(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

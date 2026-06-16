@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <algorithm>
 #include <cmath>
@@ -343,3 +343,4 @@ inline bool runRigidAlignment(RegistrationContext& ctx,
 
 } // namespace rigid_direct_common
 } // namespace ir
+

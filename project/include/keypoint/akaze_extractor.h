@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <opencv2/features2d.hpp>
 #include <yaml-cpp/yaml.h>
@@ -7,18 +7,18 @@
 
 namespace ir {
 
-/// AKAZE ÌØÕ÷ÌáÈ¡Æ÷¡£
+/// AKAZE ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½
 class AkazeExtractor : public IKeypointExtractor {
 public:
-    /// ¸ù¾İ YAML ÅäÖÃ³õÊ¼»¯ AKAZE ²ÎÊı¡£
+    /// ï¿½ï¿½ï¿½ï¿½ YAML ï¿½ï¿½ï¿½Ã³ï¿½Ê¼ï¿½ï¿½ AKAZE ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     explicit AkazeExtractor(const YAML::Node& cfg);
 
     std::string name() const override { return "AKAZE"; }
     KeypointType type() const override { return KeypointType::AKAZE; }
-    /// AKAZE Ä¬ÈÏÊ¹ÓÃ¶ş½øÖÆÃèÊö×Ó£¬Í¨³£¶ÔÓ¦ Hamming ¾àÀë¡£
+    /// AKAZE Ä¬ï¿½ï¿½Ê¹ï¿½Ã¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó£ï¿½Í¨ï¿½ï¿½ï¿½ï¿½Ó¦ Hamming ï¿½ï¿½ï¿½ë¡£
     NormType normType() const override { return _norm; }
 
-    /// ÔÚÉÏÏÂÎÄÖĞÌáÈ¡ AKAZE ¹Ø¼üµãºÍÃèÊö×Ó¡£
+    /// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¡ AKAZE ï¿½Ø¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó¡ï¿½
     bool extract(RegistrationContext& ctx) override;
 
 private:
@@ -35,3 +35,4 @@ private:
 };
 
 } // namespace ir
+

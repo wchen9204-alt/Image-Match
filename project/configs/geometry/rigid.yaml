@@ -1,24 +1,66 @@
-# ---------------------------------------------------------------------------
-# 2D 刚体变换估计器配置
-# 先使用 OpenCV cv::estimateAffinePartial2D(...) 做 RANSAC 内点筛选，
-# 再在内点上回归严格的旋转 + 平移模型，避免最终矩阵带缩放。
-# 注释中会区分 OpenCV 原始默认值和本项目默认值
+﻿# ---------------------------------------------------------------------------
+# 2D 刚体变换几何估计器
+#
+# 当前实现先使用 OpenCV estimateAffinePartial2D 做 RANSAC 初筛。
+# estimateAffinePartial2D 的模型是 partial affine / similarity：
+#   x' = s*cos(theta)*x - s*sin(theta)*y + tx
+#   y' = s*sin(theta)*x + s*cos(theta)*y + ty
+# 它允许统一缩放 s，不允许剪切和各向异性缩放。
+#
+# rigidRefineMode 用于决定是否把 OpenCV 得到的初始模型压回 s=1：
+# - NONE：直接使用 OpenCV 的 A 和 mask，可能包含统一缩放，不是严格刚体。
+# - SVD：使用 OpenCV RANSAC 内点重新拟合严格刚体，只保留旋转和平移。
+# - NORMALIZE_SCALE：从 OpenCV 的 sR 中去掉统一缩放，再重算平移。
 # ---------------------------------------------------------------------------
 type: RIGID
 
 params:
-  # 鲁棒估计方法，可选 RANSAC / LMEDS
-  # estimateAffinePartial2D 的 OpenCV 原始默认值: RANSAC
-  # 本项目默认值: RANSAC
+  # 初始估计后端；可选 OPENCV_PARTIAL_AFFINE / CUSTOM_RIGID_RANSAC；默认 OPENCV_PARTIAL_AFFINE。
+  #
+  # OPENCV_PARTIAL_AFFINE:
+  # - 先调用 estimateAffinePartial2D 做鲁棒初筛
+  # - 再按 rigidRefineMode 压回 s=1 的严格刚体
+  #
+  # CUSTOM_RIGID_RANSAC:
+  # - 直接在无缩放 rigid 模型下做项目内自定义 RANSAC
+  # - 输出本身就是严格刚体
+  # - 此时 method / rigidRefineMode 仅保留为兼容字段，不参与求解
+  estimatorBackend: OPENCV_PARTIAL_AFFINE
+
+  # 鲁棒估计方法；可选 RANSAC / LMEDS；默认 RANSAC。
+  # 仅在 estimatorBackend=OPENCV_PARTIAL_AFFINE 时生效。
+  # 注意：OpenCV estimateAffinePartial2D 不支持 USAC_MAGSAC，若配置会自动回退 RANSAC。
   method: RANSAC
-  # 判定内点的最大重投影误差，单位像素，OpenCV 原始默认值: 3.0
-  # 本项目默认值: 8.0（放宽以适应线端点等非点特征的定位精度）
-  ransacReprojThreshold: 8.0
-  # 最大迭代次数，OpenCV 原始默认值: 2000
+
+  # RANSAC 内点重投影误差阈值，单位像素；OpenCV 默认 3.0。
+  ransacReprojThreshold: 3.0
+
+  # RANSAC 最大迭代次数；OpenCV 默认 2000。
   maxIters: 2000
-  # 置信度，OpenCV 原始默认值: 0.99
+
+  # RANSAC 置信度；OpenCV 默认 0.99。
   confidence: 0.99
-  # 判定估计有效所需的最少内点数，本项目默认值: 2（降低以适应线匹配数量较少的情况）
-  minInliers: 2
-  # OpenCV 初始 partial affine 细化迭代次数，OpenCV 原始默认值: 10
+
+  # OpenCV partial affine 细化迭代次数；OpenCV 默认 10。
   refineIters: 10
+
+  # 判定几何结果有效所需的最少内点数；默认 2。
+  minInliers: 2
+
+  # 刚体精修模式；可选 SVD / NORMALIZE_SCALE / NONE；默认 SVD。
+  # 仅在 estimatorBackend=OPENCV_PARTIAL_AFFINE 时生效。
+  #
+  # SVD:
+  # - 使用 OpenCV RANSAC 内点
+  # - 再用 SVD 重新拟合严格刚体
+  # - 最终矩阵只保留旋转 + 平移，不允许缩放
+  #
+  # NORMALIZE_SCALE:
+  # - 从 OpenCV partial affine 的 sR 中估计统一缩放并去掉
+  # - 重新正交化旋转并重算平移和内点
+  #
+  # NONE:
+  # - 不做刚体精修
+  # - 直接使用 OpenCV 返回的 A 和内点 mask
+  # - 结果可能包含统一缩放，因此不是严格 rigid
+  rigidRefineMode: SVD

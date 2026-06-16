@@ -1,4 +1,4 @@
-#include "direct/dense/farneback_flow_aligner.h"
+﻿#include "direct/dense/farneback_flow_aligner.h"
 
 #include <algorithm>
 
@@ -81,3 +81,4 @@ bool FarnebackFlowAligner::align(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

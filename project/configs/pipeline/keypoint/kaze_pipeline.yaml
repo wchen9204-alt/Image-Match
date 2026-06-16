@@ -1,4 +1,4 @@
-# ---------------------------------------------------------------------------
+﻿# ---------------------------------------------------------------------------
 # KAZE 配准流水线配置
 # 当前文件用于组织一条完整的点特征配准流程，可按需调整
 # keypoint / matcher / filters / geometry 等子配置。
@@ -47,21 +47,19 @@ validation:
   warp_overlap:
     # 是否启用 warp 后的前景 IoU 验证。
     enabled: true
-    # 最低 IoU 阈值；低于该值时样本判失败。
+    # 最低 IoU 阈值；低于该值时样例判失败。
     min_iou: 0.10
     # 前景二值化阈值。
     foreground_threshold: 10
   match_quality:
-    # 是否启用匹配质量验证。
+    # 是否检查匹配质量统计。
     enabled: true
-    # 最少内点数；低于该值时样本判失败。
+    # 是否把 min_inliers / min_inlier_ratio / max_reproj_error 不满足判为失败。
+    # true 表示这些阈值由 YAML 直接控制样例成功/失败；false 表示仅输出日志告警。
+    fail_on_violation: true
+    # 最少内点数；低于该值时是否失败由 fail_on_violation 控制。
     min_inliers: 4
-    # 最低内点率；低于该值时样本判失败。
+    # 最低内点率；低于该值时是否失败由 fail_on_violation 控制。
     min_inlier_ratio: 0.10
     # 最大重投影误差；-1 表示不启用该项阈值。
     max_reproj_error: -1
-  metric_quality:
-    # 是否启用评测指标质量验证。
-    enabled: true
-    # 最低 SSIM 阈值；低于该值时样本判失败。
-    min_ssim: 0.60

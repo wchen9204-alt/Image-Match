@@ -1,29 +1,25 @@
-# ---------------------------------------------------------------------------
+﻿# ---------------------------------------------------------------------------
 # SIFT 配准流水线配置
 # 当前文件用于组织一条完整的点特征配准流程，可按需调整
 # keypoint / matcher / filters / geometry 等子配置。
 # ---------------------------------------------------------------------------
 name: sift_pipeline
 
-# 支持的关键点方法：
-# akaze / brisk / kaze / orb / sift / surf
+# 关键点方法；可选 akaze / brisk / kaze / orb / sift / surf。
 keypoint: ../../keypoint/sift.yaml
 
-# 支持的匹配器：
-# bf / flann
+# 匹配器；可选 bf / flann。
 matcher: ../../matcher/bf.yaml
 
-# 支持的过滤器：
-# ratio_test / cross_check / distance_distribution /
-# distance_threshold / gms / min_distance
+# 过滤器；可选 ratio_test / cross_check / distance_distribution /
+# distance_threshold / gms / min_distance。
 filters:
   - ../../filter/ratio_test.yaml
   - ../../filter/cross_check.yaml
-# - ../../filter/distance_distribution.yaml
+#  - ../../filter/distance_distribution.yaml
 # - ../../filter/distance_threshold.yaml
 
-# 支持的几何模型：
-# rigid / similarity / affine / homography
+# 几何模型；可选 rigid / similarity / affine / homography。
 geometry: ../../geometry/rigid.yaml
 evaluator: ../../evaluator/metrics.yaml
 
@@ -35,32 +31,38 @@ io:
 visualization:
   draw_keypoints: true
   draw_matches: true
+  # 匹配连线图输出层级；可选 RAW / FILTERED / INLIERS。
+  # RAW 表示匹配器原始候选，FILTERED 表示过滤链之后，INLIERS 表示几何估计内点。
+  match_views: [RAW, FILTERED, INLIERS]
   max_matches_drawn: 100
   warp: true
-  show_source_window: true
-  show_target_window: true
-  show_warped_window: true
+  show_source_window: false
+  show_target_window: false
+  show_warped_window: false
   wait_key: 0
 
 validation:
   warp_overlap:
     # 是否启用 warp 后的前景 IoU 验证。
     enabled: true
-    # 最低 IoU 阈值；低于该值时样本判失败。
+    # 最低 IoU 阈值；低于该值时样例判失败。
     min_iou: 0.10
     # 前景二值化阈值。
     foreground_threshold: 10
   match_quality:
-    # 是否启用匹配质量验证。
+    # 是否检查匹配质量统计。
     enabled: true
-    # 最少内点数；低于该值时样本判失败。
-    min_inliers: 4
-    # 最低内点率；低于该值时样本判失败。
-    min_inlier_ratio: 0.10
+    # 是否把 min_inliers / min_inlier_ratio / max_reproj_error 不满足判为失败。
+    # true 表示这些阈值由 YAML 直接控制样例成功/失败；false 表示仅输出日志告警。
+    fail_on_violation: true
+    # 最少内点数；低于该值时是否失败由 fail_on_violation 控制。
+    min_inliers: 0
+    # 最低内点率；低于该值时是否失败由 fail_on_violation 控制。
+    min_inlier_ratio: 0.05
     # 最大重投影误差；-1 表示不启用该项阈值。
     max_reproj_error: -1
-  metric_quality:
-    # 是否启用评测指标质量验证。
+  photometric:
+    # 是否启用重叠区域光度误差 NMAD 验证。
     enabled: true
-    # 最低 SSIM 阈值；低于该值时样本判失败。
-    min_ssim: 0.60
+    # 最大 NMAD 阈值；高于该值时样例判失败。
+    max_nmad: 0.15

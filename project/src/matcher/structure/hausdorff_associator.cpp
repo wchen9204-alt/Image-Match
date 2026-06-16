@@ -1,4 +1,4 @@
-#include "matcher/structure/hausdorff_associator.h"
+﻿#include "matcher/structure/hausdorff_associator.h"
 
 #include <algorithm>
 #include <cmath>
@@ -127,3 +127,4 @@ bool HausdorffAssociator::associate(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

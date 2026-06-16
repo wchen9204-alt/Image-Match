@@ -1,4 +1,4 @@
-#include "registration_app_helpers.h"
+﻿#include "registration_app_helpers.h"
 
 #include <cmath>
 #include <filesystem>
@@ -7,10 +7,6 @@
 #include <sstream>
 #include <vector>
 
-#include "pipeline/direct_pipeline.h"
-#include "pipeline/keypoint_pipeline.h"
-#include "pipeline/learning_pipeline.h"
-#include "pipeline/structure_pipeline.h"
 #include "utils/file_utils.h"
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
@@ -435,20 +431,6 @@ void printSummary(const RegistrationContext& ctx, MethodFamily family) {
     std::cout << buildSummaryText(ctx, family);
 }
 
-std::shared_ptr<IPipeline> createPipelineForConfig(const PipelineConfig& cfg) {
-    switch (cfg.method_family) {
-    case MethodFamily::STRUCTURE:
-        return std::make_shared<StructurePipeline>();
-    case MethodFamily::DIRECT:
-        return std::make_shared<DirectPipeline>();
-    case MethodFamily::LEARNING:
-        return std::make_shared<LearningPipeline>();
-    case MethodFamily::KEYPOINT:
-    default:
-        return std::make_shared<KeypointPipeline>();
-    }
-}
-
 std::string sampleStemFromPaths(const fs::path& image1, const fs::path& image2) {
     return image1.stem().string() + "__" + image2.stem().string();
 }
@@ -509,3 +491,4 @@ void writeRunSummaryFiles(const RegistrationContext& ctx,
 }
 
 } // namespace ir::registration_app_helpers
+

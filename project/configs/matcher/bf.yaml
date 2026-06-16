@@ -1,6 +1,6 @@
 # ---------------------------------------------------------------------------
-# BF matcher config
-# type selects the brute-force matcher, method selects the OpenCV API:
+# BF 匹配器配置。
+# type 选择暴力匹配器，method 选择具体 OpenCV 匹配接口：
 #   - match
 #   - knn
 #   - radius
@@ -9,16 +9,18 @@ type: BF
 
 params:
   # MATCH / KNN / RADIUS
-  method: match
+  method: MATCH
 
   # L2 / L1 / HAMMING / HAMMING2 / AUTO
+  # 优先级：matcher 显式 norm_type 最高；AUTO 时使用 keypoint 的 descriptor_norm。
+  # 若两者都是 AUTO/UNKNOWN，则按描述子矩阵类型兜底推断。
   norm_type: AUTO
 
-  # Used when method: knn
+  # 当 method: knn 时使用，表示每个查询描述子的近邻数量。
   knn_k: 2
 
-  # Used when method: radius
+  # 当 method: radius 时使用，表示半径匹配的最大距离。
   radius: 100.0
 
-  # Only applies when method: match
+  # 仅当 method: match 时生效，开启后由 BFMatcher 执行双向一致性检查。
   crossCheck: true

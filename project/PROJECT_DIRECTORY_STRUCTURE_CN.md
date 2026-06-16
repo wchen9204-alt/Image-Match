@@ -229,6 +229,10 @@ project/                                     # 图像配准实验平台根目录
 │       ├── timer.h
 │       ├── yaml_utils.h
 │       └── visualization/
+│           ├── direct/
+│           │   └── draw_warp_difference.h
+│           ├── structure/
+│           │   └── draw_structure_matches.h
 │           ├── draw_diff.h
 │           ├── draw_inliers.h
 │           ├── draw_matches.h
@@ -340,6 +344,10 @@ project/                                     # 图像配准实验平台根目录
 │       ├── timer.cpp
 │       ├── yaml_utils.cpp
 │       └── visualization/
+│           ├── direct/
+│           │   └── draw_warp_difference.cpp
+│           ├── structure/
+│           │   └── draw_structure_matches.cpp
 │           ├── draw_diff.cpp
 │           ├── draw_inliers.cpp
 │           ├── draw_matches.cpp

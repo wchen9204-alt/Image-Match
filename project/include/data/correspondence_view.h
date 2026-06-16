@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <opencv2/core.hpp>
 #include <opencv2/features2d.hpp>
@@ -43,16 +43,24 @@ struct CorrespondenceView {
     /// 目标图对应点，索引与 first_keypoints 对齐。
     std::vector<cv::KeyPoint> second_keypoints;
 
+    /// 匹配器原始输出的候选对应关系，未经过过滤链筛选。
+    /// 点特征法中由 KeypointMatchData::raw_matches_by_query 展平得到。
+    std::vector<cv::DMatch> raw;
+
     /// 过滤后的候选对应关系。
+    /// 点特征法中对应 pipeline runFilters() 结束后写回的 KeypointMatchData::filtered_matches。
     std::vector<cv::DMatch> filtered;
 
-    /// 内点掩码，与 filtered 按索引对应；为空时表示调用方可按场景使用全部 filtered。
+    /// 几何估计阶段输出的内点掩码，与 filtered 按索引对应。
+    /// 主要用于评估或可视化中按 filtered 判断哪些匹配通过了几何验证。
     std::vector<unsigned char> inlier_mask;
 
-    /// 根据来源内点或 inlier_mask 推导出的内点对应关系。
+    /// 几何阶段最终确认并写回的内点对应关系。
+    /// 点特征法中通常由 KeypointMatchData::inlier_matches 提供，
+    /// 其来源是 estimateAffinePartial2D 的 mask 以及可选 refine 的最终结果。
     std::vector<cv::DMatch> inliers;
 
-    bool empty() const { return filtered.empty(); }
+    bool empty() const { return raw.empty() && filtered.empty(); }
     int filteredCount() const { return static_cast<int>(filtered.size()); }
     int inlierCount() const { return static_cast<int>(inliers.size()); }
 };
@@ -77,3 +85,5 @@ CorrespondenceView buildCorrespondenceView(const RegistrationContext& ctx,
 CorrespondenceView buildBestCorrespondenceView(const RegistrationContext& ctx);
 
 } // namespace ir
+
+

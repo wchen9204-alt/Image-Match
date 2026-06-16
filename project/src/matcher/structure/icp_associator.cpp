@@ -1,4 +1,4 @@
-#include "matcher/structure/icp_associator.h"
+﻿#include "matcher/structure/icp_associator.h"
 
 #include <algorithm>
 #include <cmath>
@@ -142,3 +142,4 @@ bool IcpAssociator::associate(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

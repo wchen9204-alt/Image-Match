@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "transform/warper.h"
 
@@ -18,3 +18,4 @@ public:
 };
 
 } // namespace ir
+

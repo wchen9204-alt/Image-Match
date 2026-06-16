@@ -1,4 +1,4 @@
-#include "utils/file_utils.h"
+﻿#include "utils/file_utils.h"
 
 #include <algorithm>
 #include <sstream>
@@ -103,3 +103,4 @@ std::vector<fs::path> listSubdirectories(const fs::path& root) {
 
 } // namespace file_utils
 } // namespace ir
+

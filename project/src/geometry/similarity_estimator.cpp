@@ -18,6 +18,10 @@ SimilarityEstimator::SimilarityEstimator(const YAML::Node& cfg) {
     const std::string method_str = yaml_utils::getString(params, "method", "RANSAC");
     const int m = robustMethodFromString(method_str);
     _method = (m < 0) ? cv::RANSAC : m;
+    if (_method == cv::USAC_MAGSAC) {
+        IR_LOG_WARN("SimilarityEstimator: estimateAffinePartial2D does not support USAC_MAGSAC, fallback to RANSAC.");
+        _method = cv::RANSAC;
+    }
 
     _ransacReprojThreshold = yaml_utils::getDouble(params, "ransacReprojThreshold", 3.0);
     _maxIters = yaml_utils::getInt(params, "maxIters", 2000);

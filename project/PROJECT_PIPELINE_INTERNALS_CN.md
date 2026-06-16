@@ -1,4 +1,4 @@
-# 平台内部流水线与数据流说明
+﻿# 平台内部流水线与数据流说明
 
 本文由粘贴的内部说明文本整理而来，目标是说明平台内部一次配准任务如何执行、数据如何在各阶段流转、YAML 如何创建算法组件，以及结构线匹配为什么能复用通用几何估计流程。
 
@@ -91,10 +91,10 @@ norm_type     NormType
 
 ```text
 matcher->match(ctx)
-  -> ctx.keypoint_match_data.raw_knn
+  -> ctx.keypoint_match_data.raw_matches_by_query
   -> filter1.apply(ctx)
   -> filter2.apply(ctx)
-  -> ctx.keypoint_match_data.filtered
+  -> ctx.keypoint_match_data.filtered_matches
 ```
 
 当前匹配器包括：
@@ -180,7 +180,7 @@ ctx.correspondence_source = "KEYPOINT"
 _geometry->estimate(ctx)
 ```
 
-几何估计器从 `ctx.keypoint_data` 和 `ctx.keypoint_match_data.filtered` 中读取点对，通过 RANSAC 或 OpenCV 估计接口得到：
+几何估计器从 `ctx.keypoint_data` 和 `ctx.keypoint_match_data.filtered_matches` 中读取点对，通过 RANSAC 或 OpenCV 估计接口得到：
 
 ```text
 ctx.geometry_data.H   3x3 单应矩阵
@@ -347,7 +347,7 @@ ImagePairData
 |---|---|---|---|
 | `ImagePairData` | BGR 图、灰度图 | `loadImages` | 后续所有阶段 |
 | `KeypointData` | keypoints、descriptors、type、norm_type | 点特征提取、学习匹配 | 匹配、几何估计、可视化 |
-| `KeypointMatchData` | raw_knn、filtered、inlier_mask、inliers | 匹配、过滤、几何估计 | 几何估计、输出 |
+| `KeypointMatchData` | raw_matches_by_query、filtered、inlier_mask、inliers | 匹配、过滤、几何估计 | 几何估计、输出 |
 | `StructureData` | response、lines、contours | 结构提取 | 结构关联、输出 |
 | `StructureMatchData` | raw_matches_knn、filtered_matches、line_matches、inlier_line_matches、translation、affine、score | 结构关联、过滤、几何估计 | 几何估计、输出 |
 | `DirectData` | A、H、flow、points1、points2、matches、inlier_mask、score、diagnostics | 直接法 aligner | 几何同步、可视化、摘要 |
@@ -483,3 +483,4 @@ output:
 ```
 
 `include` 为空时会扫描数据集根目录下全部样本；填写样本名时只运行指定样本。
+

@@ -1,4 +1,4 @@
-#include "filter/distance_threshold_filter.h"
+﻿#include "filter/distance_threshold_filter.h"
 
 #include <vector>
 
@@ -13,7 +13,7 @@ namespace {
 
 // 点特征法路径统一从当前筛选结果集合读取输入。
 std::vector<cv::DMatch> collectInputMatches(const KeypointMatchData& md) {
-    return md.filtered;
+    return md.filtered_matches;
 }
 
 } // 匿名命名空间
@@ -62,7 +62,7 @@ bool DistanceThresholdFilter::apply(RegistrationContext& ctx) {
     const std::vector<cv::DMatch> input = collectInputMatches(md);
     if (input.empty()) {
         IR_LOG_WARN("DistanceThresholdFilter: no matches available to filter.");
-        md.filtered.clear();
+        md.filtered_matches.clear();
         return false;
     }
 
@@ -85,8 +85,10 @@ bool DistanceThresholdFilter::apply(RegistrationContext& ctx) {
                 ")");
 
     // 步骤二：用阈值过滤后的结果覆盖当前筛选结果。
-    md.filtered = std::move(kept);
+    md.filtered_matches = std::move(kept);
     return true;
 }
 
 }
+
+

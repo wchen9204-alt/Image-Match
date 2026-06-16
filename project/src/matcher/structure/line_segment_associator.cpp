@@ -1,4 +1,4 @@
-#include "matcher/structure/line_segment_associator.h"
+﻿#include "matcher/structure/line_segment_associator.h"
 
 #include <algorithm>
 #include <cmath>
@@ -267,3 +267,4 @@ bool LineSegmentAssociator::associate(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

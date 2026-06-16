@@ -8,6 +8,7 @@
 
 #include "core/config.h"
 #include "core/context.h"
+#include "core/registration.h"
 #include "dataset/dataset_loader.h"
 #include "registration_app_helpers.h"
 #include "summary_csv_writer.h"
@@ -88,8 +89,8 @@ int RegistrationApp::runSingle(const Args& args) {
     }
 
     // 6. 根据配置选择 keypoint 流水线或结构流水线。
-    auto pipeline = app_helpers::createPipelineForConfig(cfg);
-    if (!pipeline->configure(cfg)) {
+    Registration pipeline;
+    if (!pipeline.configure(cfg)) {
         std::cerr << "Pipeline configure failed.\n";
         return 6;
     }
@@ -98,14 +99,16 @@ int RegistrationApp::runSingle(const Args& args) {
     RegistrationContext ctx;
 
     // 8. 单次运行沿用统一流水线编排，具体算法由配置决定。
-    const bool ok = pipeline->run(ctx);
+    const bool ok = pipeline.run(ctx);
     app_helpers::writeRunSummaryFiles(ctx, cfg, sample_name);
     writeSummaryCsv(cfg.output_dir / "summary.csv",
                     cfg.methodFamily(),
                     std::vector<std::string>{sample_name},
                     std::vector<RegistrationResult>{ctx.result},
                     std::vector<EvaluationData>{ctx.evaluation});
-    pipeline->showWindows(ctx);
+    if (pipeline.pipeline()) {
+        pipeline.pipeline()->showWindows(ctx);
+    }
 
     // 9. 根据方法族输出对应摘要。
     app_helpers::printSummary(ctx, cfg.methodFamily());
@@ -170,11 +173,11 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
             pCfg.image2_path = sample.target_path;
             pCfg.output_dir = pCfg.output_dir / sample.name;
 
-            auto pipeline = app_helpers::createPipelineForConfig(pCfg);
-            if (!pipeline->configure(pCfg)) continue;
+            Registration pipeline;
+            if (!pipeline.configure(pCfg)) continue;
 
             RegistrationContext ctx;
-            if (pipeline->run(ctx)) ++okCount;
+            if (pipeline.run(ctx)) ++okCount;
 
             if (ctx.result.warp_overlap_iou >= 0.0) {
                 iouSum += ctx.result.warp_overlap_iou;
@@ -412,8 +415,8 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
         cfg.show_target_window = false;
         cfg.show_warped_window = false;
 
-        auto pipeline = app_helpers::createPipelineForConfig(cfg);
-        if (!pipeline->configure(cfg)) {
+        Registration pipeline;
+        if (!pipeline.configure(cfg)) {
             // 配置失败单独记为该样本失败，避免影响整批任务继续执行。
             RegistrationResult failed;
             failed.success = false;
@@ -425,7 +428,7 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
         }
 
         RegistrationContext ctx;
-        const bool ok = pipeline->run(ctx);
+        const bool ok = pipeline.run(ctx);
         app_helpers::writeRunSummaryFiles(ctx, cfg, sample.name);
         app_helpers::printSummary(ctx, cfg.methodFamily());
         sample_names.push_back(sample.name);
@@ -507,3 +510,4 @@ int RegistrationApp::run(int argc, char** argv) {
 }
 
 } // namespace ir
+

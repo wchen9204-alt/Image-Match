@@ -1,4 +1,4 @@
-#include "matcher/structure/line_descriptor_associator.h"
+﻿#include "matcher/structure/line_descriptor_associator.h"
 
 #include <algorithm>
 #include <cmath>
@@ -733,3 +733,4 @@ bool LineDescriptorAssociator::associate(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

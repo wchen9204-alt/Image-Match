@@ -1,4 +1,4 @@
-#include "direct/global/zncc_rigid_aligner.h"
+﻿#include "direct/global/zncc_rigid_aligner.h"
 
 #include <algorithm>
 #include <cmath>
@@ -483,3 +483,4 @@ bool ZnccRigidAligner::align(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

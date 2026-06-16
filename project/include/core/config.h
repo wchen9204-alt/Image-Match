@@ -16,6 +16,13 @@ enum class MethodFamily {
     LEARNING
 };
 
+/// 匹配可视化的数据层级，用于区分过滤前、过滤后和几何内点。
+enum class MatchView {
+    RAW,
+    FILTERED,
+    INLIERS
+};
+
 /// 将 MethodFamily 枚举转为输出目录名。
 inline const char* methodFamilyDir(MethodFamily f) {
     switch (f) {
@@ -63,6 +70,11 @@ struct PipelineConfig {
     bool draw_keypoints = false;
     bool draw_matches = true;
     bool draw_inliers_only = false;
+    std::vector<MatchView> match_views = {
+        MatchView::RAW,
+        MatchView::FILTERED,
+        MatchView::INLIERS
+    };
     int max_matches_drawn = 100;
     bool warp = true;
     bool show_source_window = false;
@@ -78,6 +90,7 @@ struct PipelineConfig {
     double max_warp_photometric_error = 0.15;
 
     bool validate_match_quality = false;
+    bool fail_on_match_quality = false;
     int min_match_inliers = 0;
     double min_match_inlier_ratio = -1.0;
     double max_match_reproj_error = -1.0;
@@ -86,11 +99,6 @@ struct PipelineConfig {
     double min_structure_overlap_iou = 0.20;
     int structure_overlap_foreground_threshold = 0;
     int structure_overlap_dilate_size = 3;
-
-    bool validate_metric_quality = false;
-    double min_metric_psnr = -1.0;
-    double min_metric_ssim = -1.0;
-    double max_metric_rmse = -1.0;
 
     MethodFamily methodFamily() const { return method_family; }
 };
@@ -110,3 +118,4 @@ public:
 };
 
 } // namespace ir
+

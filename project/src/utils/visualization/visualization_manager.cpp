@@ -47,7 +47,6 @@ bool VisualizationManager::saveAll(const RegistrationContext& ctx,
     if (opt.draw_matches) {
         // 匹配图保留全局对应关系，适合作为第一层人工诊断材料。
         DrawMatches::Options match_opt;
-        match_opt.draw_inliers_only = false;
         match_opt.max_matches = opt.max_matches;
         const cv::Mat img = DrawMatches::render(ctx, match_opt);
         const fs::path path = output_root / "all_match" / (stem + "_all_match.png");
@@ -65,7 +64,6 @@ bool VisualizationManager::saveAll(const RegistrationContext& ctx,
         // 内点图只展示几何模型接受的匹配，用于检查鲁棒估计质量。
         DrawInliers::Options inlier_opt;
         inlier_opt.max_inliers = opt.max_inliers;
-        inlier_opt.draw_outliers = false;
         const cv::Mat img = DrawInliers::render(ctx, inlier_opt);
         const fs::path path = output_root / "inlier_match" / (stem + "_inlier_match.png");
         if (writeImage(path, img)) {
@@ -107,3 +105,4 @@ bool VisualizationManager::saveAll(const RegistrationContext& ctx,
 }
 
 } // namespace ir
+

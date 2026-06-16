@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <string>
 #include <vector>
@@ -74,3 +74,4 @@ getVec(const YAML::Node& node, const std::string& key, const std::vector<T>& fal
 
 } // namespace yaml_utils
 } // namespace ir
+

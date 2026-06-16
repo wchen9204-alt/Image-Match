@@ -1,4 +1,4 @@
-#include "matcher/structure/chamfer_associator.h"
+﻿#include "matcher/structure/chamfer_associator.h"
 
 #include <algorithm>
 #include <cmath>
@@ -160,3 +160,4 @@ bool ChamferAssociator::associate(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

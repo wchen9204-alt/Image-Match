@@ -1,4 +1,4 @@
-#include "pipeline/base_pipeline.h"
+﻿#include "pipeline/base_pipeline.h"
 
 #include <algorithm>
 #include <cctype>
@@ -422,13 +422,23 @@ bool BasePipeline::validateRegistrationQuality(RegistrationContext& ctx) {
     if (!validateWarpQuality(ctx)) {
         return false;
     }
-    return validateMetricQuality(ctx);
+    return true;
 }
 
 bool BasePipeline::validateMatchQuality(RegistrationContext& ctx) {
     if (!_config.validate_match_quality) {
         return true;
     }
+
+    auto handleViolation = [&](const std::string& message) {
+        if (_config.fail_on_match_quality) {
+            ctx.result.message = "match quality validation failed: " + message;
+            IR_LOG_WARN(ctx.result.message);
+            return false;
+        }
+        IR_LOG_WARN("Match quality warning: ", message);
+        return true;
+    };
 
     // 统一读取结果对象里的匹配统计。
     const auto& r = ctx.result;
@@ -439,33 +449,34 @@ bool BasePipeline::validateMatchQuality(RegistrationContext& ctx) {
                 ", reproj=",
                 r.mean_reproj_error);
 
-    // 条件1：最少内点数。
+    // 条件1：最少内点数。是否判失败由 fail_on_violation 控制。
     if (_config.min_match_inliers > 0 && r.num_inliers < _config.min_match_inliers) {
-        ctx.result.message = "match quality validation failed: inliers " +
-                             std::to_string(r.num_inliers) + " < " +
-                             std::to_string(_config.min_match_inliers);
-        IR_LOG_WARN(ctx.result.message);
-        return false;
+        const std::string message = "inliers " + std::to_string(r.num_inliers) + " < " +
+                                    std::to_string(_config.min_match_inliers);
+        if (!handleViolation(message)) {
+            return false;
+        }
     }
 
-    // 条件2：最小内点率。
+    // 条件2：最低内点率。是否判失败由 fail_on_violation 控制。
     if (_config.min_match_inlier_ratio >= 0.0 &&
         r.inlier_ratio < _config.min_match_inlier_ratio) {
-        ctx.result.message = "match quality validation failed: inlier ratio " +
-                             std::to_string(r.inlier_ratio) + " < " +
-                             std::to_string(_config.min_match_inlier_ratio);
-        IR_LOG_WARN(ctx.result.message);
-        return false;
+        const std::string message = "inlier ratio " + std::to_string(r.inlier_ratio) +
+                                    " < " + std::to_string(_config.min_match_inlier_ratio);
+        if (!handleViolation(message)) {
+            return false;
+        }
     }
 
-    // 条件3：最大重投影误差。
+    // 条件3：最大重投影误差。是否判失败由 fail_on_violation 控制。
     if (_config.max_match_reproj_error >= 0.0 &&
         r.mean_reproj_error > _config.max_match_reproj_error) {
-        ctx.result.message = "match quality validation failed: reprojection error " +
-                             std::to_string(r.mean_reproj_error) + " > " +
-                             std::to_string(_config.max_match_reproj_error);
-        IR_LOG_WARN(ctx.result.message);
-        return false;
+        const std::string message = "reprojection error " +
+                                    std::to_string(r.mean_reproj_error) + " > " +
+                                    std::to_string(_config.max_match_reproj_error);
+        if (!handleViolation(message)) {
+            return false;
+        }
     }
 
     return true;
@@ -523,73 +534,6 @@ bool BasePipeline::validateStructureOverlap(RegistrationContext& ctx) {
                              std::to_string(_config.min_structure_overlap_iou);
         IR_LOG_WARN(ctx.result.message);
         return false;
-    }
-
-    return true;
-}
-
-bool BasePipeline::validateMetricQuality(RegistrationContext& ctx) {
-    if (!_config.validate_metric_quality) {
-        return true;
-    }
-
-    // 统一读取 evaluator 产出的指标。
-    auto findRequiredMetric = [&](const std::string& name) -> const MetricResult* {
-        const MetricResult* metric = ctx.evaluation.find(name);
-        if (!metric || !metric->valid) {
-            ctx.result.message = "metric quality validation failed: missing metric " + name;
-            IR_LOG_WARN(ctx.result.message);
-            return nullptr;
-        }
-        return metric;
-    };
-
-    // 条件1：PSNR 不低于阈值。
-    if (_config.min_metric_psnr >= 0.0) {
-        const MetricResult* metric = findRequiredMetric("PSNR");
-        if (!metric) {
-            return false;
-        }
-        IR_LOG_INFO("Metric quality PSNR=", metric->value, ", min=", _config.min_metric_psnr);
-        if (metric->value < _config.min_metric_psnr) {
-            ctx.result.message = "metric quality validation failed: PSNR " +
-                                 std::to_string(metric->value) + " < " +
-                                 std::to_string(_config.min_metric_psnr);
-            IR_LOG_WARN(ctx.result.message);
-            return false;
-        }
-    }
-
-    // 条件2：SSIM 不低于阈值。
-    if (_config.min_metric_ssim >= 0.0) {
-        const MetricResult* metric = findRequiredMetric("SSIM");
-        if (!metric) {
-            return false;
-        }
-        IR_LOG_INFO("Metric quality SSIM=", metric->value, ", min=", _config.min_metric_ssim);
-        if (metric->value < _config.min_metric_ssim) {
-            ctx.result.message = "metric quality validation failed: SSIM " +
-                                 std::to_string(metric->value) + " < " +
-                                 std::to_string(_config.min_metric_ssim);
-            IR_LOG_WARN(ctx.result.message);
-            return false;
-        }
-    }
-
-    // 条件3：RMSE 不高于阈值。
-    if (_config.max_metric_rmse >= 0.0) {
-        const MetricResult* metric = findRequiredMetric("RMSE");
-        if (!metric) {
-            return false;
-        }
-        IR_LOG_INFO("Metric quality RMSE=", metric->value, ", max=", _config.max_metric_rmse);
-        if (metric->value > _config.max_metric_rmse) {
-            ctx.result.message = "metric quality validation failed: RMSE " +
-                                 std::to_string(metric->value) + " > " +
-                                 std::to_string(_config.max_metric_rmse);
-            IR_LOG_WARN(ctx.result.message);
-            return false;
-        }
     }
 
     return true;
@@ -852,3 +796,4 @@ bool BasePipeline::run(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

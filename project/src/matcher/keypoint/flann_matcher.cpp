@@ -1,8 +1,9 @@
-#include "matcher/keypoint/flann_matcher.h"
+ï»¿#include "matcher/keypoint/flann_matcher.h"
 
 #include <opencv2/features2d.hpp>
 #include <opencv2/flann/miniflann.hpp>
 
+#include "utils/descriptor_norm_utils.h"
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
 
@@ -10,19 +11,7 @@ namespace ir {
 
 namespace {
 
-// ¾àÀëÀàĞÍÓÅÏÈÊ¹ÓÃÏÔÊ½ÅäÖÃ£¬Æä´Î¼Ì³ĞÌØÕ÷ÌáÈ¡½×¶ÎÔ¼¶¨£¬×îºó°´ÃèÊö×ÓÀàĞÍ¶µµ×ÍÆ¶Ï¡£
-NormType resolveNormType(const KeypointData& fd, NormType configuredNorm) {
-    NormType effective = configuredNorm;
-    if (effective == NormType::UNKNOWN) {
-        effective = fd.norm_type;
-    }
-    if (effective == NormType::UNKNOWN) {
-        effective = (fd.first.descriptors.type() == CV_8U) ? NormType::HAMMING : NormType::L2;
-    }
-    return effective;
-}
-
-// FLANN µÄË÷ÒıÊµÏÖ¶ÔÊı¾İÀàĞÍ¸üÃô¸Ğ£¬¸¡µã¾àÀëĞèÒªÏÔÊ½×ª»»µ½ CV_32F¡£
+// FLANN åœ¨æµ®ç‚¹è·ç¦»ä¸‹éœ€è¦ CV_32F æè¿°å­ã€‚
 void prepareFlannDescriptors(const KeypointData& fd, NormType effective, cv::Mat& d1, cv::Mat& d2) {
     d1 = fd.first.descriptors;
     d2 = fd.second.descriptors;
@@ -95,7 +84,7 @@ bool FlannMatcher::match(RegistrationContext& ctx) {
     auto& fd = ctx.keypoint_data;
     auto& md = ctx.keypoint_match_data;
 
-    // Ã¿´ÎÆ¥ÅäÇ°Çå¿Õ¾É½á¹û£¬±ÜÃâ¸´ÓÃÉÏÏÂÎÄÊ±»ìÈëÉÏÒ»×éÍ¼Ïñ¶ÔµÄÊı¾İ¡£
+    // æ¯æ¬¡åŒ¹é…å‰æ¸…ç©ºæ—§ç»“æœï¼Œé¿å…å¤ç”¨ä¸Šä¸‹æ–‡æ—¶æ··å…¥ä¸Šä¸€ç»„æ•°æ®ã€‚
     md.clear();
 
     if (fd.first.descriptors.empty() || fd.second.descriptors.empty()) {
@@ -103,15 +92,16 @@ bool FlannMatcher::match(RegistrationContext& ctx) {
         return false;
     }
 
-    const NormType effective = resolveNormType(fd, _normType);
+    const NormType effective =
+        descriptor_norm_utils::resolve(_normType, fd.norm_type, fd.first.descriptors);
 
     cv::Ptr<cv::flann::IndexParams> index;
     if (effective == NormType::HAMMING || effective == NormType::HAMMING2) {
-        // ¶ş½øÖÆÃèÊö×ÓÊ¹ÓÃ LSH£¬±ÜÃâ KD-Tree ¶ÔººÃ÷¿Õ¼ä²»ÊÊÅä¡£
+        // äºŒè¿›åˆ¶æè¿°å­ä½¿ç”¨ LSHï¼Œé¿å… KD-tree ä¸é€‚é…æ±‰æ˜ç©ºé—´ã€‚
         index = cv::makePtr<cv::flann::LshIndexParams>(
             _lshTableNumber, _lshKeySize, _lshMultiProbeLevel);
     } else {
-        // ¸¡µãÃèÊö×Ó²ÉÓÃ KD-Tree£¬¼æ¹Ë´ó¹æÄ£½üÁÚËÑË÷Ğ§ÂÊÓëÕÙ»ØÂÊ¡£
+        // æµ®ç‚¹æè¿°å­ä½¿ç”¨ KD-tree ç´¢å¼•ã€‚
         index = cv::makePtr<cv::flann::KDTreeIndexParams>(_kdTrees);
     }
     cv::Ptr<cv::flann::SearchParams> search =
@@ -138,41 +128,41 @@ bool FlannMatcher::match(RegistrationContext& ctx) {
 
     switch (_method) {
     case MatchMethod::MATCH: {
-        // MATCH ·ÖÖ§Í³Ò»°ü×°³Éµ¥ÔªËØ knn ĞĞ£¬±ãÓÚºóĞø¹ıÂËÆ÷¸´ÓÃÍ¬Ò»Êı¾İ½á¹¹¡£
+        // å°† MATCH ç»“æœåŒ…è£…æˆå•å…ƒç´  KNN è¡Œï¼Œä¾¿äºåç»­è¿‡æ»¤å™¨å¤ç”¨ã€‚
         std::vector<cv::DMatch> matches;
         matcher.match(d1, d2, matches);
 
-        md.raw_knn.reserve(matches.size());
+        md.raw_matches_by_query.reserve(matches.size());
         for (const auto& match : matches) {
-            md.raw_knn.push_back({match});
+            md.raw_matches_by_query.push_back({match});
         }
-        md.filtered = matches;
+        md.filtered_matches = matches;
 
-        IR_LOG_INFO("FlannMatcher produced ", md.filtered.size(), " matches (method=MATCH)");
-        return !md.filtered.empty();
+        IR_LOG_INFO("FlannMatcher produced ", md.filtered_matches.size(), " matches (method=MATCH)");
+        return !md.filtered_matches.empty();
     }
     case MatchMethod::KNN:
-        // k-NN ÊÇ FLANN µÄ³£¼ûÓÃ·¨£¬Í¨³£Óë ratio test ÁªºÏÊ¹ÓÃ¡£
-        matcher.knnMatch(d1, d2, md.raw_knn, _knnK);
+        // KNN æ˜¯ FLANN å¸¸è§ç”¨æ³•ï¼Œé€šå¸¸é…åˆ ratio test ä½¿ç”¨ã€‚
+        matcher.knnMatch(d1, d2, md.raw_matches_by_query, _knnK);
         IR_LOG_INFO("FlannMatcher produced ",
-                    md.raw_knn.size(),
+                    md.raw_matches_by_query.size(),
                     " query rows (method=KNN, k=",
                     _knnK,
                     ", norm=",
                     toString(effective),
                     ")");
-        return !md.raw_knn.empty();
+        return !md.raw_matches_by_query.empty();
     case MatchMethod::RADIUS:
-        // °ë¾¶ËÑË÷±£Áô¾Ö²¿ÁÚÓò¼¯ºÏ£¬±ãÓÚÔÚ¸ßÃÜ¶ÈÌØÕ÷³¡¾°ÖĞÌ½Ë÷²»Í¬²Ã¼ô²ßÂÔ¡£
-        matcher.radiusMatch(d1, d2, md.raw_knn, _radius);
+        // åŠå¾„åŒ¹é…ä¿ç•™å±€éƒ¨é‚»åŸŸå€™é€‰ï¼Œåç»­é˜¶æ®µå†å†³å®šå¦‚ä½•ç­›é€‰ã€‚
+        matcher.radiusMatch(d1, d2, md.raw_matches_by_query, _radius);
         IR_LOG_INFO("FlannMatcher produced ",
-                    md.raw_knn.size(),
+                    md.raw_matches_by_query.size(),
                     " query rows (method=RADIUS, radius=",
                     _radius,
                     ", norm=",
                     toString(effective),
                     ")");
-        return !md.raw_knn.empty();
+        return !md.raw_matches_by_query.empty();
     case MatchMethod::UNKNOWN:
     default:
         IR_LOG_ERROR("FlannMatcher::match - unsupported method: ", toString(_method));
@@ -181,3 +171,5 @@ bool FlannMatcher::match(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+
+

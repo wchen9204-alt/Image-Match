@@ -1,5 +1,6 @@
-#include "keypoint/sift_extractor.h"
+ï»¿#include "keypoint/sift_extractor.h"
 
+#include "utils/descriptor_norm_utils.h"
 #include "utils/image_utils.h"
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
@@ -14,6 +15,7 @@ SiftExtractor::SiftExtractor(const YAML::Node& cfg) {
     _contrastThreshold = yaml_utils::getDouble(params, "contrastThreshold", 0.04);
     _edgeThreshold = yaml_utils::getDouble(params, "edgeThreshold", 10.0);
     _sigma = yaml_utils::getDouble(params, "sigma", 1.6);
+    _norm = descriptor_norm_utils::readConfiguredNorm(cfg, NormType::L2);
 
     _impl =
         cv::SIFT::create(_nfeatures, _nOctaveLayers, _contrastThreshold, _edgeThreshold, _sigma);
@@ -27,7 +29,9 @@ SiftExtractor::SiftExtractor(const YAML::Node& cfg) {
                 ", edge=",
                 _edgeThreshold,
                 ", sigma=",
-                _sigma);
+                _sigma,
+                ", norm=",
+                toString(_norm));
 }
 
 bool SiftExtractor::extract(RegistrationContext& ctx) {
@@ -36,25 +40,22 @@ bool SiftExtractor::extract(RegistrationContext& ctx) {
         return false;
     }
 
-    // SIFT Éú³É¸¡µãÃèÊö×Ó£¬Òò´ËÔÚÌØÕ÷½×¶ÎÖ±½ÓÐ´Èë L2 ¾àÀëÔ¼¶¨¡£
     auto& fd = ctx.keypoint_data;
     auto& images = ctx.images;
     fd.type = KeypointType::SIFT;
-    fd.norm_type = NormType::L2;
+    fd.norm_type = _norm;
 
     if (images.first.empty() || images.second.empty()) {
         IR_LOG_ERROR("SIFT::extract - source images are empty.");
         return false;
     }
 
-    // »Ò¶ÈÍ¼ÓÅÏÈ¸´ÓÃÉÏÓÎÔ¤´¦Àí½á¹û£¬±ÜÃâÖØ¸´ÑÕÉ«¿Õ¼ä×ª»»¡£
     if (!image_utils::ensureGray(images.first, images.first_gray) ||
         !image_utils::ensureGray(images.second, images.second_gray)) {
         IR_LOG_ERROR("SIFT::extract - failed to prepare grayscale images.");
         return false;
     }
 
-    // ¼ì²âÓëÃèÊö×Ó¼ÆËãºÏ²¢Ö´ÐÐ£¬±£Ö¤¹Ø¼üµãÓëÃèÊö×Ó²ÎÊýÍêÈ«Ò»ÖÂ¡£
     _impl->detectAndCompute(
         images.first_gray, cv::noArray(), fd.first.keypoints, fd.first.descriptors);
     _impl->detectAndCompute(
@@ -67,5 +68,5 @@ bool SiftExtractor::extract(RegistrationContext& ctx) {
                 " keypoints");
     return !fd.empty();
 }
-
 } // namespace ir
+

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <string>
 #include <vector>
@@ -56,3 +56,4 @@ private:
 };
 
 } // namespace ir
+

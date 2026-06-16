@@ -1,4 +1,4 @@
-#include "utils/visualization/draw_diff.h"
+﻿#include "utils/visualization/draw_diff.h"
 
 #include <opencv2/imgproc.hpp>
 
@@ -47,3 +47,4 @@ cv::Mat DrawDiff::render(const RegistrationContext& ctx, const Options& opt) {
 }
 
 } // namespace ir
+

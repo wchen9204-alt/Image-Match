@@ -83,3 +83,4 @@ private:
     ::ir::Logger::instance().log(::ir::LogLevel::Error, IR_LOG_LOCATION, " | ", __VA_ARGS__)
 
 } // namespace ir
+

@@ -1,4 +1,4 @@
-#include "structure/line_extractor.h"
+﻿#include "structure/line_extractor.h"
 
 #include <algorithm>
 #include <cmath>
@@ -629,3 +629,4 @@ bool LineExtractor::extract(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

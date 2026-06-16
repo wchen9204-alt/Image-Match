@@ -1,4 +1,4 @@
-#include "filter/min_distance_filter.h"
+﻿#include "filter/min_distance_filter.h"
 
 #include <algorithm>
 #include <cmath>
@@ -16,7 +16,7 @@ namespace {
 
 // 点特征法过滤链统一从当前筛选结果集合读取输入。
 std::vector<cv::DMatch> collectInputMatches(const KeypointMatchData& md) {
-    return md.filtered;
+    return md.filtered_matches;
 }
 
 } // 匿名命名空间
@@ -81,7 +81,7 @@ bool MinDistanceFilter::apply(RegistrationContext& ctx) {
     const std::vector<cv::DMatch> input = collectInputMatches(md);
     if (input.empty()) {
         IR_LOG_WARN("MinDistanceFilter: no matches available to filter.");
-        md.filtered.clear();
+        md.filtered_matches.clear();
         return false;
     }
 
@@ -92,7 +92,7 @@ bool MinDistanceFilter::apply(RegistrationContext& ctx) {
     }
     if (!std::isfinite(minDistance)) {
         IR_LOG_WARN("MinDistanceFilter: invalid min distance.");
-        md.filtered.clear();
+        md.filtered_matches.clear();
         return false;
     }
 
@@ -118,8 +118,10 @@ bool MinDistanceFilter::apply(RegistrationContext& ctx) {
                 ")");
 
     // 步骤三：将结果写回当前筛选结果集合，供后续过滤器或几何估计使用。
-    md.filtered = std::move(kept);
+    md.filtered_matches = std::move(kept);
     return true;
 }
 
 }
+
+

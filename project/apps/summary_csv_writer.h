@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <filesystem>
 #include <string>
@@ -18,3 +18,4 @@ void write(const std::filesystem::path& csv_path,
            const std::vector<EvaluationData>& evaluations);
 
 } // namespace ir::summary_csv
+

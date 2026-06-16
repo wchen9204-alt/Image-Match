@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <opencv2/xfeatures2d.hpp>
 #include <yaml-cpp/yaml.h>
@@ -7,17 +7,17 @@
 
 namespace ir {
 
-/// SURF ÌØÕ÷ÌáÈ¡Æ÷¡£
+/// SURF ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½
 class SurfExtractor : public IKeypointExtractor {
 public:
-    /// ¸ù¾Ý YAML ÅäÖÃ³õÊ¼»¯ SURF ²ÎÊý¡£
+    /// ï¿½ï¿½ï¿½ï¿½ YAML ï¿½ï¿½Ê¼ï¿½ï¿½ SURF ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     explicit SurfExtractor(const YAML::Node& cfg);
 
     std::string name() const override { return "SURF"; }
     KeypointType type() const override { return KeypointType::SURF; }
-    NormType normType() const override { return NormType::L2; }
+    NormType normType() const override { return _norm; }
 
-    /// ÔÚÉÏÏÂÎÄÖÐÌáÈ¡ SURF ¹Ø¼üµãºÍÃèÊö×Ó¡£
+    /// ï¿½ï¿½ï¿½Ø¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¡ï¿½ï¿½ï¿½Ð´ï¿½ï¿½ï¿½ï¿½×¼ï¿½ï¿½ï¿½ï¿½ï¿½Ä¡ï¿½
     bool extract(RegistrationContext& ctx) override;
 
 private:
@@ -27,6 +27,7 @@ private:
     bool _extended = false;
     bool _upright = false;
 
+    NormType _norm = NormType::L2;
     cv::Ptr<cv::xfeatures2d::SURF> _impl;
 };
 

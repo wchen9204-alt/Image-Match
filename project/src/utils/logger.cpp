@@ -1,4 +1,4 @@
-#include "utils/logger.h"
+﻿#include "utils/logger.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -38,3 +38,4 @@ void Logger::writeLine(LogLevel lv, const std::string& msg) {
 }
 
 } // namespace ir
+

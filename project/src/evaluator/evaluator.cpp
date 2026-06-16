@@ -1,4 +1,4 @@
-#include "evaluator/evaluator.h"
+﻿#include "evaluator/evaluator.h"
 
 #include <memory>
 #include <string>
@@ -89,3 +89,4 @@ void Evaluator::evaluate(RegistrationContext& ctx, const Sample& sample) const {
 }
 
 } // namespace ir
+

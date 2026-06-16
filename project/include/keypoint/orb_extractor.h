@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <opencv2/features2d.hpp>
 #include <yaml-cpp/yaml.h>
@@ -7,17 +7,17 @@
 
 namespace ir {
 
-/// ORB ÌØÕ÷ÌáÈ¡Æ÷¡£
+/// ORB ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½
 class OrbExtractor : public IKeypointExtractor {
 public:
-    /// ¸ù¾İ YAML ÅäÖÃ³õÊ¼»¯ ORB ²ÎÊı¡£
+    /// ï¿½ï¿½ï¿½ï¿½ YAML ï¿½ï¿½ï¿½Ã³ï¿½Ê¼ï¿½ï¿½ ORB ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     explicit OrbExtractor(const YAML::Node& cfg);
 
     std::string name() const override { return "ORB"; }
     KeypointType type() const override { return KeypointType::ORB; }
     NormType normType() const override { return _norm; }
 
-    /// ÔÚÉÏÏÂÎÄÖĞÌáÈ¡ ORB ¹Ø¼üµãºÍÃèÊö×Ó¡£
+    /// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¡ ORB ï¿½Ø¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó¡ï¿½
     bool extract(RegistrationContext& ctx) override;
 
 private:
@@ -36,3 +36,4 @@ private:
 };
 
 } // namespace ir
+

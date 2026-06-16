@@ -25,4 +25,5 @@ params:
   upright: false
 
 # SURF 使用浮点描述子，匹配距离通常使用 L2。
+# 仅当 matcher 的 norm_type 为 AUTO 时生效；matcher 显式 norm_type 优先级更高。
 descriptor_norm: L2

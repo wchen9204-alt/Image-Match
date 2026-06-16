@@ -1,5 +1,6 @@
-#include "keypoint/akaze_extractor.h"
+ï»¿#include "keypoint/akaze_extractor.h"
 
+#include "utils/descriptor_norm_utils.h"
 #include "utils/image_utils.h"
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
@@ -19,13 +20,13 @@ AkazeExtractor::AkazeExtractor(const YAML::Node& cfg) {
     _diffusivity =
         yaml_utils::getInt(params, "diffusivity", static_cast<int>(cv::KAZE::DIFF_PM_G2));
 
-    // KAZE ÏµÃèÊö×ÓÎª¸¡µãĞÍ£¬MLDB ÏµÃèÊö×ÓÎª¶ş½øÖÆ¡£
+    // KAZE ç³»æè¿°å­ä¸ºæµ®ç‚¹å‹ï¼ŒMLDB ç³»æè¿°å­ä¸ºäºŒè¿›åˆ¶ã€‚
     const auto dtype = static_cast<cv::AKAZE::DescriptorType>(_descriptorType);
-    if (dtype == cv::AKAZE::DESCRIPTOR_KAZE || dtype == cv::AKAZE::DESCRIPTOR_KAZE_UPRIGHT) {
-        _norm = NormType::L2;
-    } else {
-        _norm = NormType::HAMMING;
-    }
+    const NormType default_norm =
+        (dtype == cv::AKAZE::DESCRIPTOR_KAZE || dtype == cv::AKAZE::DESCRIPTOR_KAZE_UPRIGHT)
+            ? NormType::L2
+            : NormType::HAMMING;
+    _norm = descriptor_norm_utils::readConfiguredNorm(cfg, default_norm);
 
     _impl = cv::AKAZE::create(dtype,
                               _descriptorSize,
@@ -88,3 +89,4 @@ bool AkazeExtractor::extract(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

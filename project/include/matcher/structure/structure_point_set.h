@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <opencv2/core.hpp>
 
@@ -19,3 +19,4 @@ cv::Point2d centroid(const std::vector<cv::Point2f>& points);
 
 } // namespace structure_points
 } // namespace ir
+

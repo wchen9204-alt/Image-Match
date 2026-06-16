@@ -1,4 +1,4 @@
-#include "matcher/structure/phase_correlate_associator.h"
+﻿#include "matcher/structure/phase_correlate_associator.h"
 
 #include <opencv2/imgproc.hpp>
 
@@ -90,3 +90,4 @@ bool PhaseCorrelateAssociator::associate(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

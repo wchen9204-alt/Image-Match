@@ -1,4 +1,4 @@
-#include "utils/visualization/draw_overlay.h"
+﻿#include "utils/visualization/draw_overlay.h"
 
 #include <opencv2/imgproc.hpp>
 
@@ -33,3 +33,4 @@ cv::Mat DrawOverlay::render(const RegistrationContext& ctx, const Options& opt) 
 }
 
 } // namespace ir
+

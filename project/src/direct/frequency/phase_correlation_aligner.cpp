@@ -1,4 +1,4 @@
-#include "direct/frequency/phase_correlation_aligner.h"
+﻿#include "direct/frequency/phase_correlation_aligner.h"
 
 #include <algorithm>
 #include <cmath>
@@ -392,3 +392,4 @@ bool DirectPhaseCorrelationAligner::align(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

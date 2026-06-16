@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <string>
 
@@ -79,3 +79,4 @@ bool finalizeFlowAlignment(RegistrationContext& ctx,
 
 } // namespace dense_flow_common
 } // namespace ir
+

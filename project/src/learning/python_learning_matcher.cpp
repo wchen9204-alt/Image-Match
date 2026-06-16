@@ -1,4 +1,4 @@
-#include "learning/python_learning_matcher.h"
+﻿#include "learning/python_learning_matcher.h"
 
 #include <algorithm>
 #include <atomic>
@@ -539,8 +539,8 @@ bool PythonLearningMatcher::loadMatchesJson(const fs::path& path, RegistrationCo
     kd.second.keypoints.reserve(matches.size());
     kd.first.descriptors = cv::Mat(static_cast<int>(matches.size()), 1, CV_32F);
     kd.second.descriptors = cv::Mat(static_cast<int>(matches.size()), 1, CV_32F);
-    md.raw_knn.reserve(matches.size());
-    md.filtered.reserve(matches.size());
+    md.raw_matches_by_query.reserve(matches.size());
+    md.filtered_matches.reserve(matches.size());
 
     for (size_t i = 0; i < matches.size(); ++i) {
         const auto& match = matches[i];
@@ -554,8 +554,8 @@ bool PythonLearningMatcher::loadMatchesJson(const fs::path& path, RegistrationCo
         const float distance =
             static_cast<float>(std::max(0.0, 1.0 - std::clamp(match.confidence, 0.0, 1.0)));
         cv::DMatch dmatch(static_cast<int>(i), static_cast<int>(i), distance);
-        md.filtered.push_back(dmatch);
-        md.raw_knn.push_back({dmatch});
+        md.filtered_matches.push_back(dmatch);
+        md.raw_matches_by_query.push_back({dmatch});
     }
 
     IR_LOG_INFO("Learning matcher loaded ",
@@ -594,3 +594,5 @@ bool PythonLearningMatcher::match(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+
+

@@ -1,4 +1,4 @@
-#include "summary_csv_writer.h"
+﻿#include "summary_csv_writer.h"
 
 #include <algorithm>
 #include <sstream>
@@ -200,3 +200,4 @@ void write(const std::filesystem::path& csv_path,
 }
 
 } // namespace ir::summary_csv
+

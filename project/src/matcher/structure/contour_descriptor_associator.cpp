@@ -1,4 +1,4 @@
-#include "matcher/structure/contour_descriptor_associator.h"
+﻿#include "matcher/structure/contour_descriptor_associator.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1039,3 +1039,4 @@ bool ContourDescriptorAssociator::associate(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <opencv2/core.hpp>
 
@@ -20,3 +20,4 @@ public:
 };
 
 } // namespace ir
+

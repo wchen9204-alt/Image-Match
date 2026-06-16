@@ -1,4 +1,4 @@
-#include "direct/global/global_lk_aligner.h"
+﻿#include "direct/global/global_lk_aligner.h"
 
 #include <algorithm>
 #include <cmath>
@@ -149,3 +149,4 @@ bool GlobalLkAligner::align(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+

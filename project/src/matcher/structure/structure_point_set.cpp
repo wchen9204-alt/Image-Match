@@ -1,4 +1,4 @@
-#include "matcher/structure/structure_point_set.h"
+﻿#include "matcher/structure/structure_point_set.h"
 
 #include <algorithm>
 #include <cmath>
@@ -113,3 +113,4 @@ cv::Point2d centroid(const std::vector<cv::Point2f>& points) {
 
 } // namespace structure_points
 } // namespace ir
+
