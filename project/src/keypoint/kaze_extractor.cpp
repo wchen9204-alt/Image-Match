@@ -1,4 +1,4 @@
-﻿#include "keypoint/kaze_extractor.h"
+#include "keypoint/kaze_extractor.h"
 
 #include "utils/descriptor_norm_utils.h"
 #include "utils/image_utils.h"
@@ -18,6 +18,7 @@ KazeExtractor::KazeExtractor(const YAML::Node& cfg) {
     _diffusivity =
         yaml_utils::getInt(params, "diffusivity", static_cast<int>(cv::KAZE::DIFF_PM_G2));
     _norm = descriptor_norm_utils::readConfiguredNorm(cfg, NormType::L2);
+    _augmentation_config = loadBoundaryCornerAugmentationConfig(cfg);
 
     _impl = cv::KAZE::create(_extended,
                              _upright,
@@ -63,6 +64,12 @@ bool KazeExtractor::extract(RegistrationContext& ctx) {
         return false;
     }
 
+    // KAZE 描述子依赖 detector 内部尺度空间状态，外部补点不能安全参与 compute。
+    if (_augmentation_config.enabled) {
+        IR_LOG_WARN("KAZE boundary corner augmentation is disabled at runtime: "
+                    "OpenCV KAZE descriptors require detector-owned class_id.");
+    }
+
     _impl->detectAndCompute(
         images.first_gray, cv::noArray(), fd.first.keypoints, fd.first.descriptors);
     _impl->detectAndCompute(
@@ -77,4 +84,3 @@ bool KazeExtractor::extract(RegistrationContext& ctx) {
 }
 
 } // namespace ir
-

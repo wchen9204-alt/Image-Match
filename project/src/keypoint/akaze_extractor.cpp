@@ -1,4 +1,4 @@
-﻿#include "keypoint/akaze_extractor.h"
+#include "keypoint/akaze_extractor.h"
 
 #include "utils/descriptor_norm_utils.h"
 #include "utils/image_utils.h"
@@ -27,6 +27,7 @@ AkazeExtractor::AkazeExtractor(const YAML::Node& cfg) {
             ? NormType::L2
             : NormType::HAMMING;
     _norm = descriptor_norm_utils::readConfiguredNorm(cfg, default_norm);
+    _augmentation_config = loadBoundaryCornerAugmentationConfig(cfg);
 
     _impl = cv::AKAZE::create(dtype,
                               _descriptorSize,
@@ -75,6 +76,12 @@ bool AkazeExtractor::extract(RegistrationContext& ctx) {
         return false;
     }
 
+    // AKAZE 描述子同样依赖 detector 内部状态，边界补点不能直接进入 compute。
+    if (_augmentation_config.enabled) {
+        IR_LOG_WARN("AKAZE boundary corner augmentation is disabled at runtime: "
+                    "OpenCV AKAZE descriptors require detector-owned class_id.");
+    }
+
     _impl->detectAndCompute(
         images.first_gray, cv::noArray(), fd.first.keypoints, fd.first.descriptors);
     _impl->detectAndCompute(
@@ -89,4 +96,3 @@ bool AkazeExtractor::extract(RegistrationContext& ctx) {
 }
 
 } // namespace ir
-

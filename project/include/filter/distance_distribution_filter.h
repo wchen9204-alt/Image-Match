@@ -22,6 +22,8 @@ private:
     float _stdMultiplier = 1.0f;
     float _percentile = 0.8f;
     float _minDistanceFloor = 0.0f;
+    int _minKeptMatches = 0;
+    bool _fallbackToInputIfTooFew = false;
 };
 
 }

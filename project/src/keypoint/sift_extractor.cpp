@@ -1,5 +1,6 @@
-﻿#include "keypoint/sift_extractor.h"
+#include "keypoint/sift_extractor.h"
 
+#include "keypoint/keypoint_extractor_helpers.h"
 #include "utils/descriptor_norm_utils.h"
 #include "utils/image_utils.h"
 #include "utils/logger.h"
@@ -16,6 +17,7 @@ SiftExtractor::SiftExtractor(const YAML::Node& cfg) {
     _edgeThreshold = yaml_utils::getDouble(params, "edgeThreshold", 10.0);
     _sigma = yaml_utils::getDouble(params, "sigma", 1.6);
     _norm = descriptor_norm_utils::readConfiguredNorm(cfg, NormType::L2);
+    _augmentation_config = loadBoundaryCornerAugmentationConfig(cfg);
 
     _impl =
         cv::SIFT::create(_nfeatures, _nOctaveLayers, _contrastThreshold, _edgeThreshold, _sigma);
@@ -40,33 +42,12 @@ bool SiftExtractor::extract(RegistrationContext& ctx) {
         return false;
     }
 
-    auto& fd = ctx.keypoint_data;
-    auto& images = ctx.images;
-    fd.type = KeypointType::SIFT;
-    fd.norm_type = _norm;
-
-    if (images.first.empty() || images.second.empty()) {
-        IR_LOG_ERROR("SIFT::extract - source images are empty.");
-        return false;
-    }
-
-    if (!image_utils::ensureGray(images.first, images.first_gray) ||
-        !image_utils::ensureGray(images.second, images.second_gray)) {
-        IR_LOG_ERROR("SIFT::extract - failed to prepare grayscale images.");
-        return false;
-    }
-
-    _impl->detectAndCompute(
-        images.first_gray, cv::noArray(), fd.first.keypoints, fd.first.descriptors);
-    _impl->detectAndCompute(
-        images.second_gray, cv::noArray(), fd.second.keypoints, fd.second.descriptors);
-
-    IR_LOG_INFO("SIFT extracted ",
-                fd.first.keypoints.size(),
-                " / ",
-                fd.second.keypoints.size(),
-                " keypoints");
-    return !fd.empty();
+    return extractKeypointsWithBoundaryAugmentation(ctx,
+                                                    KeypointType::SIFT,
+                                                    _norm,
+                                                    "SIFT",
+                                                    *_impl,
+                                                    _augmentation_config);
 }
-} // namespace ir
 
+} // namespace ir

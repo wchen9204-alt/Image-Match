@@ -71,6 +71,10 @@ void appendDirectDiagnostics(std::ostringstream& oss, const DirectData& direct) 
 }
 
 void appendValidationQuality(std::ostringstream& oss, const RegistrationResult& r) {
+    if (r.inlier_spatial_coverage >= 0.0) {
+        oss << "  inlier spread : " << std::fixed << std::setprecision(3)
+            << r.inlier_spatial_coverage << "\n";
+    }
     if (r.structure_overlap_iou >= 0.0) {
         oss << "  structure IoU : " << std::fixed << std::setprecision(3)
             << r.structure_overlap_iou << "\n";
@@ -198,9 +202,21 @@ std::string buildKeypointSummaryText(const RegistrationContext& ctx) {
     oss << "  filtered      : " << r.num_filtered_matches << "\n";
     oss << "  inliers       : " << r.num_inliers << " (" << std::fixed << std::setprecision(3)
         << r.inlier_ratio << ")\n";
-    if (r.warp_overlap_iou >= 0.0) {
-        oss << "  warp IoU      : " << std::fixed << std::setprecision(3)
-            << r.warp_overlap_iou << "\n";
+    if (r.warp_overlap_containment >= 0.0) {
+        oss << "  warp contain  : " << std::fixed << std::setprecision(3)
+            << r.warp_overlap_containment << "\n";
+    }
+    if (r.warp_source_coverage >= 0.0) {
+        oss << "  warp source   : " << std::fixed << std::setprecision(3)
+            << r.warp_source_coverage << "\n";
+    }
+    if (r.warp_target_coverage >= 0.0) {
+        oss << "  warp target   : " << std::fixed << std::setprecision(3)
+            << r.warp_target_coverage << "\n";
+    }
+    if (r.warp_bidirectional_coverage >= 0.0) {
+        oss << "  warp bi-cov   : " << std::fixed << std::setprecision(3)
+            << r.warp_bidirectional_coverage << "\n";
     }
     if (r.warp_photometric_error >= 0.0) {
         oss << "  warp NMAD      : " << std::fixed << std::setprecision(4)
@@ -225,9 +241,21 @@ std::string buildLearningSummaryText(const RegistrationContext& ctx) {
     oss << "  filtered      : " << r.num_filtered_matches << "\n";
     oss << "  inliers       : " << r.num_inliers << " (" << std::fixed << std::setprecision(3)
         << r.inlier_ratio << ")\n";
-    if (r.warp_overlap_iou >= 0.0) {
-        oss << "  warp IoU      : " << std::fixed << std::setprecision(3)
-            << r.warp_overlap_iou << "\n";
+    if (r.warp_overlap_containment >= 0.0) {
+        oss << "  warp contain  : " << std::fixed << std::setprecision(3)
+            << r.warp_overlap_containment << "\n";
+    }
+    if (r.warp_source_coverage >= 0.0) {
+        oss << "  warp source   : " << std::fixed << std::setprecision(3)
+            << r.warp_source_coverage << "\n";
+    }
+    if (r.warp_target_coverage >= 0.0) {
+        oss << "  warp target   : " << std::fixed << std::setprecision(3)
+            << r.warp_target_coverage << "\n";
+    }
+    if (r.warp_bidirectional_coverage >= 0.0) {
+        oss << "  warp bi-cov   : " << std::fixed << std::setprecision(3)
+            << r.warp_bidirectional_coverage << "\n";
     }
     if (r.warp_photometric_error >= 0.0) {
         oss << "  warp NMAD      : " << std::fixed << std::setprecision(4)
@@ -262,9 +290,21 @@ std::string buildStructureSummaryText(const RegistrationContext& ctx) {
             << smd.translation.x << ", dy=" << smd.translation.y << "\n";
     }
     oss << "  response      : " << std::fixed << std::setprecision(3) << r.inlier_ratio << "\n";
-    if (r.warp_overlap_iou >= 0.0) {
-        oss << "  warp IoU      : " << std::fixed << std::setprecision(3)
-            << r.warp_overlap_iou << "\n";
+    if (r.warp_overlap_containment >= 0.0) {
+        oss << "  warp contain  : " << std::fixed << std::setprecision(3)
+            << r.warp_overlap_containment << "\n";
+    }
+    if (r.warp_source_coverage >= 0.0) {
+        oss << "  warp source   : " << std::fixed << std::setprecision(3)
+            << r.warp_source_coverage << "\n";
+    }
+    if (r.warp_target_coverage >= 0.0) {
+        oss << "  warp target   : " << std::fixed << std::setprecision(3)
+            << r.warp_target_coverage << "\n";
+    }
+    if (r.warp_bidirectional_coverage >= 0.0) {
+        oss << "  warp bi-cov   : " << std::fixed << std::setprecision(3)
+            << r.warp_bidirectional_coverage << "\n";
     }
     if (r.warp_photometric_error >= 0.0) {
         oss << "  warp NMAD      : " << std::fixed << std::setprecision(4)
@@ -311,9 +351,21 @@ std::string buildDirectSummaryText(const RegistrationContext& ctx) {
         oss << "  photometric MSE: " << std::fixed << std::setprecision(6)
             << dd.photometric_error << "\n";
     }
-    if (r.warp_overlap_iou >= 0.0) {
-        oss << "  warp IoU      : " << std::fixed << std::setprecision(3)
-            << r.warp_overlap_iou << "\n";
+    if (r.warp_overlap_containment >= 0.0) {
+        oss << "  warp contain  : " << std::fixed << std::setprecision(3)
+            << r.warp_overlap_containment << "\n";
+    }
+    if (r.warp_source_coverage >= 0.0) {
+        oss << "  warp source   : " << std::fixed << std::setprecision(3)
+            << r.warp_source_coverage << "\n";
+    }
+    if (r.warp_target_coverage >= 0.0) {
+        oss << "  warp target   : " << std::fixed << std::setprecision(3)
+            << r.warp_target_coverage << "\n";
+    }
+    if (r.warp_bidirectional_coverage >= 0.0) {
+        oss << "  warp bi-cov   : " << std::fixed << std::setprecision(3)
+            << r.warp_bidirectional_coverage << "\n";
     }
     if (r.warp_photometric_error >= 0.0) {
         oss << "  warp NMAD      : " << std::fixed << std::setprecision(4)
@@ -367,7 +419,11 @@ std::string buildSummaryJson(const RegistrationContext& ctx,
     oss << "  \"quality\": {\n";
     oss << "    \"inlier_ratio\": " << r.inlier_ratio << ",\n";
     oss << "    \"mean_reproj_error\": " << r.mean_reproj_error << ",\n";
-    oss << "    \"warp_overlap_iou\": " << r.warp_overlap_iou << ",\n";
+    oss << "    \"inlier_spatial_coverage\": " << r.inlier_spatial_coverage << ",\n";
+    oss << "    \"warp_overlap_containment\": " << r.warp_overlap_containment << ",\n";
+    oss << "    \"warp_source_coverage\": " << r.warp_source_coverage << ",\n";
+    oss << "    \"warp_target_coverage\": " << r.warp_target_coverage << ",\n";
+    oss << "    \"warp_bidirectional_coverage\": " << r.warp_bidirectional_coverage << ",\n";
     oss << "    \"warp_photometric_error\": " << r.warp_photometric_error << ",\n";
     oss << "    \"structure_overlap_iou\": " << r.structure_overlap_iou;
     if (isDirect) {

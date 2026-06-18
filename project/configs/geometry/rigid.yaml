@@ -10,7 +10,6 @@
 # rigidRefineMode 用于决定是否把 OpenCV 得到的初始模型压回 s=1：
 # - NONE：直接使用 OpenCV 的 A 和 mask，可能包含统一缩放，不是严格刚体。
 # - SVD：使用 OpenCV RANSAC 内点重新拟合严格刚体，只保留旋转和平移。
-# - NORMALIZE_SCALE：从 OpenCV 的 sR 中去掉统一缩放，再重算平移。
 # ---------------------------------------------------------------------------
 type: RIGID
 
@@ -25,7 +24,7 @@ params:
   # - 直接在无缩放 rigid 模型下做项目内自定义 RANSAC
   # - 输出本身就是严格刚体
   # - 此时 method / rigidRefineMode 仅保留为兼容字段，不参与求解
-  estimatorBackend: OPENCV_PARTIAL_AFFINE
+  estimatorBackend: opencv_partial_affine
 
   # 鲁棒估计方法；可选 RANSAC / LMEDS；默认 RANSAC。
   # 仅在 estimatorBackend=OPENCV_PARTIAL_AFFINE 时生效。
@@ -47,7 +46,7 @@ params:
   # 判定几何结果有效所需的最少内点数；默认 2。
   minInliers: 2
 
-  # 刚体精修模式；可选 SVD / NORMALIZE_SCALE / NONE；默认 SVD。
+  # 刚体精修模式；可选 SVD / NONE；默认 SVD。
   # 仅在 estimatorBackend=OPENCV_PARTIAL_AFFINE 时生效。
   #
   # SVD:
@@ -55,12 +54,50 @@ params:
   # - 再用 SVD 重新拟合严格刚体
   # - 最终矩阵只保留旋转 + 平移，不允许缩放
   #
-  # NORMALIZE_SCALE:
-  # - 从 OpenCV partial affine 的 sR 中估计统一缩放并去掉
-  # - 重新正交化旋转并重算平移和内点
-  #
   # NONE:
   # - 不做刚体精修
   # - 直接使用 OpenCV 返回的 A 和内点 mask
   # - 结果可能包含统一缩放，因此不是严格 rigid
   rigidRefineMode: SVD
+
+  # 是否从 filtered_matches 额外抽取严格 rigid 候选。
+  enableFilteredMatchCandidates: true
+
+  # 先按描述子距离取前 K 个 filtered 匹配，再从中组合候选对。
+  filteredMatchCandidateTopK: 24
+
+  # 候选 seed 的距离池大小。
+  # 当前实现不是只从前 topK 取，而是先从前 poolSize 个距离较好的匹配里，
+  # 混合做“空间分散选点 + 距离优先补点 + 主旋转峰补点”，再得到最终 seed。
+  filteredMatchCandidatePoolSize: 64
+
+  # 最多生成多少个额外候选。
+  filteredMatchCandidateCount: 12
+
+  # 生成候选时，两点之间最小空间间距，避免退化样本。
+  filteredMatchCandidateMinPairDistance: 20.0
+
+  # 是否在多候选 rigid 选模时加入前景 mask 几何评分。
+  # 开启后，每个候选都会额外计算 containment / source coverage /
+  # target coverage / bidirectional coverage。
+  enableCandidateMaskScoring: true
+
+  # 候选 mask 评分时的前景二值化阈值。
+  candidateMaskForegroundThreshold: 10
+
+  # 候选选择阶段的最低局部包含率阈值。
+  # 若候选不满足该阈值，则优先级低于满足阈值的候选；
+  # 若所有候选都不满足，则自动回退到旧的候选比较规则。
+  candidateMinContainment: 0.90
+
+  # 候选选择阶段的最低双向 coverage 阈值。
+  # 双向 coverage 取 max(source_coverage, target_coverage)。
+  # 若所有候选都不满足，也会自动回退到旧规则。
+  candidateMinBidirectionalCoverage: 0.98
+
+  # 轻量候选去重时允许的最大旋转角差，单位为度。
+  # 若两个 rigid 候选的旋转差和平移差都很小，则视为重复候选。
+  candidateDedupRotationDiffDeg: 2.0
+
+  # 轻量候选去重时允许的最大平移差，单位为像素。
+  candidateDedupTranslationDiff: 3.0

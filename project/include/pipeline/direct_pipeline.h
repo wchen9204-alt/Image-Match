@@ -32,7 +32,7 @@ protected:
     /// 执行直接法配准器，并同步几何结果到通用上下文。
     bool runEstimation(RegistrationContext& ctx) override;
 
-    /// 保存直接法专属输出，再委托基类保存通用 warp 输出。
+    /// 清理当前样本遗留的 direct 专属旧图，再委托基类保存通用 warp 输出。
     bool saveOutputs(RegistrationContext& ctx) override;
 
     /// 生成带直接法算法标签的输出文件名前缀。

@@ -212,9 +212,6 @@ validation:
     min_iou: 0.12
     foreground_threshold: 0
     dilate_size: 7
-  metric_quality:
-    enabled: true
-    min_ssim: 0.66
   photometric:
     enabled: true
     max_nmad: 0.15
@@ -261,7 +258,6 @@ function Read-RunRecord {
     $json = Get-Content -LiteralPath $JsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
     $counts = PickProperty $json 'counts'
     $quality = PickProperty $json 'quality'
-    $metrics = PickProperty $json 'metrics'
     $timings = PickProperty $json 'timings_ms'
     [pscustomobject]@{
         MethodLabel = $Method.Label
@@ -281,9 +277,6 @@ function Read-RunRecord {
         NumInliers = PickProperty $counts 'num_inliers'
         InlierRatio = PickProperty $quality 'inlier_ratio'
         IoU = PickProperty $quality 'warp_overlap_iou'
-        PSNR = PickProperty $metrics 'PSNR'
-        SSIM = PickProperty $metrics 'SSIM'
-        RMSE = PickProperty $metrics 'RMSE'
         LoadMs = PickProperty $timings 'load'
         ExtractMs = PickProperty $timings 'extract'
         MatchMs = PickProperty $timings 'match'
@@ -339,7 +332,7 @@ function Build-Report {
         $ok = @($items | Where-Object { $_.Success }).Count
         $total = $items.Count
         $rate = if ($total -gt 0) { 100.0 * $ok / $total } else { 0.0 }
-        '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5} / {4}</td><td>{6}%</td><td>{7}</td><td>{8}</td><td>{9}</td><td>{10}</td></tr>' -f `
+        '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5} / {4}</td><td>{6}%</td><td>{7}</td><td>{8}</td><td>{9}</td></tr>' -f `
             (HtmlEscape $method.Display),
             (HtmlEscape $method.Extractor),
             (HtmlEscape $method.Association),
@@ -349,7 +342,6 @@ function Build-Report {
             (FormatNumber $rate 1),
             (FormatNumber (MeanValue $items 'InlierRatio' -OnlyNonNegative) 3),
             (FormatNumber (MeanValue $items 'IoU' -OnlyNonNegative) 3),
-            (FormatNumber (MeanValue $items 'SSIM' -OnlyNonNegative) 3),
             (FormatNumber (MeanValue $items 'TotalMs') 1)
     }
 
@@ -358,7 +350,7 @@ function Build-Report {
         $detailRows = foreach ($r in $items) {
             $statusClass = if ($r.Success) { 'ok' } else { 'fail' }
             $statusText = if ($r.Success) { '&#36890;&#36807;' } else { '&#26410;&#36890;&#36807;' }
-            '<tr><td>{0}</td><td class="{1}">{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td>{7}</td><td>{8}</td><td>{9}</td><td>{10}</td><td>{11}</td><td>{12}</td><td>{13}</td><td>{14}</td></tr>' -f `
+            '<tr><td>{0}</td><td class="{1}">{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td>{7}</td><td>{8}</td><td>{9}</td><td>{10}</td><td>{11}</td><td>{12}</td><td>{13}</td></tr>' -f `
                 (HtmlEscape $r.Sample),
                 $statusClass,
                 $statusText,
@@ -370,7 +362,6 @@ function Build-Report {
                 (FormatNumber $r.NumInliers 0),
                 (FormatNumber $r.InlierRatio 3),
                 (FormatNumber $r.IoU 3),
-                (FormatNumber $r.SSIM 3),
                 (FormatNumber $r.ExtractMs 1),
                 (FormatNumber $r.MatchMs 1),
                 (FormatNumber $r.TotalMs 1)
@@ -401,7 +392,7 @@ function Build-Report {
   <h3>12 &#20010;&#27979;&#35797;&#29992;&#20363;&#36807;&#31243;&#20449;&#24687;&#32479;&#35745;&#34920;</h3>
   <table>
     <thead>
-      <tr><th>&#26679;&#26412;</th><th>&#29366;&#24577;</th><th>&#35828;&#26126;</th><th>&#28304;&#30452;&#32447;&#25968;</th><th>&#30446;&#26631;&#30452;&#32447;&#25968;</th><th>&#20505;&#36873;&#21305;&#37197;</th><th>&#36807;&#28388;&#21305;&#37197;</th><th>&#20869;&#28857;</th><th>&#20869;&#28857;&#29575;</th><th>IoU</th><th>SSIM</th><th>&#25552;&#21462; ms</th><th>&#21305;&#37197; ms</th><th>&#24635;&#32791;&#26102; ms</th></tr>
+      <tr><th>&#26679;&#26412;</th><th>&#29366;&#24577;</th><th>&#35828;&#26126;</th><th>&#28304;&#30452;&#32447;&#25968;</th><th>&#30446;&#26631;&#30452;&#32447;&#25968;</th><th>&#20505;&#36873;&#21305;&#37197;</th><th>&#36807;&#28388;&#21305;&#37197;</th><th>&#20869;&#28857;</th><th>&#20869;&#28857;&#29575;</th><th>IoU</th><th>&#25552;&#21462; ms</th><th>&#21305;&#37197; ms</th><th>&#24635;&#32791;&#26102; ms</th></tr>
     </thead>
     <tbody>
       $($detailRows -join "`n")
@@ -453,7 +444,7 @@ $css
 <h2>1. &#30452;&#32447;&#26816;&#27979;&#19982;&#25551;&#36848;&#23376;&#32452;&#21512; 12 &#20010;&#29992;&#20363;&#27979;&#35797;&#32467;&#26524;&#19982;&#25104;&#21151;&#29575;</h2>
 <table>
   <thead>
-    <tr><th>&#26041;&#27861;</th><th>&#26816;&#27979;&#22120;</th><th>&#20851;&#32852;&#26041;&#27861;</th><th>&#25551;&#36848;&#23376;</th><th>&#29992;&#20363;&#25968;</th><th>&#25104;&#21151;&#25968;</th><th>&#25104;&#21151;&#29575;</th><th>&#24179;&#22343;&#20869;&#28857;&#29575;</th><th>&#24179;&#22343; IoU</th><th>&#24179;&#22343; SSIM</th><th>&#24179;&#22343;&#32791;&#26102; ms</th></tr>
+    <tr><th>&#26041;&#27861;</th><th>&#26816;&#27979;&#22120;</th><th>&#20851;&#32852;&#26041;&#27861;</th><th>&#25551;&#36848;&#23376;</th><th>&#29992;&#20363;&#25968;</th><th>&#25104;&#21151;&#25968;</th><th>&#25104;&#21151;&#29575;</th><th>&#24179;&#22343;&#20869;&#28857;&#29575;</th><th>&#24179;&#22343; IoU</th><th>&#24179;&#22343;&#32791;&#26102; ms</th></tr>
   </thead>
   <tbody>
     $($methodRows -join "`n")

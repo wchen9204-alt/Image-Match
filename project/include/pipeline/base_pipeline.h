@@ -68,7 +68,7 @@ protected:
     PipelineConfig _config;
     std::shared_ptr<IWarper> _warper;
 
-    /// 评估器，用于在 warp 后计算 PSNR/SSIM/RMSE 等指标。
+    /// 评估器，用于在流程结束后计算当前启用的评测指标。
     Evaluator _evaluator;
 };
 

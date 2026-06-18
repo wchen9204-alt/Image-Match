@@ -1,8 +1,5 @@
 ﻿#include "pipeline/base_pipeline.h"
 
-#include <algorithm>
-#include <cctype>
-#include <cmath>
 #include <filesystem>
 #include <string>
 
@@ -11,6 +8,7 @@
 #include <opencv2/imgproc.hpp>
 
 #include "core/config.h"
+#include "pipeline/base_pipeline_helpers.h"
 #include "transform/affine_warper.h"
 #include "transform/perspective_warper.h"
 #include "utils/logger.h"
@@ -19,301 +17,6 @@
 namespace fs = std::filesystem;
 
 namespace ir {
-
-namespace {
-
-// TIFF 常见于高位深场景，优先走保留原始位深的读取分支。
-bool hasTiffExtension(const fs::path& path) {
-    std::string ext = path.extension().string();
-    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return ext == ".tif" || ext == ".tiff";
-}
-
-// 在保留数值位深的前提下完成灰度化，为后续统一归一化预处理提供输入。
-bool toGrayPreserveDepth(const cv::Mat& src, cv::Mat& gray) {
-    if (src.channels() == 1) {
-        gray = src;
-        return true;
-    }
-    if (src.channels() == 3) {
-        cv::cvtColor(src, gray, cv::COLOR_BGR2GRAY);
-        return true;
-    }
-    if (src.channels() == 4) {
-        cv::cvtColor(src, gray, cv::COLOR_BGRA2GRAY);
-        return true;
-    }
-    return false;
-}
-
-// 将单通道图像压缩到 8 位动态范围，兼容多数 OpenCV 算子对输入类型的要求。
-bool convertGrayTo8U(const cv::Mat& gray, cv::Mat& gray8) {
-    if (gray.empty() || gray.channels() != 1) {
-        return false;
-    }
-    if (gray.depth() == CV_8U) {
-        gray8 = gray.clone();
-        return true;
-    }
-
-    double minVal = 0.0;
-    double maxVal = 0.0;
-    cv::minMaxLoc(gray, &minVal, &maxVal);
-    if (!std::isfinite(minVal) || !std::isfinite(maxVal) || maxVal <= minVal) {
-        gray8 = cv::Mat::zeros(gray.size(), CV_8U);
-        return true;
-    }
-
-    const double scale = 255.0 / (maxVal - minVal);
-    gray.convertTo(gray8, CV_8U, scale, -minVal * scale);
-    return true;
-}
-
-// 为配准方法准备一对同步图像：显示用 BGR 图与计算用 8 位灰度图。
-bool loadImageForPipeline(const fs::path& path, cv::Mat& color, cv::Mat& gray) {
-    color.release();
-    gray.release();
-
-    if (!hasTiffExtension(path)) {
-        color = cv::imread(path.string(), cv::IMREAD_COLOR);
-        if (!color.empty()) {
-            cv::cvtColor(color, gray, cv::COLOR_BGR2GRAY);
-            return true;
-        }
-    }
-
-    cv::Mat raw = cv::imread(path.string(), cv::IMREAD_UNCHANGED);
-    if (raw.empty()) {
-        return false;
-    }
-
-    if (raw.depth() == CV_8U) {
-        if (raw.channels() == 1) {
-            gray = raw.clone();
-            cv::cvtColor(gray, color, cv::COLOR_GRAY2BGR);
-            return true;
-        }
-        if (raw.channels() == 3) {
-            color = raw.clone();
-            cv::cvtColor(color, gray, cv::COLOR_BGR2GRAY);
-            return true;
-        }
-        if (raw.channels() == 4) {
-            cv::cvtColor(raw, color, cv::COLOR_BGRA2BGR);
-            cv::cvtColor(color, gray, cv::COLOR_BGR2GRAY);
-            return true;
-        }
-    }
-
-    cv::Mat nativeGray;
-    if (!toGrayPreserveDepth(raw, nativeGray) || !convertGrayTo8U(nativeGray, gray)) {
-        return false;
-    }
-
-    cv::cvtColor(gray, color, cv::COLOR_GRAY2BGR);
-    if (raw.depth() != CV_8U) {
-        IR_LOG_INFO("Loaded and normalized high-depth image: ",
-                    path.string(),
-                    " (depth=",
-                    raw.depth(),
-                    ", channels=",
-                    raw.channels(),
-                    ")");
-    }
-    return true;
-}
-
-// 将图像转换为前景 mask，用于判断 warped source 与 target 是否真正重合。
-bool buildForegroundMask(const cv::Mat& image, int thresholdValue, cv::Mat& mask) {
-    mask.release();
-    if (image.empty()) {
-        return false;
-    }
-
-    cv::Mat gray;
-    if (image.channels() == 1) {
-        gray = image;
-    } else if (image.channels() == 3) {
-        cv::cvtColor(image, gray, cv::COLOR_BGR2GRAY);
-    } else if (image.channels() == 4) {
-        cv::cvtColor(image, gray, cv::COLOR_BGRA2GRAY);
-    } else {
-        return false;
-    }
-
-    cv::Mat gray8;
-    if (!convertGrayTo8U(gray, gray8)) {
-        return false;
-    }
-
-    cv::threshold(gray8,
-                  mask,
-                  static_cast<double>(std::clamp(thresholdValue, 0, 255)),
-                  255.0,
-                  cv::THRESH_BINARY);
-    return true;
-}
-
-/// 计算 warped 与 target 在 overlapMask 区域内的归一化平均绝对差 (NMAD)。
-/// 返回值归一化到 [0, 1]；0 = 完全相同，1 = 完全不同。
-/// 若 overlapMask 无前景像素则返回 -1.0。
-double computePhotometricError(const cv::Mat& warped,
-                                const cv::Mat& target,
-                                const cv::Mat& overlapMask) {
-    if (overlapMask.empty() || cv::countNonZero(overlapMask) == 0) {
-        return -1.0;
-    }
-
-    cv::Mat warpedGray, targetGray;
-    if (warped.channels() == 1) {
-        warpedGray = warped;
-    } else {
-        cv::cvtColor(warped, warpedGray, cv::COLOR_BGR2GRAY);
-    }
-    if (target.channels() == 1) {
-        targetGray = target;
-    } else {
-        cv::cvtColor(target, targetGray, cv::COLOR_BGR2GRAY);
-    }
-
-    cv::Mat warpedFloat, targetFloat;
-    warpedGray.convertTo(warpedFloat, CV_32F, 1.0 / 255.0);
-    targetGray.convertTo(targetFloat, CV_32F, 1.0 / 255.0);
-
-    cv::Mat diff;
-    cv::absdiff(warpedFloat, targetFloat, diff);
-
-    const cv::Scalar meanDiff = cv::mean(diff, overlapMask);
-    return meanDiff[0];
-}
-
-double computeMaskIou(const cv::Mat& a, const cv::Mat& b) {
-    if (a.empty() || b.empty() || a.size() != b.size()) {
-        return -1.0;
-    }
-
-    cv::Mat intersectionMask;
-    cv::Mat unionMask;
-    cv::bitwise_and(a, b, intersectionMask);
-    cv::bitwise_or(a, b, unionMask);
-
-    const int unionCount = cv::countNonZero(unionMask);
-    if (unionCount == 0) {
-        return -1.0;
-    }
-
-    return static_cast<double>(cv::countNonZero(intersectionMask)) /
-           static_cast<double>(unionCount);
-}
-
-bool activeTransformMatrix(const RegistrationContext& ctx, cv::Mat& matrix) {
-    matrix.release();
-    if (!ctx.geometry_data.A.empty()) {
-        ctx.geometry_data.A.convertTo(matrix, CV_64F);
-        return matrix.rows >= 2 && matrix.cols >= 3;
-    }
-    if (!ctx.geometry_data.H.empty()) {
-        ctx.geometry_data.H.convertTo(matrix, CV_64F);
-        return matrix.rows >= 3 && matrix.cols >= 3;
-    }
-    if (!ctx.transform_data.M.empty()) {
-        ctx.transform_data.M.convertTo(matrix, CV_64F);
-        return (matrix.rows >= 2 && matrix.cols >= 3);
-    }
-    return false;
-}
-
-void dilateMaskIfRequested(cv::Mat& mask, int dilateSize) {
-    if (mask.empty() || dilateSize <= 1) {
-        return;
-    }
-    if (dilateSize % 2 == 0) {
-        ++dilateSize;
-    }
-    const cv::Mat kernel =
-        cv::getStructuringElement(cv::MORPH_RECT, cv::Size(dilateSize, dilateSize));
-    cv::dilate(mask, mask, kernel);
-}
-
-bool warpStructureMask(const RegistrationContext& ctx,
-                       const cv::Mat& sourceMask,
-                       const cv::Size& targetSize,
-                       cv::Mat& warpedMask) {
-    warpedMask.release();
-    cv::Mat matrix;
-    if (!activeTransformMatrix(ctx, matrix)) {
-        return false;
-    }
-
-    if (matrix.rows >= 3 && matrix.cols >= 3) {
-        cv::warpPerspective(sourceMask,
-                            warpedMask,
-                            matrix,
-                            targetSize,
-                            cv::INTER_NEAREST,
-                            cv::BORDER_CONSTANT,
-                            cv::Scalar(0));
-        return true;
-    }
-
-    if (matrix.rows >= 2 && matrix.cols >= 3) {
-        cv::Mat affine = matrix(cv::Rect(0, 0, 3, 2)).clone();
-        cv::warpAffine(sourceMask,
-                       warpedMask,
-                       affine,
-                       targetSize,
-                       cv::INTER_NEAREST,
-                       cv::BORDER_CONSTANT,
-                       cv::Scalar(0));
-        return true;
-    }
-    return false;
-}
-
-bool toGray8ForVisualization(const cv::Mat& image, cv::Mat& gray8) {
-    cv::Mat gray;
-    if (!toGrayPreserveDepth(image, gray)) {
-        return false;
-    }
-    return convertGrayTo8U(gray, gray8);
-}
-
-bool buildFalseColorOverlay(const cv::Mat& warped,
-                            const cv::Mat& target,
-                            int foregroundThreshold,
-                            cv::Mat& overlay) {
-    overlay.release();
-    if (warped.empty() || target.empty() || warped.size() != target.size()) {
-        return false;
-    }
-
-    cv::Mat warpedGray;
-    cv::Mat targetGray;
-    if (!toGray8ForVisualization(warped, warpedGray) ||
-        !toGray8ForVisualization(target, targetGray)) {
-        return false;
-    }
-
-    const int thresholdValue = std::clamp(foregroundThreshold, 0, 255);
-    cv::Mat warpedMask;
-    cv::Mat targetMask;
-    cv::threshold(warpedGray, warpedMask, thresholdValue, 255.0, cv::THRESH_BINARY);
-    cv::threshold(targetGray, targetMask, thresholdValue, 255.0, cv::THRESH_BINARY);
-
-    cv::Mat warpedRed = cv::Mat::zeros(warpedGray.size(), CV_8U);
-    cv::Mat targetGreen = cv::Mat::zeros(targetGray.size(), CV_8U);
-    warpedGray.copyTo(warpedRed, warpedMask);
-    targetGray.copyTo(targetGreen, targetMask);
-
-    cv::Mat blue = cv::Mat::zeros(warpedGray.size(), CV_8U);
-    cv::Mat channels[] = {blue, targetGreen, warpedRed};
-    cv::merge(channels, 3, overlay);
-    return true;
-}
-
-} // namespace
 
 bool BasePipeline::configure(const PipelineConfig& cfg) {
     // 1. 保存配置，并清空上一轮创建的阶段组件。
@@ -362,8 +65,12 @@ bool BasePipeline::loadImages(RegistrationContext& ctx) {
     }
 
     // 2. 读取图像，同时准备显示用 BGR 图和算法用 8 位灰度图。
-    if (!loadImageForPipeline(ctx.image1_path, ctx.images.first, ctx.images.first_gray) ||
-        !loadImageForPipeline(ctx.image2_path, ctx.images.second, ctx.images.second_gray)) {
+    if (!base_pipeline_helpers::loadImageForPipeline(ctx.image1_path,
+                                                     ctx.images.first,
+                                                     ctx.images.first_gray) ||
+        !base_pipeline_helpers::loadImageForPipeline(ctx.image2_path,
+                                                     ctx.images.second,
+                                                     ctx.images.second_gray)) {
         IR_LOG_ERROR("loadImages: cv::imread failed or image format is unsupported.");
         return false;
     }
@@ -479,6 +186,52 @@ bool BasePipeline::validateMatchQuality(RegistrationContext& ctx) {
         }
     }
 
+    // 条件4：计算最终内点在前景中的空间覆盖率，写入结果用于后续综合判断。
+    // 这里先不提前判失败，避免把 warp 几何和光度都已经对齐的局部包含场景误杀。
+    if (_config.min_inlier_spatial_coverage >= 0.0) {
+        cv::Mat sourceMask;
+        cv::Mat targetMask;
+        const int thresholdValue = _config.warp_overlap_foreground_threshold;
+        if (!base_pipeline_helpers::buildForegroundMask(ctx.images.first,
+                                                        thresholdValue,
+                                                        sourceMask) ||
+            !base_pipeline_helpers::buildForegroundMask(ctx.images.second,
+                                                        thresholdValue,
+                                                        targetMask)) {
+            if (!handleViolation("cannot build masks for inlier spatial coverage")) {
+                return false;
+            }
+        } else {
+            double sourceSpatialCoverage = -1.0;
+            double targetSpatialCoverage = -1.0;
+            const double spatialCoverage =
+                base_pipeline_helpers::computeInlierSpatialCoverage(
+                    ctx.keypoint_data.first.keypoints,
+                    ctx.keypoint_data.second.keypoints,
+                    ctx.keypoint_match_data.inlier_matches,
+                    sourceMask,
+                    targetMask,
+                    sourceSpatialCoverage,
+                    targetSpatialCoverage);
+            ctx.result.inlier_spatial_coverage = spatialCoverage;
+            IR_LOG_INFO("Inlier spatial coverage=",
+                        spatialCoverage,
+                        ", source=",
+                        sourceSpatialCoverage,
+                        ", target=",
+                        targetSpatialCoverage,
+                        ", min=",
+                        _config.min_inlier_spatial_coverage);
+            if (spatialCoverage < _config.min_inlier_spatial_coverage) {
+                IR_LOG_WARN("Match quality warning: inlier spatial coverage ",
+                            spatialCoverage,
+                            " < ",
+                            _config.min_inlier_spatial_coverage,
+                            " (recorded only; final acceptance is decided by warp validation)");
+            }
+        }
+    }
+
     return true;
 }
 
@@ -499,26 +252,30 @@ bool BasePipeline::validateStructureOverlap(RegistrationContext& ctx) {
     const int thresholdValue = _config.structure_overlap_foreground_threshold;
 
     // 条件2：结构响应图要能转成前景 mask。
-    if (!buildForegroundMask(ctx.structure_data.first.response, thresholdValue, sourceMask) ||
-        !buildForegroundMask(ctx.structure_data.second.response, thresholdValue, targetMask)) {
+    if (!base_pipeline_helpers::buildForegroundMask(ctx.structure_data.first.response,
+                                                     thresholdValue,
+                                                     sourceMask) ||
+        !base_pipeline_helpers::buildForegroundMask(ctx.structure_data.second.response,
+                                                     thresholdValue,
+                                                     targetMask)) {
         ctx.result.message = "structure overlap validation failed: cannot build masks";
         IR_LOG_WARN(ctx.result.message);
         return false;
     }
 
-    dilateMaskIfRequested(sourceMask, _config.structure_overlap_dilate_size);
-    dilateMaskIfRequested(targetMask, _config.structure_overlap_dilate_size);
+    base_pipeline_helpers::dilateMaskIfRequested(sourceMask, _config.structure_overlap_dilate_size);
+    base_pipeline_helpers::dilateMaskIfRequested(targetMask, _config.structure_overlap_dilate_size);
 
     cv::Mat warpedSourceMask;
 
     // 条件3：source mask 要能 warp 到 target 坐标系。
-    if (!warpStructureMask(ctx, sourceMask, targetMask.size(), warpedSourceMask)) {
+    if (!base_pipeline_helpers::warpStructureMask(ctx, sourceMask, targetMask.size(), warpedSourceMask)) {
         ctx.result.message = "structure overlap validation failed: cannot warp source mask";
         IR_LOG_WARN(ctx.result.message);
         return false;
     }
 
-    const double iou = computeMaskIou(warpedSourceMask, targetMask);
+    const double iou = base_pipeline_helpers::computeMaskIou(warpedSourceMask, targetMask);
     ctx.result.structure_overlap_iou = iou;
     if (iou < 0.0) {
         ctx.result.message = "structure overlap IoU failed: empty structure union";
@@ -540,10 +297,15 @@ bool BasePipeline::validateStructureOverlap(RegistrationContext& ctx) {
 }
 
 bool BasePipeline::validateWarpQuality(RegistrationContext& ctx) {
-    ctx.result.warp_overlap_iou = -1.0;
+    ctx.result.warp_overlap_containment = -1.0;
+    ctx.result.warp_source_coverage = -1.0;
+    ctx.result.warp_target_coverage = -1.0;
+    ctx.result.warp_bidirectional_coverage = -1.0;
     ctx.result.warp_photometric_error = -1.0;
 
-    if (!_config.validate_warp_overlap && !_config.validate_warp_photometric) {
+    // 没启用任何 warp 质量验证时，直接视为通过。
+    if (!_config.validate_warp_containment && !_config.validate_warp_bidirectional_coverage &&
+        !_config.validate_warp_photometric) {
         return true;
     }
 
@@ -566,38 +328,158 @@ bool BasePipeline::validateWarpQuality(RegistrationContext& ctx) {
     cv::Mat warpedMask;
     cv::Mat targetMask;
     const int thresholdValue = _config.warp_overlap_foreground_threshold;
-    if (!buildForegroundMask(ctx.warped_image, thresholdValue, warpedMask) ||
-        !buildForegroundMask(ctx.images.second, thresholdValue, targetMask)) {
+    if (!base_pipeline_helpers::buildForegroundMask(ctx.warped_image, thresholdValue, warpedMask) ||
+        !base_pipeline_helpers::buildForegroundMask(ctx.images.second,
+                                                     thresholdValue,
+                                                     targetMask)) {
         ctx.result.message = "warp validation failed: cannot build foreground masks";
         IR_LOG_WARN(ctx.result.message);
         return false;
     }
 
-    // 条件4：前景 IoU 要达到阈值。
-    if (_config.validate_warp_overlap) {
-        const double iou = computeMaskIou(warpedMask, targetMask);
-        ctx.result.warp_overlap_iou = iou;
-        if (iou < 0.0) {
-            ctx.result.message = "warp overlap IoU failed: empty foreground union";
+    cv::Mat matrix;
+    cv::Mat inverseMatrix;
+    cv::Mat sourceMask;
+    cv::Mat reverseWarpedTargetMask;
+    cv::Mat warpedSourceMask;
+    double sourceCoverage = -1.0;
+    double targetCoverage = -1.0;
+    double bidirectionalCoverage = -1.0;
+    double containment = -1.0;
+    // - containmentPassForEither 表示局部包含率这一侧是否达标；
+    // - coveragePassForEither 表示双向 coverage 这一侧是否达标。
+    bool containmentPassForEither = false;
+    bool coveragePassForEither = false;
+    if (_config.validate_warp_bidirectional_coverage || _config.validate_warp_containment) {
+        if (!base_pipeline_helpers::activeTransformMatrix(ctx, matrix)) {
+            ctx.result.message = "warp mask validation failed: no transform matrix";
+            IR_LOG_WARN(ctx.result.message);
+            return false;
+        }
+        if (!base_pipeline_helpers::buildForegroundMask(ctx.images.first,
+                                                        thresholdValue,
+                                                        sourceMask) ||
+            !base_pipeline_helpers::warpMaskToTargetSize(sourceMask,
+                                                         ctx.images.second.size(),
+                                                         matrix,
+                                                         warpedSourceMask)) {
+            ctx.result.message = "warp mask validation failed: cannot warp source mask";
+            IR_LOG_WARN(ctx.result.message);
+            return false;
+        }
+        if (_config.validate_warp_bidirectional_coverage) {
+            if (!base_pipeline_helpers::invertTransformMatrix(matrix, inverseMatrix) ||
+                !base_pipeline_helpers::warpMaskToTargetSize(targetMask,
+                                                             ctx.images.first.size(),
+                                                             inverseMatrix,
+                                                             reverseWarpedTargetMask)) {
+                ctx.result.message = "warp mask validation failed: cannot inverse-warp target mask";
+                IR_LOG_WARN(ctx.result.message);
+                return false;
+            }
+        }
+    }
+
+    // 条件5：双向 coverage 用于判断局部图是否在某个方向上被完整保留。
+    if (_config.validate_warp_bidirectional_coverage) {
+        // 1. 正向看 source warp 到 target 画布后保留了多少前景。
+        sourceCoverage = base_pipeline_helpers::computeMaskCoverage(sourceMask, warpedSourceMask);
+        // 2. 反向看 target inverse-warp 到 source 画布后保留了多少前景。
+        targetCoverage =
+            base_pipeline_helpers::computeMaskCoverage(targetMask, reverseWarpedTargetMask);
+        bidirectionalCoverage = std::max(sourceCoverage, targetCoverage);
+
+        ctx.result.warp_source_coverage = sourceCoverage;
+        ctx.result.warp_target_coverage = targetCoverage;
+        ctx.result.warp_bidirectional_coverage = bidirectionalCoverage;
+
+        if (sourceCoverage < 0.0 || targetCoverage < 0.0 || bidirectionalCoverage < 0.0) {
+            ctx.result.message = "warp bidirectional coverage validation failed: invalid coverage";
             IR_LOG_WARN(ctx.result.message);
             return false;
         }
 
-        IR_LOG_INFO("Warp overlap IoU=", iou, ", min=", _config.min_warp_overlap_iou);
-        if (iou < _config.min_warp_overlap_iou) {
-            ctx.result.message = "warp overlap IoU below threshold: " + std::to_string(iou) +
-                                 " < " + std::to_string(_config.min_warp_overlap_iou);
+        IR_LOG_INFO("Warp source coverage=",
+                    sourceCoverage,
+                    ", target coverage=",
+                    targetCoverage,
+                    ", bidirectional coverage=",
+                    bidirectionalCoverage,
+                    ", min=",
+                    _config.min_warp_bidirectional_coverage);
+        // 严格模式下，双向 coverage 单项不达标就直接失败。
+        // either-pass 模式下先只记录结果，等 containment 也算完后统一判断。
+        if (!_config.accept_warp_overlap_if_either_passes &&
+            bidirectionalCoverage < _config.min_warp_bidirectional_coverage) {
+            ctx.result.message = "warp bidirectional coverage below threshold: " +
+                                 std::to_string(bidirectionalCoverage) + " < " +
+                                 std::to_string(_config.min_warp_bidirectional_coverage);
             IR_LOG_WARN(ctx.result.message);
             return false;
         }
     }
 
-    // 条件5：重叠区域光度误差不能过大。
+    // 条件6：局部包含率要达到阈值，适配一张图是另一张图局部的场景。
+    if (_config.validate_warp_containment) {
+        containment = base_pipeline_helpers::computeMaskLocalContainment(sourceMask,
+                                                                         warpedSourceMask,
+                                                                         targetMask);
+        ctx.result.warp_overlap_containment = containment;
+        if (containment < 0.0) {
+            ctx.result.message = "warp local containment failed: empty foreground";
+            IR_LOG_WARN(ctx.result.message);
+            return false;
+        }
+
+        IR_LOG_INFO("Warp local containment=",
+                    containment,
+                    ", min=",
+                    _config.min_warp_overlap_containment);
+        // 严格模式下，局部包含率单项不达标就直接失败。
+        // either-pass 模式下改为和 coverage 一起看，允许“局部图完整落入大图”
+        // 或“反向覆盖关系成立”中的任意一种成立。
+        if (!_config.accept_warp_overlap_if_either_passes &&
+            containment < _config.min_warp_overlap_containment) {
+            ctx.result.message = "warp local containment below threshold: " +
+                                 std::to_string(containment) + " < " +
+                                 std::to_string(_config.min_warp_overlap_containment);
+            IR_LOG_WARN(ctx.result.message);
+            return false;
+        }
+    }
+
+    // either-pass 模式用于“其中一张图可能只是另一张图局部”的场景。
+    // 只要两者至少有一个成立，就允许 warp overlap 这一关先通过。
+    if (_config.accept_warp_overlap_if_either_passes &&
+        (_config.validate_warp_bidirectional_coverage || _config.validate_warp_containment)) {
+        containmentPassForEither =
+            !_config.validate_warp_containment ||
+            (containment >= 0.0 && containment >= _config.min_warp_overlap_containment);
+        coveragePassForEither =
+            !_config.validate_warp_bidirectional_coverage ||
+            (bidirectionalCoverage >= 0.0 &&
+             bidirectionalCoverage >= _config.min_warp_bidirectional_coverage);
+        if (!containmentPassForEither && !coveragePassForEither) {
+            ctx.result.message =
+                "warp overlap validation failed: containment " +
+                std::to_string(containment) + " < " +
+                std::to_string(_config.min_warp_overlap_containment) +
+                " and bidirectional coverage " +
+                std::to_string(bidirectionalCoverage) + " < " +
+                std::to_string(_config.min_warp_bidirectional_coverage);
+            IR_LOG_WARN(ctx.result.message);
+            return false;
+        }
+    }
+
+    // 条件7：重叠区域光度误差不能过大。
     if (_config.validate_warp_photometric) {
         cv::Mat overlapMask;
         cv::bitwise_and(warpedMask, targetMask, overlapMask);
         const double nmad =
-            computePhotometricError(ctx.warped_image, ctx.images.second, overlapMask);
+            base_pipeline_helpers::computePhotometricError(ctx.warped_image,
+                                                            ctx.images.second,
+                                                            overlapMask);
         ctx.result.warp_photometric_error = nmad;
         if (nmad < 0.0) {
             ctx.result.message = "warp photometric validation failed: empty overlap";
@@ -612,6 +494,22 @@ bool BasePipeline::validateWarpQuality(RegistrationContext& ctx) {
             ctx.result.message = "warp photometric error above threshold: " +
                                  std::to_string(nmad) +
                                  " > " + std::to_string(_config.max_warp_photometric_error);
+            IR_LOG_WARN(ctx.result.message);
+            return false;
+        }
+        // 当 overlap 只是靠 coverage 通过、而 containment 没通过时，
+        // 说明几何关系仍然偏可疑，例如可能只是边缘大面积重叠、
+        // 或者发生了“形状能盖住但内容没有真对齐”的误配。
+        // 所以这里额外套一个更严格的 photometric 阈值，专门压这类误判。
+        if (_config.max_warp_photometric_error_for_coverage_only >= 0.0 &&
+            _config.accept_warp_overlap_if_either_passes &&
+            coveragePassForEither &&
+            !containmentPassForEither &&
+            nmad > _config.max_warp_photometric_error_for_coverage_only) {
+            ctx.result.message =
+                "warp coverage-only photometric error above threshold: " +
+                std::to_string(nmad) + " > " +
+                std::to_string(_config.max_warp_photometric_error_for_coverage_only);
             IR_LOG_WARN(ctx.result.message);
             return false;
         }
@@ -679,10 +577,11 @@ bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
 
         if (ctx.warped_image.size() == ctx.images.second.size()) {
             cv::Mat falseColorOverlay;
-            if (buildFalseColorOverlay(ctx.warped_image,
-                                       ctx.images.second,
-                                       _config.warp_overlap_foreground_threshold,
-                                       falseColorOverlay)) {
+            if (base_pipeline_helpers::buildFalseColorOverlay(
+                    ctx.warped_image,
+                    ctx.images.second,
+                    _config.warp_overlap_foreground_threshold,
+                    falseColorOverlay)) {
                 const fs::path false_color_out =
                     false_color_overlay_dir / (stem + "_false_color_overlay.png");
                 cv::imwrite(false_color_out.string(), falseColorOverlay);
@@ -796,4 +695,3 @@ bool BasePipeline::run(RegistrationContext& ctx) {
 }
 
 } // namespace ir
-

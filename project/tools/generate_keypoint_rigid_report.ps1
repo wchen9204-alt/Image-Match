@@ -141,9 +141,6 @@ validation:
     min_inliers: 4
     min_inlier_ratio: 0.10
     max_reproj_error: -1
-  metric_quality:
-    enabled: true
-    min_ssim: 0.60
 "@
         Write-Utf8NoBom $pipelineYaml $pipelineText
 
@@ -187,7 +184,6 @@ function Read-RunRecord {
     $json = Get-Content -LiteralPath $JsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
     $counts = PickProperty $json 'counts'
     $quality = PickProperty $json 'quality'
-    $metrics = PickProperty $json 'metrics'
     $timings = PickProperty $json 'timings_ms'
     [pscustomobject]@{
         MethodLabel = $Method.Label
@@ -206,9 +202,6 @@ function Read-RunRecord {
         InlierRatio = PickProperty $quality 'inlier_ratio'
         IoU = PickProperty $quality 'warp_overlap_iou'
         NMAD = PickProperty $quality 'warp_photometric_error'
-        PSNR = PickProperty $metrics 'PSNR'
-        SSIM = PickProperty $metrics 'SSIM'
-        RMSE = PickProperty $metrics 'RMSE'
         LoadMs = PickProperty $timings 'load'
         ExtractMs = PickProperty $timings 'extract'
         MatchMs = PickProperty $timings 'match'
@@ -262,7 +255,7 @@ function Build-Report {
         $ok = @($items | Where-Object { $_.Success }).Count
         $total = $items.Count
         $rate = if ($total -gt 0) { 100.0 * $ok / $total } else { 0.0 }
-        '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3} / {2}</td><td>{4}%</td><td>{5}</td><td>{6}</td><td>{7}</td><td>{8}</td></tr>' -f `
+        '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3} / {2}</td><td>{4}%</td><td>{5}</td><td>{6}</td><td>{7}</td></tr>' -f `
             (HtmlEscape $method.Display),
             (HtmlEscape $method.Keypoint),
             $total,
@@ -270,7 +263,6 @@ function Build-Report {
             (FormatNumber $rate 1),
             (FormatNumber (MeanValue $items 'InlierRatio' -OnlyNonNegative) 3),
             (FormatNumber (MeanValue $items 'IoU' -OnlyNonNegative) 3),
-            (FormatNumber (MeanValue $items 'SSIM' -OnlyNonNegative) 3),
             (FormatNumber (MeanValue $items 'TotalMs') 1)
     }
 
@@ -279,7 +271,7 @@ function Build-Report {
         $detailRows = foreach ($r in $items) {
             $statusClass = if ($r.Success) { 'ok' } else { 'fail' }
             $statusText = if ($r.Success) { '通过' } else { '未通过' }
-            '<tr><td>{0}</td><td class="{1}">{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td>{7}</td><td>{8}</td><td>{9}</td><td>{10}</td><td>{11}</td><td>{12}</td><td>{13}</td><td>{14}</td><td>{15}</td></tr>' -f `
+            '<tr><td>{0}</td><td class="{1}">{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td>{7}</td><td>{8}</td><td>{9}</td><td>{10}</td><td>{11}</td><td>{12}</td><td>{13}</td><td>{14}</td></tr>' -f `
                 (HtmlEscape $r.Sample),
                 $statusClass,
                 $statusText,
@@ -292,7 +284,6 @@ function Build-Report {
                 (FormatNumber $r.InlierRatio 3),
                 (FormatNumber $r.IoU 3),
                 (FormatNumber $r.NMAD 4),
-                (FormatNumber $r.SSIM 3),
                 (FormatNumber $r.ExtractMs 1),
                 (FormatNumber $r.MatchMs 1),
                 (FormatNumber $r.TotalMs 1)
@@ -323,7 +314,7 @@ function Build-Report {
   <h3>12 个测试用例过程信息统计表</h3>
   <table>
     <thead>
-      <tr><th>样本</th><th>状态</th><th>说明</th><th>源关键点</th><th>目标关键点</th><th>原始匹配</th><th>过滤匹配</th><th>内点</th><th>内点率</th><th>IoU</th><th>NMAD</th><th>SSIM</th><th>提取 ms</th><th>匹配 ms</th><th>总耗时 ms</th></tr>
+      <tr><th>样本</th><th>状态</th><th>说明</th><th>源关键点</th><th>目标关键点</th><th>原始匹配</th><th>过滤匹配</th><th>内点</th><th>内点率</th><th>IoU</th><th>NMAD</th><th>提取 ms</th><th>匹配 ms</th><th>总耗时 ms</th></tr>
     </thead>
     <tbody>
       $($detailRows -join "`n")
@@ -374,7 +365,7 @@ $css
 <h2>1. 六种方法 12 个用例测试结果与成功率</h2>
 <table>
   <thead>
-    <tr><th>方法</th><th>特征配置</th><th>用例数</th><th>成功数</th><th>成功率</th><th>平均内点率</th><th>平均 IoU</th><th>平均 SSIM</th><th>平均耗时 ms</th></tr>
+    <tr><th>方法</th><th>特征配置</th><th>用例数</th><th>成功数</th><th>成功率</th><th>平均内点率</th><th>平均 IoU</th><th>平均耗时 ms</th></tr>
   </thead>
   <tbody>
     $($methodRows -join "`n")

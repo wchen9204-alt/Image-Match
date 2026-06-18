@@ -31,6 +31,7 @@
 #include "filter/gms_filter.h"
 #include "filter/min_distance_filter.h"
 #include "filter/ratio_test.h"
+#include "filter/pairwise_rigid_consistency_filter.h"
 
 #include "direct/dense/dis_flow_aligner.h"
 #include "direct/dense/farneback_flow_aligner.h"
@@ -165,24 +166,28 @@ std::shared_ptr<IMatcher> Factory::createMatcher(const YAML::Node& cfg) {
 
 std::shared_ptr<IFilter> Factory::createFilter(const YAML::Node& cfg) {
     const std::string t = typeOf(cfg);
+    const std::string key = string_utils::normalizedKey(t);
 
-    if (t == "RATIO_TEST" || t == "RatioTest") {
+    if (key == "RATIOTEST") {
         return std::make_shared<RatioTestFilter>(cfg);
     }
-    if (t == "CROSS_CHECK" || t == "CrossCheck") {
+    if (key == "CROSSCHECK") {
         return std::make_shared<CrossCheckFilter>(cfg);
     }
-    if (t == "DISTANCE_THRESHOLD" || t == "DistanceThreshold") {
+    if (key == "DISTANCETHRESHOLD") {
         return std::make_shared<DistanceThresholdFilter>(cfg);
     }
-    if (t == "MIN_DISTANCE" || t == "MinDistance" || t == "MIN_DIST") {
+    if (key == "MINDISTANCE" || key == "MINDIST") {
         return std::make_shared<MinDistanceFilter>(cfg);
     }
-    if (t == "DISTANCE_DISTRIBUTION" || t == "DistanceDistribution") {
+    if (key == "DISTANCEDISTRIBUTION") {
         return std::make_shared<DistanceDistributionFilter>(cfg);
     }
-    if (t == "GMS") {
+    if (key == "GMS") {
         return std::make_shared<GmsFilter>(cfg);
+    }
+    if (key == "PAIRWISERIGIDCONSISTENCY" || key == "RIGIDCONSISTENCY") {
+        return std::make_shared<PairwiseRigidConsistencyFilter>(cfg);
     }
     throw std::runtime_error("Factory: unknown filter type: " + t);
 }
@@ -246,4 +251,3 @@ std::shared_ptr<IGeometryEstimator> Factory::createGeometryEstimator(const YAML:
 }
 
 } // namespace ir
-

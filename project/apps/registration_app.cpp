@@ -152,8 +152,19 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
     std::vector<std::string> labels;
     std::vector<int> successCounts;
     std::vector<int> totalCounts;
-    std::vector<double> avgIous;
-    std::vector<double> avgPsnrs;
+    std::vector<double> avgContainments;
+    std::vector<std::string> failedCases;
+
+    auto joinFailedCases = [](const std::vector<std::string>& names) {
+        std::ostringstream joined;
+        for (size_t i = 0; i < names.size(); ++i) {
+            if (i > 0) {
+                joined << "; ";
+            }
+            joined << names[i];
+        }
+        return joined.str();
+    };
 
     auto runCombination = [&](const std::string& label, const PipelineConfig& pipelineCfg) {
         DatasetLoader loader(datasetOpts);
@@ -164,8 +175,18 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
         }
 
         int okCount = 0;
-        double iouSum = 0.0, psnrSum = 0.0;
-        int iouValid = 0, psnrValid = 0;
+        double containmentSum = 0.0;
+        int containmentValid = 0;
+        std::vector<std::string> failedSampleNames;
+        std::vector<std::string> sampleNames;
+        std::vector<RegistrationResult> results;
+        std::vector<EvaluationData> evaluations;
+        sampleNames.reserve(samples.size());
+        results.reserve(samples.size());
+        evaluations.reserve(samples.size());
+
+        std::error_code ec;
+        fs::create_directories(pipelineCfg.output_dir, ec);
 
         for (const auto& sample : samples) {
             auto pCfg = pipelineCfg;
@@ -174,27 +195,47 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
             pCfg.output_dir = pCfg.output_dir / sample.name;
 
             Registration pipeline;
-            if (!pipeline.configure(pCfg)) continue;
+            if (!pipeline.configure(pCfg)) {
+                RegistrationResult failed;
+                failed.success = false;
+                failed.message = "pipeline configure failed";
+                failedSampleNames.push_back(sample.name);
+                sampleNames.push_back(sample.name);
+                results.push_back(failed);
+                evaluations.push_back(EvaluationData{});
+                continue;
+            }
 
             RegistrationContext ctx;
-            if (pipeline.run(ctx)) ++okCount;
-
-            if (ctx.result.warp_overlap_iou >= 0.0) {
-                iouSum += ctx.result.warp_overlap_iou;
-                ++iouValid;
+            if (pipeline.run(ctx)) {
+                ++okCount;
+            } else {
+                failedSampleNames.push_back(sample.name);
             }
-            // 从 evaluation 中取 PSNR。
-            if (const auto* m = ctx.evaluation.find("PSNR"); m && m->valid) {
-                psnrSum += m->value;
-                ++psnrValid;
+            app_helpers::writeRunSummaryFiles(ctx, pCfg, sample.name);
+            sampleNames.push_back(sample.name);
+            results.push_back(ctx.result);
+            evaluations.push_back(ctx.evaluation);
+
+            if (ctx.result.warp_overlap_containment >= 0.0) {
+                containmentSum += ctx.result.warp_overlap_containment;
+                ++containmentValid;
             }
         }
 
         labels.push_back(label);
         successCounts.push_back(okCount);
         totalCounts.push_back(static_cast<int>(samples.size()));
-        avgIous.push_back(iouValid > 0 ? iouSum / iouValid : -1.0);
-        avgPsnrs.push_back(psnrValid > 0 ? psnrSum / psnrValid : -1.0);
+        avgContainments.push_back(containmentValid > 0 ? containmentSum / containmentValid : -1.0);
+        failedCases.push_back(joinFailedCases(failedSampleNames));
+
+        if (yaml_utils::getBool(output, "summary_csv", true)) {
+            writeSummaryCsv(pipelineCfg.output_dir / "summary.csv",
+                            pipelineCfg.methodFamily(),
+                            sampleNames,
+                            results,
+                            evaluations);
+        }
 
         std::cout << "  " << label << ": " << okCount << " / " << samples.size()
                   << " succeeded\n";
@@ -305,16 +346,16 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
     // 5. 写对比总表
     const auto csvPath = outputRoot / "comparison.csv";
     std::ostringstream oss;
-    oss << "method,succeeded,total,success_rate,avg_iou,avg_psnr\n";
+    oss << "方法,成功数,总数,成功率,平均局部包含率,失败用例\n";
     for (size_t i = 0; i < labels.size(); ++i) {
-        oss << labels[i] << ","
+        oss << file_utils::csvEscape(labels[i]) << ","
             << successCounts[i] << ","
             << totalCounts[i] << ","
             << (totalCounts[i] > 0
                     ? static_cast<double>(successCounts[i]) / totalCounts[i]
                     : 0.0) << ","
-            << avgIous[i] << ","
-            << avgPsnrs[i] << "\n";
+            << avgContainments[i] << ","
+            << file_utils::csvEscape(failedCases[i]) << "\n";
     }
     file_utils::writeWholeFile(csvPath, oss.str());
     std::cout << "\nWrote comparison table: " << csvPath.string() << "\n";
@@ -409,7 +450,6 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
         cfg.output_dir = buildOutputDir(OutputMode::BATCH, output_root, cfg, sample.name);
         if (!batch.save_visuals) {
             cfg.draw_matches = false;
-            cfg.warp = false;
         }
         cfg.show_source_window = false;
         cfg.show_target_window = false;

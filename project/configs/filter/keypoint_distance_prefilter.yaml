@@ -1,0 +1,13 @@
+type: DISTANCE_DISTRIBUTION
+
+params:
+  # 用分位数模式做宽松预过滤，只去掉描述子距离分布中的明显长尾。
+  mode: percentile
+  percentile: 0.75
+
+  # 对二值/浮点描述子共用时，不强加固定距离下限。
+  min_distance_floor: 0.0
+
+  # 若预过滤后剩余匹配过少，则回退到输入，避免弱纹理样例被过早剪空。
+  min_kept_matches: 12
+  fallback_to_input_if_too_few: true

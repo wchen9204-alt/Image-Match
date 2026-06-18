@@ -30,10 +30,10 @@ visualization:
 
 validation:
   warp_overlap:
-    # 是否启用 warp 后的前景 IoU 验证。
+    # 是否启用 warp 后的前景局部包含率验证。
     enabled: true
-    # 最低 IoU 阈值；低于该值时样本判失败。
-    min_iou: 0.20
+    # 最低局部包含率；默认值 0.20，低于该值时样本判失败。
+    min_containment: 0.70
     # 前景二值化阈值。
     foreground_threshold: 10
   photometric:

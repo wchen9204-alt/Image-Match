@@ -150,8 +150,30 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
         const auto& validation = node["validation"];
         if (validation["warp_overlap"] && validation["warp_overlap"].IsMap()) {
             const auto& overlap = validation["warp_overlap"];
-            cfg.validate_warp_overlap = yaml_utils::getBool(overlap, "enabled", false);
-            cfg.min_warp_overlap_iou = yaml_utils::getDouble(overlap, "min_iou", 0.20);
+            const bool warpOverlapEnabled = yaml_utils::getBool(overlap, "enabled", false);
+            const bool hasContainmentThreshold = static_cast<bool>(overlap["min_containment"]);
+            cfg.min_warp_overlap_containment =
+                yaml_utils::getDouble(overlap, "min_containment", 0.20);
+            cfg.validate_warp_containment =
+                warpOverlapEnabled &&
+                yaml_utils::getBool(overlap,
+                                    "containment_enabled",
+                                    hasContainmentThreshold);
+            const bool hasBidirectionalCoverageThreshold =
+                static_cast<bool>(overlap["min_bidirectional_coverage"]);
+            const bool hasLegacySourceCoverageThreshold =
+                static_cast<bool>(overlap["min_source_coverage"]);
+            cfg.min_warp_bidirectional_coverage =
+                hasBidirectionalCoverageThreshold
+                    ? yaml_utils::getDouble(overlap, "min_bidirectional_coverage", -1.0)
+                    : yaml_utils::getDouble(overlap, "min_source_coverage", -1.0);
+            cfg.validate_warp_bidirectional_coverage =
+                yaml_utils::getBool(overlap,
+                                    "bidirectional_coverage_enabled",
+                                    hasBidirectionalCoverageThreshold ||
+                                        hasLegacySourceCoverageThreshold);
+            cfg.accept_warp_overlap_if_either_passes =
+                yaml_utils::getBool(overlap, "accept_if_either_passes", false);
             cfg.warp_overlap_foreground_threshold =
                 yaml_utils::getInt(overlap, "foreground_threshold", 10);
         }
@@ -161,6 +183,8 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
                 yaml_utils::getBool(photometric, "enabled", false);
             cfg.max_warp_photometric_error =
                 yaml_utils::getDouble(photometric, "max_nmad", 0.15);
+            cfg.max_warp_photometric_error_for_coverage_only =
+                yaml_utils::getDouble(photometric, "max_nmad_for_coverage_only", -1.0);
         }
         if (validation["match_quality"] && validation["match_quality"].IsMap()) {
             const auto& matchQuality = validation["match_quality"];
@@ -172,6 +196,8 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
                 yaml_utils::getDouble(matchQuality, "min_inlier_ratio", -1.0);
             cfg.max_match_reproj_error =
                 yaml_utils::getDouble(matchQuality, "max_reproj_error", -1.0);
+            cfg.min_inlier_spatial_coverage =
+                yaml_utils::getDouble(matchQuality, "min_inlier_spatial_coverage", -1.0);
         }
         if (validation["structure_overlap"] && validation["structure_overlap"].IsMap()) {
             const auto& overlap = validation["structure_overlap"];

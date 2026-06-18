@@ -9,7 +9,7 @@ type: BF
 
 params:
   # MATCH / KNN / RADIUS
-  method: MATCH
+  method: match
 
   # L2 / L1 / HAMMING / HAMMING2 / AUTO
   # 优先级：matcher 显式 norm_type 最高；AUTO 时使用 keypoint 的 descriptor_norm。

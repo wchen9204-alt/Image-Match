@@ -51,6 +51,9 @@ DistanceDistributionFilter::DistanceDistributionFilter(const YAML::Node& cfg) {
     _stdMultiplier = yaml_utils::getFloat(params, "std_multiplier", 1.0f);
     _percentile = yaml_utils::getFloat(params, "percentile", 0.8f);
     _minDistanceFloor = yaml_utils::getFloat(params, "min_distance_floor", 0.0f);
+    _minKeptMatches = yaml_utils::getInt(params, "min_kept_matches", 0);
+    _fallbackToInputIfTooFew =
+        yaml_utils::getBool(params, "fallback_to_input_if_too_few", false);
 
     if (_stdMultiplier < 0.0f) {
         _stdMultiplier = 0.0f;
@@ -58,6 +61,9 @@ DistanceDistributionFilter::DistanceDistributionFilter(const YAML::Node& cfg) {
     _percentile = std::clamp(_percentile, 0.0f, 1.0f);
     if (_minDistanceFloor < 0.0f) {
         _minDistanceFloor = 0.0f;
+    }
+    if (_minKeptMatches < 0) {
+        _minKeptMatches = 0;
     }
 
     IR_LOG_INFO("DistanceDistributionFilter mode=",
@@ -67,7 +73,11 @@ DistanceDistributionFilter::DistanceDistributionFilter(const YAML::Node& cfg) {
                 ", percentile=",
                 _percentile,
                 ", min_distance_floor=",
-                _minDistanceFloor);
+                _minDistanceFloor,
+                ", min_kept_matches=",
+                _minKeptMatches,
+                ", fallback_to_input_if_too_few=",
+                _fallbackToInputIfTooFew);
 }
 
 bool DistanceDistributionFilter::apply(RegistrationContext& ctx) {
@@ -112,6 +122,17 @@ bool DistanceDistributionFilter::apply(RegistrationContext& ctx) {
             if (match.distance <= threshold) {
                 kept.push_back(match);
             }
+        }
+
+        if (_fallbackToInputIfTooFew &&
+            _minKeptMatches > 0 &&
+            static_cast<int>(kept.size()) < _minKeptMatches) {
+            IR_LOG_WARN("DistanceDistributionFilter [structure]: kept ",
+                        kept.size(),
+                        " matches, below min_kept_matches=",
+                        _minKeptMatches,
+                        "; fallback to input.");
+            return true;
         }
 
         smd.filtered_matches = std::move(kept);
@@ -163,6 +184,19 @@ bool DistanceDistributionFilter::apply(RegistrationContext& ctx) {
         if (match.distance <= threshold) {
             kept.push_back(match);
         }
+    }
+
+    if (_fallbackToInputIfTooFew &&
+        _minKeptMatches > 0 &&
+        static_cast<int>(kept.size()) < _minKeptMatches) {
+        IR_LOG_WARN("DistanceDistributionFilter [keypoint]: kept ",
+                    kept.size(),
+                    " / ",
+                    input.size(),
+                    " matches, below min_kept_matches=",
+                    _minKeptMatches,
+                    "; fallback to input.");
+        return true;
     }
 
     IR_LOG_INFO("DistanceDistributionFilter [keypoint] kept ",

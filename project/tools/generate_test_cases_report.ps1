@@ -211,7 +211,6 @@ function New-ReportRecordFromCsvRow {
         InlierRatio = PickFirst $Row @('structure_inlier_ratio', 'learning_inlier_ratio', 'direct_confidence', 'inlier_ratio')
         ReprojError = PickFirst $Row @('mean_structure_reproj_error', 'mean_reproj_error')
         IoU = PickProperty $Row 'warp_overlap_iou'
-        SSIM = PickFirst $Row @('metric_SSIM', 'SSIM')
         TotalMs = PickProperty $Row 't_total_ms'
     }
 }
@@ -235,7 +234,6 @@ function New-ReportRecordFromJson {
     $parts = $relativeSummary -split '/'
     $counts = PickProperty $json 'counts'
     $quality = PickProperty $json 'quality'
-    $metrics = PickProperty $json 'metrics'
     $timings = PickProperty $json 'timings_ms'
     $family = if (PickProperty $json 'method_family') { PickProperty $json 'method_family' } else { $parts[2] }
     $schema = DetectCsvSchema $counts $family
@@ -258,7 +256,6 @@ function New-ReportRecordFromJson {
         InlierRatio = PickProperty $quality 'inlier_ratio'
         ReprojError = PickProperty $quality 'mean_reproj_error'
         IoU = PickProperty $quality 'warp_overlap_iou'
-        SSIM = PickProperty $metrics 'SSIM'
         TotalMs = PickProperty $timings 'total'
     }
 }
@@ -317,21 +314,20 @@ $pipelineRows = foreach ($group in ($records | Group-Object Family, Pipeline | S
     $items = @($group.Group)
     $first = $items[0]
     $ok = @($items | Where-Object { $_.Status -eq 'OK' }).Count
-    '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3} / {2}</td><td>{4}</td><td>{5}</td><td>{6}</td><td>{7}</td><td>{8}</td></tr>' -f `
+    '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3} / {2}</td><td>{4}</td><td>{5}</td><td>{6}</td><td>{7}</td></tr>' -f `
         (HtmlEscape $first.Family),
         (HtmlEscape $first.Pipeline),
         $items.Count,
         $ok,
         (FormatNumber (Mean $items 'IoU')),
         (FormatNumber (Mean $items 'InlierRatio')),
-        (FormatNumber (Mean $items 'SSIM')),
         (FormatNumber (Mean $items 'TotalMs') 1),
         (HtmlEscape $first.SummaryPath)
 }
 
 $caseRows = foreach ($record in $records) {
     $statusText = if ($record.Status -eq 'OK') { '&#36890;&#36807;' } else { '&#26410;&#36890;&#36807;' }
-    '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}<br><span class="muted">{6}</span></td><td>{7}</td><td>{8}</td><td>{9}</td><td>{10}</td><td>{11}</td><td>{12}</td><td>{13}</td><td>{14}</td><td>{15}</td></tr>' -f `
+    '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}<br><span class="muted">{6}</span></td><td>{7}</td><td>{8}</td><td>{9}</td><td>{10}</td><td>{11}</td><td>{12}</td><td>{13}</td><td>{14}</td></tr>' -f `
         (HtmlEscape $record.Sample),
         (HtmlEscape $record.Family),
         (HtmlEscape $record.Pipeline),
@@ -345,7 +341,6 @@ $caseRows = foreach ($record in $records) {
         (FormatNumber $record.InlierRatio),
         (FormatNumber $record.ReprojError),
         (FormatNumber $record.IoU),
-        (FormatNumber $record.SSIM),
         (FormatNumber $record.TotalMs 1),
         (HtmlEscape $record.SummaryPath)
 }
@@ -393,12 +388,12 @@ $template = @'
   </table>
   <h2>4. Pipeline &#27719;&#24635;</h2>
   <table>
-    <tr><th>&#26041;&#27861;&#26063;</th><th>Pipeline</th><th>&#29992;&#20363;&#25968;</th><th>&#36890;&#36807;&#25968;</th><th>&#24179;&#22343; IoU</th><th>&#24179;&#22343;&#20869;&#28857;/&#32622;&#20449;&#24230;</th><th>&#24179;&#22343; SSIM</th><th>&#24179;&#22343;&#32791;&#26102; ms</th><th>CSV &#27719;&#24635;</th></tr>
+    <tr><th>&#26041;&#27861;&#26063;</th><th>Pipeline</th><th>&#29992;&#20363;&#25968;</th><th>&#36890;&#36807;&#25968;</th><th>&#24179;&#22343; IoU</th><th>&#24179;&#22343;&#20869;&#28857;/&#32622;&#20449;&#24230;</th><th>&#24179;&#22343;&#32791;&#26102; ms</th><th>CSV &#27719;&#24635;</th></tr>
     __PIPELINE_ROWS__
   </table>
   <h2>5. &#27979;&#35797;&#29992;&#20363;&#26126;&#32454;</h2>
   <table>
-    <tr><th>&#26679;&#26412;</th><th>&#26041;&#27861;&#26063;</th><th>Pipeline</th><th>&#29366;&#24577;</th><th>&#35828;&#26126;</th><th>&#23545;&#35937;&#25968;&#37327;</th><th>&#20505;&#36873;/&#21407;&#22987;&#21305;&#37197;</th><th>&#36807;&#28388;&#21305;&#37197;</th><th>&#20869;&#28857;</th><th>&#20869;&#28857;&#29575;/&#32622;&#20449;&#24230;</th><th>&#37325;&#25237;&#24433;&#35823;&#24046;</th><th>IoU</th><th>SSIM</th><th>&#32791;&#26102; ms</th><th>&#20449;&#24687;&#26469;&#28304;</th></tr>
+    <tr><th>&#26679;&#26412;</th><th>&#26041;&#27861;&#26063;</th><th>Pipeline</th><th>&#29366;&#24577;</th><th>&#35828;&#26126;</th><th>&#23545;&#35937;&#25968;&#37327;</th><th>&#20505;&#36873;/&#21407;&#22987;&#21305;&#37197;</th><th>&#36807;&#28388;&#21305;&#37197;</th><th>&#20869;&#28857;</th><th>&#20869;&#28857;&#29575;/&#32622;&#20449;&#24230;</th><th>&#37325;&#25237;&#24433;&#35823;&#24046;</th><th>IoU</th><th>&#32791;&#26102; ms</th><th>&#20449;&#24687;&#26469;&#28304;</th></tr>
     __CASE_ROWS__
   </table>
   <p>&#29983;&#25104;&#26102;&#38388;&#65306;__GENERATED_AT__</p>

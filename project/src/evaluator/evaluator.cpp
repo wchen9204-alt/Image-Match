@@ -6,9 +6,6 @@
 #include "core/config.h"
 #include "evaluator/metrics/geometric/inlier_ratio.h"
 #include "evaluator/metrics/geometric/reprojection_error.h"
-#include "evaluator/metrics/image/psnr.h"
-#include "evaluator/metrics/image/rmse.h"
-#include "evaluator/metrics/image/ssim.h"
 #include "evaluator/metrics/keypoint/repeatability.h"
 #include "utils/logger.h"
 #include "utils/string_utils.h"
@@ -24,12 +21,6 @@ std::shared_ptr<IMetric> Evaluator::createMetric(const std::string& name,
     // 大小写和分隔符不敏感匹配。
     const std::string key = string_utils::normalizedKey(name);
 
-    if (key == "PSNR")
-        return std::make_shared<PsnrMetric>(params);
-    if (key == "SSIM")
-        return std::make_shared<SsimMetric>(params);
-    if (key == "RMSE")
-        return std::make_shared<RmseMetric>(params);
     if (key == "INLIERRATIO")
         return std::make_shared<InlierRatioMetric>(params);
     if (key == "REPROJECTIONERROR")

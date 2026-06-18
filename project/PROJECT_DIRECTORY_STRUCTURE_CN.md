@@ -155,9 +155,6 @@ project/                                     # 图像配准实验平台根目录
 │   │       │   ├── inlier_ratio.h
 │   │       │   └── reprojection_error.h
 │   │       ├── image/
-│   │       │   ├── psnr.h
-│   │       │   ├── rmse.h
-│   │       │   └── ssim.h
 │   │       └── keypoint/
 │   │           └── repeatability.h
 │   ├── filter/                              # 匹配过滤器

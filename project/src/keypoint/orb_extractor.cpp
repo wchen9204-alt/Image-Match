@@ -1,5 +1,6 @@
-﻿#include "keypoint/orb_extractor.h"
+#include "keypoint/orb_extractor.h"
 
+#include "keypoint/keypoint_extractor_helpers.h"
 #include "utils/descriptor_norm_utils.h"
 #include "utils/image_utils.h"
 #include "utils/logger.h"
@@ -27,6 +28,7 @@ OrbExtractor::OrbExtractor(const YAML::Node& cfg) {
     const NormType default_norm =
         (_wtaK == 3 || _wtaK == 4) ? NormType::HAMMING2 : NormType::HAMMING;
     _norm = descriptor_norm_utils::readConfiguredNorm(cfg, default_norm);
+    _augmentation_config = loadBoundaryCornerAugmentationConfig(cfg);
 
     _impl = cv::ORB::create(_nfeatures,
                             _scaleFactor,
@@ -58,33 +60,12 @@ bool OrbExtractor::extract(RegistrationContext& ctx) {
         return false;
     }
 
-    auto& fd = ctx.keypoint_data;
-    auto& images = ctx.images;
-    fd.type = KeypointType::ORB;
-    fd.norm_type = _norm;
-
-    if (images.first.empty() || images.second.empty()) {
-        IR_LOG_ERROR("ORB::extract - source images are empty.");
-        return false;
-    }
-    if (!image_utils::ensureGray(images.first, images.first_gray) ||
-        !image_utils::ensureGray(images.second, images.second_gray)) {
-        IR_LOG_ERROR("ORB::extract - failed to prepare grayscale images.");
-        return false;
-    }
-
-    _impl->detectAndCompute(
-        images.first_gray, cv::noArray(), fd.first.keypoints, fd.first.descriptors);
-    _impl->detectAndCompute(
-        images.second_gray, cv::noArray(), fd.second.keypoints, fd.second.descriptors);
-
-    IR_LOG_INFO("ORB extracted ",
-                fd.first.keypoints.size(),
-                " / ",
-                fd.second.keypoints.size(),
-                " keypoints");
-    return !fd.empty();
+    return extractKeypointsWithBoundaryAugmentation(ctx,
+                                                    KeypointType::ORB,
+                                                    _norm,
+                                                    "ORB",
+                                                    *_impl,
+                                                    _augmentation_config);
 }
 
 } // namespace ir
-

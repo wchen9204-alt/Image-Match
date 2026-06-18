@@ -11,7 +11,7 @@ namespace ir {
 Registration::Registration(std::shared_ptr<IPipeline> pipeline) : _pipeline(std::move(pipeline)) {}
 
 std::string Registration::name() const {
-    // ���ȷ�����ʽ�������ƣ�������־��������������ȶ���
+    // 优先返回显式配置的名称，保证日志和输出目录命名稳定。
     if (!_cfg.name.empty()) {
         return _cfg.name;
     }
@@ -24,7 +24,7 @@ std::string Registration::name() const {
 bool Registration::configure(const PipelineConfig& cfg) {
     _cfg = cfg;
 
-    // �ⲿδע�������ˮ��ʱ���� method_family ͳһѡ��Ĭ��ʵ�֡�
+    // 外部未注入具体流水线时，按 method_family 统一选择默认实现。
     if (!_pipeline) {
         switch (_cfg.method_family) {
         case MethodFamily::STRUCTURE:
@@ -43,7 +43,7 @@ bool Registration::configure(const PipelineConfig& cfg) {
         }
     }
 
-    // Registration ֻ����������ȣ�����׶����ý�����ˮ��ʵ�֡�
+    // Registration 只负责高层配置，具体阶段配置交给流水线实现。
     if (!_pipeline->configure(_cfg)) {
         IR_LOG_ERROR("Registration::configure - pipeline configure failed for '", _cfg.name, "'");
         return false;
@@ -52,7 +52,7 @@ bool Registration::configure(const PipelineConfig& cfg) {
 }
 
 bool Registration::run(RegistrationContext& ctx) {
-    // ����ǰ��������� configure���������ˮ�߽���ִ�н׶Ρ�
+    // 运行前必须已经完成 configure，然后由流水线执行各阶段。
     if (!_pipeline) {
         IR_LOG_ERROR("Registration::run - pipeline not configured.");
         return false;

@@ -1,0 +1,23 @@
+type: PAIRWISE_RIGID_CONSISTENCY
+
+params:
+  # 只使用足够分开的点对投票，避免 2 点向量太短导致旋转估计不稳定。
+  min_pair_distance: 20.0
+
+  # rigid 假设下，source / target 中对应点对的长度差不应过大。
+  max_distance_diff: 5.0
+
+  # 相对主旋转峰的最大角度偏差，单位度。
+  max_angle_diff_deg: 8.0
+
+  # 旋转角直方图分桶数，用于估计主旋转峰。
+  rotation_bins: 36
+
+  # 单条匹配至少需要和多少个 pair 支持关系一致才保留。
+  min_votes: 2
+
+  # 0 表示不限制；>0 时仅保留得票最高的前 K 条匹配。
+  keep_top_k: 0
+
+  # 若过滤后为空，是否回退到输入 matches。
+  fallback_to_input_if_empty: true

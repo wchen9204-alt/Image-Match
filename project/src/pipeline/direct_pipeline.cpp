@@ -1,20 +1,13 @@
-﻿#include "pipeline/direct_pipeline.h"
+#include "pipeline/direct_pipeline.h"
 
 #include <algorithm>
 #include <filesystem>
-#include <stdexcept>
 #include <string>
-
-#include <opencv2/imgcodecs.hpp>
-#include <opencv2/imgproc.hpp>
 
 #include "core/config.h"
 #include "core/factory.h"
 #include "utils/logger.h"
 #include "utils/timer.h"
-#include "utils/visualization/direct/draw_warp_difference.h"
-#include "utils/visualization/draw_matches.h"
-#include "utils/yaml_utils.h"
 
 namespace fs = std::filesystem;
 
@@ -75,7 +68,7 @@ bool DirectPipeline::runEstimation(RegistrationContext& ctx) {
     ctx.correspondence_source = "DIRECT";
     const bool ok = _aligner->align(ctx);
 
-    // 直接法不再伪装成 keypoint match，摘要统计直接从 direct_data/geometry_data 读取。
+    // Direct methods report summary stats from direct_data/geometry_data.
     const int pairCount = static_cast<int>(
         std::max(ctx.direct_data.matches.size(),
                  std::min(ctx.direct_data.points1.size(), ctx.direct_data.points2.size())));
@@ -84,7 +77,7 @@ bool DirectPipeline::runEstimation(RegistrationContext& ctx) {
     ctx.result.num_inliers = ctx.geometry_data.num_inliers;
     ctx.result.inlier_ratio = ctx.geometry_data.inlier_ratio;
     if (ctx.result.num_inliers == 0 && ctx.direct_data.valid) {
-        // ECC/相位相关这类非点对方法可能只有 score，没有常规内点数，用 score 填入摘要置信度。
+        // Methods without point pairs may only provide a score; reuse it as confidence.
         ctx.result.num_inliers = pairCount;
         ctx.result.inlier_ratio = ctx.direct_data.score;
     }
@@ -102,40 +95,14 @@ bool DirectPipeline::saveOutputs(RegistrationContext& ctx) {
     }
 
     const fs::path directDir = _config.output_dir / "direct";
-    std::error_code ec;
-    // direct 子目录仅存放直接法专属可视化，通用 warped/blend 仍由 BasePipeline 统一输出。
-    fs::create_directories(directDir, ec);
-
-    const std::string stem = buildOutputStem(ctx);
-    const bool hasPointPairs = !ctx.direct_data.points1.empty() && !ctx.direct_data.points2.empty();
-    const fs::path matchesOut = directDir / (stem + "_matches.png");
-    if (_config.draw_matches && hasPointPairs) {
-        DrawMatches::Options matchOpt;
-        matchOpt.max_matches = _config.max_matches_drawn;
-        const cv::Mat matchesVis = DrawMatches::render(ctx, matchOpt);
-        if (!matchesVis.empty()) {
-            cv::imwrite(matchesOut.string(), matchesVis);
-            IR_LOG_INFO("Wrote direct matches visualization: ", matchesOut.string());
-        }
-    } else {
-        // 配置关闭或当前直接法不产出点对时，清理同名旧图，避免输出目录误导复盘。
-        removeStaleDirectOutput(matchesOut);
-    }
-
-    // 稠密光流只作为内部估计数据保留，不再输出伪彩色 flow 图，避免 direct 目录混入非配准质量图。
-    removeStaleDirectOutput(directDir / (stem + "_flow.png"));
-
-    if (_config.warp && !ctx.warped_image.empty() && !ctx.images.second.empty()) {
-        const cv::Mat diffVis = renderWarpDifference(ctx.warped_image, ctx.images.second);
-        if (!diffVis.empty()) {
-            const fs::path out = directDir / (stem + "_warp_diff.png");
-            cv::imwrite(out.string(), diffVis);
-            IR_LOG_INFO("Wrote direct warp difference visualization: ", out.string());
-        }
+    if (_aligner) {
+        const std::string stem = buildOutputStem(ctx);
+        removeStaleDirectOutput(directDir / (stem + "_matches.png"));
+        removeStaleDirectOutput(directDir / (stem + "_flow.png"));
+        removeStaleDirectOutput(directDir / (stem + "_warp_diff.png"));
     }
 
     return BasePipeline::saveOutputs(ctx);
 }
 
 } // namespace ir
-

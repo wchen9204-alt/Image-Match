@@ -27,3 +27,19 @@ params:
 # SURF 使用浮点描述子，匹配距离通常使用 L2。
 # 仅当 matcher 的 norm_type 为 AUTO 时生效；matcher 显式 norm_type 优先级更高。
 descriptor_norm: L2
+
+augmentation:
+  foreground_boundary_corners:
+    enabled: true
+    # 边界角点检测方法。
+    # 可选：shi_tomasi / harris
+    corner_method: harris
+    max_corners: 40
+    quality_level: 0.01
+    min_distance: 8.0
+    block_size: 3
+    harris_k: 0.04
+    boundary_band: 6
+    foreground_threshold: 10
+    keypoint_size: 12.0
+    max_total_keypoints: -1
