@@ -19,7 +19,6 @@
 #include "matcher/structure/icp_associator.h"
 #include "matcher/structure/line_descriptor_associator.h"
 #include "matcher/structure/line_segment_associator.h"
-#include "matcher/structure/phase_correlate_associator.h"
 
 #include "structure/contour_extractor.h"
 #include "structure/edge_extractor.h"
@@ -35,13 +34,9 @@
 
 #include "direct/dense/dis_flow_aligner.h"
 #include "direct/dense/farneback_flow_aligner.h"
-#include "direct/dense/tvl1_flow_aligner.h"
 #include "direct/frequency/fourier_mellin_aligner.h"
-#include "direct/frequency/phase_correlation_aligner.h"
 #include "direct/global/ecc_aligner.h"
 #include "direct/global/esm_rigid_aligner.h"
-#include "direct/global/global_lk_aligner.h"
-#include "direct/global/zncc_rigid_aligner.h"
 #include "direct/sparse/klt_sparse_aligner.h"
 
 #include "geometry/affine_estimator.h"
@@ -112,12 +107,6 @@ std::shared_ptr<IStructureAssociator> Factory::createStructureAssociator(const Y
     const std::string key = string_utils::normalizedKey(t);
     const YAML::Node all_params = assoc_cfg["params"];
 
-    if (key == "PHASECORRELATE") {
-        const YAML::Node params =
-            all_params && all_params["phase_correlate"] ? all_params["phase_correlate"]
-                                                         : assoc_cfg;
-        return std::make_shared<PhaseCorrelateAssociator>(params);
-    }
     if (key == "CHAMFER") {
         const YAML::Node params =
             all_params && all_params["chamfer"] ? all_params["chamfer"] : assoc_cfg;
@@ -203,15 +192,6 @@ std::shared_ptr<IDirectAligner> Factory::createDirectAligner(const YAML::Node& c
     if (key == "ESMRIGID" || key == "RIGIDESM" || key == "ESM") {
         return std::make_shared<EsmRigidAligner>(cfg);
     }
-    if (key == "GLOBALLK" || key == "LKGLOBAL") {
-        return std::make_shared<GlobalLkAligner>(cfg);
-    }
-    if (key == "ZNCCRIGID" || key == "GLOBALZNCC" || key == "ZNCC") {
-        return std::make_shared<ZnccRigidAligner>(cfg);
-    }
-    if (key == "PHASECORRELATION" || key == "PHASECORRELATE") {
-        return std::make_shared<DirectPhaseCorrelationAligner>(cfg);
-    }
     if (key == "FOURIERMELLIN" || key == "FOURIERMELLINTRANSFORM" ||
         key == "FOURIERMELLINALIGNER" || key == "DIRECTFOURIERMELLIN" || key == "FMT") {
         return std::make_shared<DirectFourierMellinAligner>(cfg);
@@ -224,9 +204,6 @@ std::shared_ptr<IDirectAligner> Factory::createDirectAligner(const YAML::Node& c
     }
     if (key == "DIS" || key == "DISFLOW" || key == "DENSEINVERSESEARCH") {
         return std::make_shared<DisFlowAligner>(cfg);
-    }
-    if (key == "TVL1" || key == "TVL1FLOW" || key == "DUALTVL1" || key == "DUALTVL1FLOW") {
-        return std::make_shared<Tvl1FlowAligner>(cfg);
     }
 
     throw std::runtime_error("Factory: unknown direct aligner method: " + method);

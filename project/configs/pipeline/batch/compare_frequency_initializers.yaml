@@ -1,0 +1,43 @@
+# ---------------------------------------------------------------------------
+# 频域直接法初始化器对比配置
+# 用 6 种点特征法分别给频域直接法提供初始值，并输出统一 comparison.csv。
+# ---------------------------------------------------------------------------
+name: compare_frequency_initializers
+
+# 默认模板；组合项里直接覆盖成对应的频域 pipeline。
+base_pipeline: ../direct/frequency_direct_pipeline.yaml
+
+# 标记这是 direct compare；当前所有组合都复用 fourier_mellin 作为直接法主体。
+base_direct: ../../direct/fourier_mellin.yaml
+
+combinations:
+  - label: frequency_sift
+    pipeline: ../direct/frequency_compare/sift_frequency_direct_pipeline.yaml
+  - label: frequency_surf
+    pipeline: ../direct/frequency_compare/surf_frequency_direct_pipeline.yaml
+  - label: frequency_orb
+    pipeline: ../direct/frequency_compare/orb_frequency_direct_pipeline.yaml
+  - label: frequency_brisk
+    pipeline: ../direct/frequency_compare/brisk_frequency_direct_pipeline.yaml
+  - label: frequency_kaze
+    pipeline: ../direct/frequency_compare/kaze_frequency_direct_pipeline.yaml
+  - label: frequency_akaze
+    pipeline: ../direct/frequency_compare/akaze_frequency_direct_pipeline.yaml
+
+dataset:
+  root: ../../../datasets
+  pattern_sources: [source, moving]
+  pattern_targets: [target, reference]
+  include: []
+
+output:
+  root: ../../../outputs/compare/direct/frequency_initializers
+  save_visuals: false
+  summary_csv: true
+
+visualization:
+  draw_matches: false
+  warp: true
+  show_source_window: false
+  show_target_window: false
+  show_warped_window: false

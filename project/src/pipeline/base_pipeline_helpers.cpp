@@ -79,6 +79,7 @@ bool loadImageForPipeline(const fs::path& path, cv::Mat& color, cv::Mat& gray) {
     color.release();
     gray.release();
 
+    // 1. 常规 8-bit 非 TIFF 图像优先走 IMREAD_COLOR，直接得到显示用 BGR 和算法用灰度图。
     if (!hasTiffExtension(path)) {
         color = cv::imread(path.string(), cv::IMREAD_COLOR);
         if (!color.empty()) {
@@ -87,11 +88,13 @@ bool loadImageForPipeline(const fs::path& path, cv::Mat& color, cv::Mat& gray) {
         }
     }
 
+    // 2. 读取原始位深；高位深/特殊通道数图像在这里统一走保深度分支。
     cv::Mat raw = cv::imread(path.string(), cv::IMREAD_UNCHANGED);
     if (raw.empty()) {
         return false;
     }
 
+    // 3. 对原生 8-bit 灰度/BGR/BGRA 直接做最少转换，避免不必要的归一化损失。
     if (raw.depth() == CV_8U) {
         if (raw.channels() == 1) {
             gray = raw.clone();
@@ -110,6 +113,7 @@ bool loadImageForPipeline(const fs::path& path, cv::Mat& color, cv::Mat& gray) {
         }
     }
 
+    // 4. 其余情况统一先保深度灰度化，再压到 8-bit，保证后续整条 pipeline 输入一致。
     cv::Mat nativeGray;
     if (!toGrayPreserveDepth(raw, nativeGray) || !convertGrayTo8U(nativeGray, gray)) {
         return false;
@@ -135,6 +139,7 @@ bool buildForegroundMask(const cv::Mat& image, int thresholdValue, cv::Mat& mask
         return false;
     }
 
+    // 1. 先统一整理成单通道灰度图，兼容灰度、BGR 和 BGRA 输入。
     cv::Mat gray;
     if (image.channels() == 1) {
         gray = image;
@@ -151,6 +156,7 @@ bool buildForegroundMask(const cv::Mat& image, int thresholdValue, cv::Mat& mask
         return false;
     }
 
+    // 2. 再按阈值二值化，非黑前景区域记为 255，供 overlap/coverage 相关验证复用。
     cv::threshold(gray8,
                   mask,
                   static_cast<double>(std::clamp(thresholdValue, 0, 255)),
@@ -163,10 +169,12 @@ bool buildForegroundMask(const cv::Mat& image, int thresholdValue, cv::Mat& mask
 double computePhotometricError(const cv::Mat& warped,
                                const cv::Mat& target,
                                const cv::Mat& overlapMask) {
+    // 1. 先检查重叠区域是否合法；没有重叠时无法计算光度误差。
     if (overlapMask.empty() || cv::countNonZero(overlapMask) == 0) {
         return -1.0;
     }
 
+    // 2. 统一转为单通道灰度图，避免彩色通道差异影响后续直接比较。
     cv::Mat warpedGray;
     cv::Mat targetGray;
     if (warped.channels() == 1) {
@@ -180,16 +188,77 @@ double computePhotometricError(const cv::Mat& warped,
         cv::cvtColor(target, targetGray, cv::COLOR_BGR2GRAY);
     }
 
+    // 3. 归一化到浮点 [0, 1]，让不同图像都在统一数值范围内比较。
     cv::Mat warpedFloat;
     cv::Mat targetFloat;
     warpedGray.convertTo(warpedFloat, CV_32F, 1.0 / 255.0);
     targetGray.convertTo(targetFloat, CV_32F, 1.0 / 255.0);
 
+    // 4. 逐像素求绝对光度差，得到两张图在每个位置的灰度偏差。
     cv::Mat diff;
     cv::absdiff(warpedFloat, targetFloat, diff);
 
+    // 5. 只在重叠区域内求均值，并将该均值作为最终光度误差返回。
     const cv::Scalar meanDiff = cv::mean(diff, overlapMask);
     return meanDiff[0];
+}
+
+// 计算重叠区域内的边缘 IoU；边缘比前景覆盖更敏感，可发现内容错位但覆盖率较高的误配。
+double computeEdgeAlignmentIou(const cv::Mat& warped,
+                               const cv::Mat& target,
+                               const cv::Mat& overlapMask,
+                               int cannyLowThreshold,
+                               int cannyHighThreshold,
+                               int dilateSize,
+                               int minEdgePixels) {
+    // 1. 先检查输入尺寸和 overlap mask 是否有效；没有重叠时无法比较边缘。
+    if (warped.empty() || target.empty() || warped.size() != target.size() ||
+        overlapMask.empty() || overlapMask.size() != warped.size() ||
+        cv::countNonZero(overlapMask) == 0) {
+        return -1.0;
+    }
+
+    // 2. 统一转成 8 位灰度图，为 Canny 边缘检测准备输入。
+    cv::Mat warpedGray;
+    cv::Mat targetGray;
+    if (!toGray8ForVisualization(warped, warpedGray) ||
+        !toGray8ForVisualization(target, targetGray)) {
+        return -1.0;
+    }
+
+    int low = std::clamp(cannyLowThreshold, 0, 255);
+    int high = std::clamp(cannyHighThreshold, 0, 255);
+    if (high < low) {
+        std::swap(high, low);
+    }
+    if (high == low) {
+        high = std::min(255, low + 1);
+    }
+
+    // 3. 分别提取 warped 和 target 的边缘。
+    cv::Mat warpedEdges;
+    cv::Mat targetEdges;
+    cv::Canny(warpedGray, warpedEdges, static_cast<double>(low), static_cast<double>(high));
+    cv::Canny(targetGray, targetEdges, static_cast<double>(low), static_cast<double>(high));
+
+    // 4. 只保留共同重叠区域内的边缘，并按需做少量膨胀，容忍像素级轻微偏移。
+    cv::bitwise_and(warpedEdges, overlapMask, warpedEdges);
+    cv::bitwise_and(targetEdges, overlapMask, targetEdges);
+    dilateMaskIfRequested(warpedEdges, dilateSize);
+    dilateMaskIfRequested(targetEdges, dilateSize);
+    cv::bitwise_and(warpedEdges, overlapMask, warpedEdges);
+    cv::bitwise_and(targetEdges, overlapMask, targetEdges);
+
+    // 5. 若重叠区域边缘过少，则认为该样本不适合用边缘 IoU 判定。
+    const int warpedEdgeCount = cv::countNonZero(warpedEdges);
+    const int targetEdgeCount = cv::countNonZero(targetEdges);
+    const int minPixels = std::max(0, minEdgePixels);
+    if (warpedEdgeCount < minPixels || targetEdgeCount < minPixels) {
+        return -1.0;
+    }
+
+    // 6. 最终使用边缘 mask 的 IoU 作为结构对齐度量。
+    return computeMaskIou(warpedEdges, targetEdges);
 }
 
 // 计算两个前景 mask 的交并比，主要用于结构重叠验证。
@@ -263,6 +332,7 @@ double computeInlierSpatialCoverage(const std::vector<cv::KeyPoint>& sourceKeypo
         return -1.0;
     }
 
+    // 1. 先把内点匹配还原成 source / target 两侧的点集，非法索引直接跳过。
     std::vector<cv::Point2f> sourcePoints;
     std::vector<cv::Point2f> targetPoints;
     sourcePoints.reserve(inlierMatches.size());
@@ -280,12 +350,14 @@ double computeInlierSpatialCoverage(const std::vector<cv::KeyPoint>& sourceKeypo
         return -1.0;
     }
 
+    // 2. 用前景 mask 的包围盒作为参考范围，衡量内点分布是否只集中在很小一块区域。
     cv::Rect sourceForegroundBox = cv::boundingRect(sourceMask);
     cv::Rect targetForegroundBox = cv::boundingRect(targetMask);
     if (sourceForegroundBox.area() <= 0 || targetForegroundBox.area() <= 0) {
         return -1.0;
     }
 
+    // 3. 计算内点包围盒占前景包围盒的比例，并返回两侧覆盖率中的较大值。
     const cv::Rect2f sourceInlierBox = cv::boundingRect(sourcePoints);
     const cv::Rect2f targetInlierBox = cv::boundingRect(targetPoints);
     sourceCoverage =
@@ -341,6 +413,7 @@ bool warpMaskToTargetSize(const cv::Mat& sourceMask,
         return false;
     }
 
+    // 1. 3x3 情况按透视变换处理，覆盖 homography 等更一般的 2D warp。
     if (matrix.rows >= 3 && matrix.cols >= 3) {
         cv::warpPerspective(sourceMask,
                             warpedMask,
@@ -352,6 +425,7 @@ bool warpMaskToTargetSize(const cv::Mat& sourceMask,
         return true;
     }
 
+    // 2. 2x3 情况按仿射变换处理，兼容平移/旋转/缩放等直接法常见输出。
     if (matrix.rows >= 2 && matrix.cols >= 3) {
         const cv::Mat affine = matrix(cv::Rect(0, 0, 3, 2)).clone();
         cv::warpAffine(sourceMask,
@@ -373,10 +447,12 @@ bool invertTransformMatrix(const cv::Mat& matrix, cv::Mat& inverseMatrix) {
         return false;
     }
 
+    // 1. 3x3 直接按完整矩阵求逆，适用于透视变换。
     if (matrix.rows >= 3 && matrix.cols >= 3) {
         return cv::invert(matrix, inverseMatrix, cv::DECOMP_SVD);
     }
 
+    // 2. 2x3 先补成 3x3 再求逆，最后裁回 2x3，统一 affine 分支的逆变换写法。
     if (matrix.rows >= 2 && matrix.cols >= 3) {
         cv::Mat affine3x3 = cv::Mat::eye(3, 3, CV_64F);
         matrix(cv::Rect(0, 0, 3, 2)).copyTo(affine3x3(cv::Rect(0, 0, 3, 2)));
@@ -412,6 +488,7 @@ bool buildFalseColorOverlay(const cv::Mat& warped,
         return false;
     }
 
+    // 1. 先统一成 8-bit 灰度图，保证后续阈值分割和通道合成使用同一数值域。
     cv::Mat warpedGray;
     cv::Mat targetGray;
     if (!toGray8ForVisualization(warped, warpedGray) ||
@@ -419,12 +496,14 @@ bool buildFalseColorOverlay(const cv::Mat& warped,
         return false;
     }
 
+    // 2. 依据前景阈值生成两侧 mask，只在有效前景区域内显示叠加结果。
     const int thresholdValue = std::clamp(foregroundThreshold, 0, 255);
     cv::Mat warpedMask;
     cv::Mat targetMask;
     cv::threshold(warpedGray, warpedMask, thresholdValue, 255.0, cv::THRESH_BINARY);
     cv::threshold(targetGray, targetMask, thresholdValue, 255.0, cv::THRESH_BINARY);
 
+    // 3. warped source 写到红通道，target 写到绿通道，重合区域会呈现偏黄色。
     cv::Mat warpedRed = cv::Mat::zeros(warpedGray.size(), CV_8U);
     cv::Mat targetGreen = cv::Mat::zeros(targetGray.size(), CV_8U);
     warpedGray.copyTo(warpedRed, warpedMask);
@@ -434,6 +513,41 @@ bool buildFalseColorOverlay(const cv::Mat& warped,
     cv::Mat channels[] = {blue, targetGreen, warpedRed};
     cv::merge(channels, 3, overlay);
     return true;
+}
+
+double computePointSpatialCoverage(const std::vector<cv::Point2f>& sourcePoints,
+                                   const std::vector<cv::Point2f>& targetPoints,
+                                   const cv::Mat& sourceMask,
+                                   const cv::Mat& targetMask,
+                                   double& sourceCoverage,
+                                   double& targetCoverage) {
+    sourceCoverage = -1.0;
+    targetCoverage = -1.0;
+    if (sourcePoints.empty() || targetPoints.empty() || sourceMask.empty() || targetMask.empty()) {
+        return -1.0;
+    }
+
+    // 1. 先取 source / target 前景的包围盒，作为点对空间分布的参考范围。
+    const cv::Rect sourceForegroundBox = cv::boundingRect(sourceMask);
+    const cv::Rect targetForegroundBox = cv::boundingRect(targetMask);
+    if (sourceForegroundBox.area() <= 0 || targetForegroundBox.area() <= 0) {
+        return -1.0;
+    }
+
+    // 2. 再统计点对自身的包围盒面积，并计算其占前景范围的比例。
+    const cv::Rect2f sourcePointBox = cv::boundingRect(sourcePoints);
+    const cv::Rect2f targetPointBox = cv::boundingRect(targetPoints);
+    sourceCoverage =
+        static_cast<double>(sourcePointBox.area()) /
+        static_cast<double>(sourceForegroundBox.area());
+    targetCoverage =
+        static_cast<double>(targetPointBox.area()) /
+        static_cast<double>(targetForegroundBox.area());
+    sourceCoverage = std::clamp(sourceCoverage, 0.0, 1.0);
+    targetCoverage = std::clamp(targetCoverage, 0.0, 1.0);
+
+    // 3. 返回两侧覆盖率中的较大值，保持与其它空间覆盖率指标一致。
+    return std::max(sourceCoverage, targetCoverage);
 }
 
 } // namespace ir::base_pipeline_helpers

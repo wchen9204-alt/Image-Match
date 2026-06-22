@@ -56,20 +56,10 @@ bool DisFlowAligner::align(RegistrationContext& ctx) {
     gd.clear();
     dd.method = name();
 
-    // 1. 读取并预处理灰度图，作为 DIS 稠密光流输入。
-    if (ctx.images.first_gray.empty() || ctx.images.second_gray.empty()) {
-        dd.message = "DIS requires non-empty grayscale images";
-        gd.message = dd.message;
-        return false;
-    }
-
-    const cv::Mat firstGray =
-        dense_flow_common::prepareGray(ctx.images.first_gray, _blurKernel);
-    const cv::Mat secondGray =
-        dense_flow_common::prepareGray(ctx.images.second_gray, _blurKernel);
-    if (firstGray.empty() || secondGray.empty()) {
-        dd.message = "DIS failed to prepare grayscale images";
-        gd.message = dd.message;
+    // 1. 统一完成输入灰度图检查和预处理，具体差异只保留在 DIS 光流求解器上。
+    cv::Mat firstGray;
+    cv::Mat secondGray;
+    if (!dense_flow_common::prepareFlowInputs(ctx, "DIS", _blurKernel, firstGray, secondGray)) {
         return false;
     }
 

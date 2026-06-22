@@ -144,8 +144,6 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
     const YAML::Node output = cfg["output"];
     const auto outputRoot = Config::resolvePath(baseDir,
         yaml_utils::getString(output, "root", "../../outputs/compare"));
-    std::error_code ec;
-    fs::create_directories(outputRoot / "tmp", ec);
 
     // 4. 遍历组合
     const YAML::Node combos = cfg["combinations"];
@@ -294,6 +292,8 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
         const auto structure_yaml = Config::resolvePath(baseDir,
             yaml_utils::getString(cfg, "base_structure"));
         YAML::Node structureNode = Config::load(structure_yaml);
+        std::error_code ec;
+        fs::create_directories(outputRoot / "tmp", ec);
 
         for (const auto& combo : combos) {
             const std::string extractor = yaml_utils::getString(combo, "extractor", "LSD");

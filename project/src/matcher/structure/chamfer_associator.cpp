@@ -9,9 +9,7 @@
 #include <opencv2/imgproc.hpp>
 
 #include "matcher/structure/structure_point_set.h"
-#include "utils/image_utils.h"
 #include "utils/logger.h"
-#include "utils/string_utils.h"
 #include "utils/yaml_utils.h"
 
 namespace ir {
@@ -44,26 +42,6 @@ double scoreTranslation(const std::vector<cv::Point2f>& srcPoints,
     return sum / static_cast<double>(count);
 }
 
-// 使用相位相关估计全局初始平移，倒角匹配再围绕该初值做局部精搜。
-bool estimatePhaseShift(const cv::Mat& first,
-                        const cv::Mat& second,
-                        int blurKernel,
-                        cv::Point2d& shift) {
-    cv::Mat src = structure_points::toGray32F(first);
-    cv::Mat dst = structure_points::toGray32F(second);
-    if (src.empty() || dst.empty() || src.size() != dst.size() || cv::countNonZero(src) == 0 ||
-        cv::countNonZero(dst) == 0) {
-        return false;
-    }
-
-    image_utils::applyOptionalGaussianBlur(src, src, blurKernel);
-    image_utils::applyOptionalGaussianBlur(dst, dst, blurKernel);
-
-    double response = 0.0;
-    shift = cv::phaseCorrelate(src, dst, cv::noArray(), &response);
-    return std::isfinite(shift.x) && std::isfinite(shift.y);
-}
-
 } // namespace
 
 ChamferAssociator::ChamferAssociator(const YAML::Node& cfg) {
@@ -71,11 +49,8 @@ ChamferAssociator::ChamferAssociator(const YAML::Node& cfg) {
     _searchRadius = yaml_utils::getInt(params, "searchRadius", 20);
     _step = std::max(1, yaml_utils::getInt(params, "step", 1));
     _maxPoints = yaml_utils::getInt(params, "maxPoints", 2000);
-    _phaseBlurKernel = yaml_utils::getInt(params, "phaseBlurKernel", 5);
     _scoreThreshold = yaml_utils::getDouble(params, "scoreThreshold", 0.25);
     _bidirectional = yaml_utils::getBool(params, "bidirectional", true);
-    _initialization = string_utils::toUpperAscii(
-        yaml_utils::getString(params, "initialization", "PHASE_CORRELATE"));
 }
 
 bool ChamferAssociator::associate(RegistrationContext& ctx) {
@@ -110,16 +85,8 @@ bool ChamferAssociator::associate(RegistrationContext& ctx) {
     }
 
     cv::Point2d centerShift(0.0, 0.0);
-    if (_initialization == "PHASE_CORRELATE") {
-        if (!estimatePhaseShift(ctx.structure_data.first.response,
-                                ctx.structure_data.second.response,
-                                _phaseBlurKernel,
-                                centerShift)) {
-            IR_LOG_WARN("ChamferAssociator phase initialization failed; fallback to zero shift.");
-        }
-    }
 
-    // 倒角搜索只在初值附近展开，避免真实位移超过 searchRadius 时被限制在原点附近。
+    // 倒角搜索围绕零平移展开，由搜索半径直接覆盖允许的平移范围。
     double bestScore = std::numeric_limits<double>::infinity();
     cv::Point2d bestShift = centerShift;
     for (int dy = -_searchRadius; dy <= _searchRadius; dy += _step) {

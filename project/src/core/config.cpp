@@ -36,6 +36,183 @@ std::vector<MatchView> parseMatchViews(const YAML::Node& vis,
     return out.empty() ? fallback : out;
 }
 
+std::string pathStemUpper(const fs::path& path) {
+    return string_utils::toUpperAscii(path.stem().string());
+}
+
+DirectValidationReferenceMode parseDirectValidationReferenceMode(const std::string& raw) {
+    const std::string key = string_utils::toUpperAscii(raw);
+    if (key == "BEST_OF_DIRECT_AND_INITIALIZER" || key == "BEST_OF_BOTH" ||
+        key == "BEST_OF_DIRECT_AND_INIT") {
+        return DirectValidationReferenceMode::BEST_OF_DIRECT_AND_INITIALIZER;
+    }
+    return DirectValidationReferenceMode::DIRECT_ONLY;
+}
+
+PipelineConfig::FeatureInitializerCandidateConfig
+parseFeatureInitializerCandidate(const YAML::Node& item, const fs::path& base) {
+    PipelineConfig::FeatureInitializerCandidateConfig candidate;
+
+    // 兼容两种写法：字符串表示 keypoint 配置路径；map 可额外指定显示名。
+    if (item.IsScalar()) {
+        candidate.keypoint_path = Config::resolvePath(base, item.as<std::string>());
+        candidate.name = pathStemUpper(candidate.keypoint_path);
+    } else if (item.IsMap()) {
+        const std::string keypointEntry =
+            yaml_utils::getString(item, "keypoint", yaml_utils::getString(item, "path"));
+        candidate.keypoint_path = Config::resolvePath(base, keypointEntry);
+        candidate.name = yaml_utils::getString(item, "name", pathStemUpper(candidate.keypoint_path));
+    }
+
+    candidate.name = string_utils::toUpperAscii(candidate.name);
+    return candidate;
+}
+
+void parseFeatureInitializer(const YAML::Node& node, const fs::path& base, PipelineConfig& cfg) {
+    if (!node["feature_initializer"] || !node["feature_initializer"].IsMap()) {
+        return;
+    }
+
+    const auto& initializer = node["feature_initializer"];
+    cfg.feature_initializer.enabled =
+        yaml_utils::getBool(initializer, "enabled", cfg.feature_initializer.enabled);
+    cfg.feature_initializer.final_validation_reference =
+        parseDirectValidationReferenceMode(yaml_utils::getString(
+            initializer,
+            "final_validation_reference",
+            "DIRECT_ONLY"));
+
+    cfg.feature_initializer.candidate = {};
+    if (initializer["candidate"]) {
+        cfg.feature_initializer.candidate =
+            parseFeatureInitializerCandidate(initializer["candidate"], base);
+    } else if (initializer["candidates"] && initializer["candidates"].IsSequence()) {
+        // 兼容旧写法；只读取第一项有效候选。
+        for (const auto& item : initializer["candidates"]) {
+            auto candidate = parseFeatureInitializerCandidate(item, base);
+            if (!candidate.keypoint_path.empty()) {
+                cfg.feature_initializer.candidate = candidate;
+                break;
+            }
+        }
+    } else {
+        const std::string keypointEntry = yaml_utils::getString(initializer, "keypoint");
+        if (!keypointEntry.empty()) {
+            PipelineConfig::FeatureInitializerCandidateConfig candidate;
+            candidate.keypoint_path = Config::resolvePath(base, keypointEntry);
+            candidate.name =
+                string_utils::toUpperAscii(yaml_utils::getString(initializer,
+                                                                 "name",
+                                                                 pathStemUpper(candidate.keypoint_path)));
+            cfg.feature_initializer.candidate = candidate;
+        }
+    }
+
+    cfg.feature_initializer.matcher_path =
+        Config::resolvePath(base, yaml_utils::getString(initializer, "matcher"));
+
+    cfg.feature_initializer.filter_paths.clear();
+    if (initializer["filters"] && initializer["filters"].IsSequence()) {
+        for (const auto& f : initializer["filters"]) {
+            cfg.feature_initializer.filter_paths.push_back(
+                Config::resolvePath(base, f.as<std::string>()));
+        }
+    }
+
+    cfg.feature_initializer.geometry_path =
+        Config::resolvePath(base, yaml_utils::getString(initializer, "geometry"));
+
+    if (initializer["acceptance"] && initializer["acceptance"].IsMap()) {
+        const auto& acceptance = initializer["acceptance"];
+        auto& accept = cfg.feature_initializer.acceptance;
+        accept.min_inliers =
+            yaml_utils::getInt(acceptance, "min_inliers", accept.min_inliers);
+        accept.min_inlier_ratio =
+            yaml_utils::getDouble(acceptance,
+                                  "min_inlier_ratio",
+                                  accept.min_inlier_ratio);
+        accept.min_inlier_spatial_coverage =
+            yaml_utils::getDouble(acceptance,
+                                  "min_inlier_spatial_coverage",
+                                  accept.min_inlier_spatial_coverage);
+    }
+
+    if (initializer["validation"] && initializer["validation"].IsMap()) {
+        const auto& validation = initializer["validation"];
+        if (validation["warp_overlap"] && validation["warp_overlap"].IsMap()) {
+            const auto& overlap = validation["warp_overlap"];
+            auto& overlapCfg = cfg.feature_initializer.validation.overlap;
+            const bool enabled =
+                yaml_utils::getBool(overlap,
+                                    "enabled",
+                                    overlapCfg.containment_enabled ||
+                                        overlapCfg.bidirectional_coverage_enabled);
+            overlapCfg.containment_enabled = enabled;
+            overlapCfg.bidirectional_coverage_enabled = enabled;
+            overlapCfg.min_containment =
+                yaml_utils::getDouble(overlap,
+                                      "min_containment",
+                                      overlapCfg.min_containment);
+            overlapCfg.min_bidirectional_coverage =
+                yaml_utils::getDouble(overlap,
+                                      "min_bidirectional_coverage",
+                                      overlapCfg.min_bidirectional_coverage);
+            overlapCfg.accept_if_either_passes =
+                yaml_utils::getBool(overlap,
+                                    "accept_if_either_passes",
+                                    overlapCfg.accept_if_either_passes);
+            overlapCfg.foreground_threshold =
+                yaml_utils::getInt(overlap,
+                                   "foreground_threshold",
+                                   overlapCfg.foreground_threshold);
+        }
+        if (validation["photometric"] && validation["photometric"].IsMap()) {
+            const auto& photometric = validation["photometric"];
+            auto& photoCfg = cfg.feature_initializer.validation.photometric;
+            photoCfg.enabled =
+                yaml_utils::getBool(photometric,
+                                    "enabled",
+                                    photoCfg.enabled);
+            photoCfg.max_nmad =
+                yaml_utils::getDouble(photometric,
+                                      "max_nmad",
+                                      photoCfg.max_nmad);
+            photoCfg.max_nmad_for_coverage_only =
+                yaml_utils::getDouble(photometric,
+                                      "max_nmad_for_coverage_only",
+                                      photoCfg.max_nmad_for_coverage_only);
+        }
+        if (validation["edge_alignment"] && validation["edge_alignment"].IsMap()) {
+            const auto& edgeAlignment = validation["edge_alignment"];
+            auto& edgeCfg = cfg.feature_initializer.validation.edge_alignment;
+            edgeCfg.enabled =
+                yaml_utils::getBool(edgeAlignment,
+                                    "enabled",
+                                    edgeCfg.enabled);
+            edgeCfg.min_iou =
+                yaml_utils::getDouble(edgeAlignment,
+                                      "min_iou",
+                                      edgeCfg.min_iou);
+            edgeCfg.canny_low_threshold =
+                yaml_utils::getInt(edgeAlignment,
+                                   "canny_low_threshold",
+                                   edgeCfg.canny_low_threshold);
+            edgeCfg.canny_high_threshold =
+                yaml_utils::getInt(edgeAlignment,
+                                   "canny_high_threshold",
+                                   edgeCfg.canny_high_threshold);
+            edgeCfg.dilate_size =
+                yaml_utils::getInt(edgeAlignment,
+                                   "dilate_size",
+                                   edgeCfg.dilate_size);
+            edgeCfg.min_edge_pixels =
+                yaml_utils::getInt(edgeAlignment,
+                                   "min_edge_pixels",
+                                   edgeCfg.min_edge_pixels);
+        }
+    }
+}
+
 } // namespace
 
 YAML::Node Config::load(const fs::path& path) {
@@ -150,11 +327,12 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
         const auto& validation = node["validation"];
         if (validation["warp_overlap"] && validation["warp_overlap"].IsMap()) {
             const auto& overlap = validation["warp_overlap"];
+            auto& overlapCfg = cfg.warp_quality.overlap;
             const bool warpOverlapEnabled = yaml_utils::getBool(overlap, "enabled", false);
             const bool hasContainmentThreshold = static_cast<bool>(overlap["min_containment"]);
-            cfg.min_warp_overlap_containment =
-                yaml_utils::getDouble(overlap, "min_containment", 0.20);
-            cfg.validate_warp_containment =
+            overlapCfg.min_containment =
+                yaml_utils::getDouble(overlap, "min_containment", overlapCfg.min_containment);
+            overlapCfg.containment_enabled =
                 warpOverlapEnabled &&
                 yaml_utils::getBool(overlap,
                                     "containment_enabled",
@@ -163,28 +341,57 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
                 static_cast<bool>(overlap["min_bidirectional_coverage"]);
             const bool hasLegacySourceCoverageThreshold =
                 static_cast<bool>(overlap["min_source_coverage"]);
-            cfg.min_warp_bidirectional_coverage =
+            overlapCfg.min_bidirectional_coverage =
                 hasBidirectionalCoverageThreshold
-                    ? yaml_utils::getDouble(overlap, "min_bidirectional_coverage", -1.0)
-                    : yaml_utils::getDouble(overlap, "min_source_coverage", -1.0);
-            cfg.validate_warp_bidirectional_coverage =
+                    ? yaml_utils::getDouble(overlap,
+                                            "min_bidirectional_coverage",
+                                            overlapCfg.min_bidirectional_coverage)
+                    : yaml_utils::getDouble(overlap,
+                                            "min_source_coverage",
+                                            overlapCfg.min_bidirectional_coverage);
+            overlapCfg.bidirectional_coverage_enabled =
                 yaml_utils::getBool(overlap,
                                     "bidirectional_coverage_enabled",
                                     hasBidirectionalCoverageThreshold ||
                                         hasLegacySourceCoverageThreshold);
-            cfg.accept_warp_overlap_if_either_passes =
-                yaml_utils::getBool(overlap, "accept_if_either_passes", false);
-            cfg.warp_overlap_foreground_threshold =
-                yaml_utils::getInt(overlap, "foreground_threshold", 10);
+            overlapCfg.accept_if_either_passes =
+                yaml_utils::getBool(overlap,
+                                    "accept_if_either_passes",
+                                    overlapCfg.accept_if_either_passes);
+            overlapCfg.foreground_threshold =
+                yaml_utils::getInt(overlap, "foreground_threshold", overlapCfg.foreground_threshold);
         }
         if (validation["photometric"] && validation["photometric"].IsMap()) {
             const auto& photometric = validation["photometric"];
-            cfg.validate_warp_photometric =
-                yaml_utils::getBool(photometric, "enabled", false);
-            cfg.max_warp_photometric_error =
-                yaml_utils::getDouble(photometric, "max_nmad", 0.15);
-            cfg.max_warp_photometric_error_for_coverage_only =
-                yaml_utils::getDouble(photometric, "max_nmad_for_coverage_only", -1.0);
+            auto& photoCfg = cfg.warp_quality.photometric;
+            photoCfg.enabled =
+                yaml_utils::getBool(photometric, "enabled", photoCfg.enabled);
+            photoCfg.max_nmad =
+                yaml_utils::getDouble(photometric, "max_nmad", photoCfg.max_nmad);
+            photoCfg.max_nmad_for_coverage_only =
+                yaml_utils::getDouble(photometric,
+                                      "max_nmad_for_coverage_only",
+                                      photoCfg.max_nmad_for_coverage_only);
+        }
+        if (validation["edge_alignment"] && validation["edge_alignment"].IsMap()) {
+            const auto& edgeAlignment = validation["edge_alignment"];
+            auto& edgeCfg = cfg.warp_quality.edge_alignment;
+            edgeCfg.enabled =
+                yaml_utils::getBool(edgeAlignment, "enabled", edgeCfg.enabled);
+            edgeCfg.min_iou =
+                yaml_utils::getDouble(edgeAlignment, "min_iou", edgeCfg.min_iou);
+            edgeCfg.canny_low_threshold =
+                yaml_utils::getInt(edgeAlignment,
+                                   "canny_low_threshold",
+                                   edgeCfg.canny_low_threshold);
+            edgeCfg.canny_high_threshold =
+                yaml_utils::getInt(edgeAlignment,
+                                   "canny_high_threshold",
+                                   edgeCfg.canny_high_threshold);
+            edgeCfg.dilate_size =
+                yaml_utils::getInt(edgeAlignment, "dilate_size", edgeCfg.dilate_size);
+            edgeCfg.min_edge_pixels =
+                yaml_utils::getInt(edgeAlignment, "min_edge_pixels", edgeCfg.min_edge_pixels);
         }
         if (validation["match_quality"] && validation["match_quality"].IsMap()) {
             const auto& matchQuality = validation["match_quality"];
@@ -199,6 +406,14 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
             cfg.min_inlier_spatial_coverage =
                 yaml_utils::getDouble(matchQuality, "min_inlier_spatial_coverage", -1.0);
         }
+        if (validation["direct_quality"] && validation["direct_quality"].IsMap()) {
+            const auto& directQuality = validation["direct_quality"];
+            cfg.validate_direct_quality = yaml_utils::getBool(directQuality, "enabled", false);
+            cfg.fail_on_direct_quality =
+                yaml_utils::getBool(directQuality, "fail_on_violation", true);
+            cfg.min_direct_confidence =
+                yaml_utils::getDouble(directQuality, "min_confidence", -1.0);
+        }
         if (validation["structure_overlap"] && validation["structure_overlap"].IsMap()) {
             const auto& overlap = validation["structure_overlap"];
             cfg.validate_structure_overlap = yaml_utils::getBool(overlap, "enabled", false);
@@ -210,6 +425,8 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
         }
     }
 
+    parseFeatureInitializer(node, base, cfg);
+
     IR_LOG_INFO("Pipeline '", cfg.name, "' loaded from ", path.string());
     IR_LOG_INFO("  keypoint : ", cfg.keypoint_path.string());
     IR_LOG_INFO("  structure: ", cfg.structure_path.string());
@@ -219,6 +436,10 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
         IR_LOG_INFO("  filter   : ", f.string());
     }
     IR_LOG_INFO("  geometry : ", cfg.geometry_path.string());
+    if (cfg.feature_initializer.enabled) {
+        IR_LOG_INFO("  direct initializer candidate configured: ",
+                    cfg.feature_initializer.candidate.keypoint_path.empty() ? 0 : 1);
+    }
     IR_LOG_INFO("  image1   : ", cfg.image1_path.string());
     IR_LOG_INFO("  image2   : ", cfg.image2_path.string());
     IR_LOG_INFO("  output   : ", cfg.output_dir.string());

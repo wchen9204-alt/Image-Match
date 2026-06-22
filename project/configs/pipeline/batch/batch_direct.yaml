@@ -6,14 +6,17 @@
 name: batch_direct
 
 # 单样本 pipeline 入口；默认值：空，批处理必须显式指定。
-# 可选示例：../direct/global_direct_pipeline.yaml / ../direct/frequency_direct_pipeline.yaml /
-# ../direct/sparse_direct_pipeline.yaml / ../direct/dense_direct_pipeline.yaml
+# 可选示例：
+# ../direct/global_direct_pipeline.yaml
+# ../direct/frequency_direct_pipeline.yaml
+# ../direct/sparse_direct_pipeline.yaml
+# ../direct/dense_direct_pipeline.yaml
 # 具体算法由对应 pipeline 中的 direct 字段决定：
-# global 可切换 ecc.yaml / global_lk.yaml / esm_rigid.yaml / zncc_rigid.yaml
-# frequency 可切换 phase_correlation.yaml / fourier_mellin.yaml
+# global 可切换 ecc.yaml / esm_rigid.yaml
+# frequency 当前保留 fourier_mellin.yaml
 # sparse 可切换 klt_sparse.yaml
-# dense 可切换 dis_flow.yaml / farneback.yaml / tvl1_flow.yaml
-pipeline: ../direct/global_direct_pipeline.yaml
+# dense 可切换 dis_flow.yaml / farneback.yaml
+pipeline: ../direct/sparse_direct_pipeline.yaml
 
 dataset:
   # 数据集根目录；默认值：空，批处理必须显式指定。

@@ -9,40 +9,19 @@
 #include <opencv2/video/tracking.hpp>
 
 #include "core/types.h"
+#include "direct/common/direct_geometry_common.h"
 #include "geometry/partial_affine_utils.h"
 #include "utils/logger.h"
-#include "utils/string_utils.h"
 #include "utils/yaml_utils.h"
 
 namespace ir {
 
 namespace {
 
-struct RobustFitOptions {
-    std::string method = "RANSAC";
-    double threshold = 3.0;
-    int max_iters = 2000;
-    double confidence = 0.99;
-    int refine_iters = 10;
-};
+using direct_geometry_common::RobustFitOptions;
 
-int normalizedRobustMethod(const std::string& method, bool allowRho) {
-    const int robustMethod = robustMethodFromString(method);
-    if (robustMethod == cv::RANSAC || robustMethod == cv::LMEDS) {
-        return robustMethod;
-    }
-    if (allowRho && robustMethod == cv::RHO) {
-        return robustMethod;
-    }
-    return cv::RANSAC;
-}
-
-bool isPointInsideWithMargin(const cv::Point2f& pt, const cv::Size& size, int borderMargin) {
-    const float margin = static_cast<float>(std::max(0, borderMargin));
-    return pt.x >= margin && pt.y >= margin && pt.x < static_cast<float>(size.width) - margin &&
-           pt.y < static_cast<float>(size.height) - margin;
-}
-
+// 功能：在指定 ROI 内提取角点，并把局部坐标换回整图坐标。
+// 作用：供网格化角点检测复用，兼顾局部纹理覆盖和后续统一的整图点坐标表示。
 void appendCornersFromRegion(const cv::Mat& gray,
                              const cv::Rect& roi,
                              int maxCorners,
@@ -96,7 +75,8 @@ static void detectCorners(const cv::Mat& gray,
     const int rows = std::max(1, gridRows);
     const int cols = std::max(1, gridCols);
     const int perCell = std::max(1, (std::max(1, maxCorners) + rows * cols - 1) / (rows * cols));
-    corners.reserve(static_cast<size_t>(rows * cols * perCell));
+    std::vector<std::vector<cv::Point2f>> cellCorners;
+    cellCorners.reserve(static_cast<size_t>(rows * cols));
 
     for (int row = 0; row < rows; ++row) {
         const int y0 = row * gray.rows / rows;
@@ -104,21 +84,40 @@ static void detectCorners(const cv::Mat& gray,
         for (int col = 0; col < cols; ++col) {
             const int x0 = col * gray.cols / cols;
             const int x1 = (col + 1) * gray.cols / cols;
+            std::vector<cv::Point2f> local;
+            local.reserve(static_cast<size_t>(perCell));
             appendCornersFromRegion(gray,
                                     cv::Rect(x0, y0, std::max(1, x1 - x0), std::max(1, y1 - y0)),
                                     perCell,
                                     qualityLevel,
                                     minDistance,
                                     blockSize,
-                                    corners);
+                                    local);
+            cellCorners.push_back(std::move(local));
         }
     }
 
-    if (corners.size() > static_cast<size_t>(std::max(1, maxCorners))) {
-        corners.resize(static_cast<size_t>(std::max(1, maxCorners)));
+    corners.reserve(static_cast<size_t>(std::max(1, maxCorners)));
+    for (size_t depth = 0; corners.size() < static_cast<size_t>(std::max(1, maxCorners)); ++depth) {
+        bool appended = false;
+        for (const auto& local : cellCorners) {
+            if (depth >= local.size()) {
+                continue;
+            }
+            corners.push_back(local[depth]);
+            appended = true;
+            if (corners.size() >= static_cast<size_t>(std::max(1, maxCorners))) {
+                break;
+            }
+        }
+        if (!appended) {
+            break;
+        }
     }
 }
 
+// 功能：对已检测角点做亚像素精修。
+// 作用：降低整数像素角点位置的量化误差，让后续金字塔 LK 跟踪初值更稳定。
 void refineCornersSubpix(const cv::Mat& gray,
                          int windowSize,
                          int maxIterations,
@@ -137,84 +136,6 @@ void refineCornersSubpix(const cv::Mat& gray,
                      cv::Size(win, win),
                      cv::Size(-1, -1),
                      criteria);
-}
-
-bool fitGlobalTransform(const std::vector<cv::Point2f>& srcPts,
-                        const std::vector<cv::Point2f>& dstPts,
-                        const std::string& fitModel,
-                        const RobustFitOptions& options,
-                        cv::Mat& A,
-                        cv::Mat& H,
-                        std::vector<unsigned char>& mask,
-                        GeometryType& type) {
-    A.release();
-    H.release();
-    mask.clear();
-    const std::string model = string_utils::toUpperAscii(fitModel);
-    const double ransacThreshold = std::max(0.0, options.threshold);
-    const int maxIters = std::max(1, options.max_iters);
-    const double confidence = std::clamp(options.confidence, 1e-6, 0.999999);
-    const int refineIters = std::max(0, options.refine_iters);
-
-    // HOMOGRAPHY 分支保留给存在透视形变的配置；当前平移+旋转主场景通常不走该分支。
-    if (model == "HOMOGRAPHY") {
-        if (srcPts.size() < 4) {
-            return false;
-        }
-        H = cv::findHomography(srcPts,
-                               dstPts,
-                               normalizedRobustMethod(options.method, true),
-                               ransacThreshold,
-                               mask,
-                               maxIters,
-                               confidence);
-        type = GeometryType::HOMOGRAPHY;
-        return !H.empty();
-    }
-
-    // RIGID/SIMILARITY 先复用 OpenCV 的 partial affine RANSAC 做鲁棒内点筛选。
-    // 注意 partial affine 本身允许等比缩放，因此 RIGID 还会在内点上回归严格旋转+平移矩阵。
-    if (model == "RIGID" || model == "SIMILARITY") {
-        if (srcPts.size() < 2) {
-            return false;
-        }
-        A = cv::estimateAffinePartial2D(srcPts,
-                                        dstPts,
-                                        mask,
-                                        normalizedRobustMethod(options.method, false),
-                                        ransacThreshold,
-                                        static_cast<size_t>(maxIters),
-                                        confidence,
-                                        static_cast<size_t>(refineIters));
-        type = model == "SIMILARITY" ? GeometryType::SIMILARITY : GeometryType::RIGID;
-        if (model == "RIGID" &&
-            // 当前业务只接受平移+旋转，最终矩阵不能直接使用带 scale 自由度的 OpenCV 结果。
-            !partial_affine_utils::refineRigidFromMask(srcPts, dstPts, ransacThreshold, mask, A)) {
-            return false;
-        }
-        return !A.empty();
-    }
-
-    // AFFINE 明确允许剪切和非等比缩放，只在配置显式要求时启用，避免误把未知模型当 AFFINE。
-    if (model == "AFFINE") {
-        if (srcPts.size() < 3) {
-            return false;
-        }
-        A = cv::estimateAffine2D(srcPts,
-                                 dstPts,
-                                 mask,
-                                 normalizedRobustMethod(options.method, false),
-                                 ransacThreshold,
-                                 static_cast<size_t>(maxIters),
-                                 confidence,
-                                 static_cast<size_t>(refineIters));
-        type = GeometryType::AFFINE;
-        return !A.empty();
-    }
-
-    // 未知模型直接拒绝，避免静默回退造成配置拼写错误时输出不符合预期的几何结果。
-    IR_LOG_WARN("KLT sparse direct: unsupported fit_model=", fitModel);
-    return false;
 }
 
 } // namespace
@@ -260,6 +181,11 @@ bool KltSparseAligner::align(RegistrationContext& ctx) {
     // 1. 检查输入灰度图，并在源图上挑选可跟踪角点作为稀疏 LK 种子。
     if (ctx.images.first_gray.empty() || ctx.images.second_gray.empty()) {
         dd.message = "KLT requires non-empty grayscale images";
+        gd.message = dd.message;
+        return false;
+    }
+    if (ctx.images.first_gray.size() != ctx.images.second_gray.size()) {
+        dd.message = "KLT requires grayscale images with the same size";
         gd.message = dd.message;
         return false;
     }
@@ -340,7 +266,8 @@ bool KltSparseAligner::align(RegistrationContext& ctx) {
         }
         ++trackedCount;
 
-        if (!isPointInsideWithMargin(tracked[i], ctx.images.second_gray.size(), _borderMargin)) {
+        if (!direct_geometry_common::isPointInsideWithMargin(
+                tracked[i], ctx.images.second_gray.size(), _borderMargin)) {
             continue;
         }
         if (_maxTrackError >= 0.0 && i < error.size() && error[i] > _maxTrackError) {
@@ -376,7 +303,15 @@ bool KltSparseAligner::align(RegistrationContext& ctx) {
     const RobustFitOptions fitOptions{
         _robustMethod, _ransacThreshold, _ransacMaxIters, _ransacConfidence, _ransacRefineIters};
     // 从跟踪点对估计全局变换，RIGID 配置会在 RANSAC 内点上强制回归无缩放矩阵。
-    if (!fitGlobalTransform(srcPts, dstPts, _fitModel, fitOptions, A, H, mask, type)) {
+    if (!direct_geometry_common::fitGlobalTransform(srcPts,
+                                                    dstPts,
+                                                    _fitModel,
+                                                    fitOptions,
+                                                    A,
+                                                    H,
+                                                    mask,
+                                                    type,
+                                                    "KLT sparse direct")) {
         dd.message = "KLT failed to fit global transform";
         gd.message = dd.message;
         return false;
@@ -408,6 +343,9 @@ bool KltSparseAligner::align(RegistrationContext& ctx) {
     gd.valid = true;
     gd.num_inliers = inliers;
     gd.inlier_ratio = dd.score;
+    gd.inlier_mask = mask;
+    gd.correspondence_source = "DIRECT";
+    gd.num_correspondences = static_cast<int>(srcPts.size());
     if (type == GeometryType::HOMOGRAPHY) {
         H.convertTo(gd.H, CV_64F);
         dd.H = gd.H.clone();

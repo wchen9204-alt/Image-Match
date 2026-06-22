@@ -1,12 +1,10 @@
 ﻿#pragma once
 
-#include <memory>
 #include <string>
 
 #include "core/config.h"
 #include "evaluator/evaluator.h"
 #include "interfaces/i_pipeline.h"
-#include "transform/warper.h"
 
 namespace ir {
 
@@ -16,7 +14,7 @@ public:
     BasePipeline() = default;
     ~BasePipeline() override = default;
 
-    /// 加载 pipeline 配置，创建通用 warper/evaluator，并委托子类配置专属阶段组件。
+    /// 加载 pipeline 配置，重置阶段对象和评测器，并委托子类配置专属阶段组件。
     bool configure(const PipelineConfig& cfg) override;
 
     /// 执行一次完整配准流程；失败时仍尽量保存已有可视化和摘要信息。
@@ -44,14 +42,23 @@ protected:
     /// 5.子类执行几何估计或直接法配准估计阶段。
     virtual bool runEstimation(RegistrationContext& ctx) = 0;
 
-    /// 6.根据几何估计结果生成 warped source 图像。
+    /// 6.根据几何估计结果选择 affine/perspective warper，并生成 warped source 图像。
     virtual bool runWarp(RegistrationContext& ctx);
 
     /// 7.统一执行当前启用的质量验证项，作为最终 success 判定入口。
     virtual bool validateRegistrationQuality(RegistrationContext& ctx);
 
+    /// 7.1 执行方法特有的质量验证，只进入当前方法族真正需要的验证分支。
+    virtual bool validateMethodSpecificQuality(RegistrationContext& ctx);
+
+    /// 7.2 执行各方法族共享的最终图像级验证，例如 overlap / photometric / edge。
+    virtual bool validateSharedFinalQuality(RegistrationContext& ctx);
+
     /// 验证匹配/关联质量，例如内点数、内点比例和重投影误差。
     virtual bool validateMatchQuality(RegistrationContext& ctx);
+
+    /// 验证直接法专属质量信号，例如 ECC/相位相关的 confidence。
+    virtual bool validateDirectQuality(RegistrationContext& ctx);
 
     /// 验证结构响应图在 warp 后是否与目标结构响应图足够重合。
     virtual bool validateStructureOverlap(RegistrationContext& ctx);
@@ -66,7 +73,6 @@ protected:
     virtual std::string buildOutputStem(const RegistrationContext& ctx) const;
 
     PipelineConfig _config;
-    std::shared_ptr<IWarper> _warper;
 
     /// 评估器，用于在流程结束后计算当前启用的评测指标。
     Evaluator _evaluator;

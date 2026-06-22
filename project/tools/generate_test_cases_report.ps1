@@ -239,6 +239,11 @@ function New-ReportRecordFromJson {
     $schema = DetectCsvSchema $counts $family
     $countFirst = PickFirst $counts @('num_keypoints_first', 'num_structures_first')
     $countSecond = PickFirst $counts @('num_keypoints_second', 'num_structures_second')
+    $primaryCount = if ($schema -eq 'direct') {
+        PickFirst $counts @('num_correspondences', 'num_raw_matches')
+    } else {
+        '{0} / {1}' -f (FormatNumber $countFirst 0), (FormatNumber $countSecond 0)
+    }
 
     [pscustomobject]@{
         Family = $family
@@ -249,11 +254,11 @@ function New-ReportRecordFromJson {
         SummaryPath = $relativeSummary
         Schema = $schema
         PrimaryLabelHtml = SchemaPrimaryLabelHtml $schema
-        PrimaryCount = '{0} / {1}' -f (FormatNumber $countFirst 0), (FormatNumber $countSecond 0)
-        RawMatches = PickProperty $counts 'num_raw_matches'
-        FilteredMatches = PickProperty $counts 'num_filtered_matches'
-        Inliers = PickProperty $counts 'num_inliers'
-        InlierRatio = PickProperty $quality 'inlier_ratio'
+        PrimaryCount = $primaryCount
+        RawMatches = PickFirst $counts @('num_raw_matches', 'num_correspondences')
+        FilteredMatches = PickFirst $counts @('num_filtered_matches', 'num_correspondences')
+        Inliers = PickFirst $counts @('num_inliers')
+        InlierRatio = PickFirst $quality @('inlier_ratio', 'direct_confidence')
         ReprojError = PickProperty $quality 'mean_reproj_error'
         IoU = PickProperty $quality 'warp_overlap_iou'
         TotalMs = PickProperty $timings 'total'

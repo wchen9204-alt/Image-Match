@@ -1,45 +1,14 @@
-﻿#include "direct/global/ecc_aligner.h"
+#include "direct/global/ecc_aligner.h"
 
-#include <cmath>
 #include <string>
 
-#include <opencv2/video/tracking.hpp>
-
+#include "direct/common/ecc_common.h"
 #include "core/types.h"
 #include "utils/image_utils.h"
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
 
 namespace ir {
-
-namespace {
-
-/// 将配置中的运动模型名称映射到 OpenCV ECC 的 motionType。
-int eccMotionTypeFromString(const std::string& raw) {
-    if (raw == "TRANSLATION" || raw == "translation") {
-        return cv::MOTION_TRANSLATION;
-    }
-    if (raw == "EUCLIDEAN" || raw == "euclidean" || raw == "RIGID" || raw == "rigid") {
-        return cv::MOTION_EUCLIDEAN;
-    }
-    if (raw == "HOMOGRAPHY" || raw == "homography") {
-        return cv::MOTION_HOMOGRAPHY;
-    }
-    return cv::MOTION_AFFINE;
-}
-
-/// 将 ECC 模型映射到平台统一几何类型，便于后续 warp 和摘要展示。
-GeometryType geometryTypeFromEccMotion(int motionType) {
-    if (motionType == cv::MOTION_HOMOGRAPHY) {
-        return GeometryType::HOMOGRAPHY;
-    }
-    if (motionType == cv::MOTION_EUCLIDEAN) {
-        return GeometryType::RIGID;
-    }
-    return GeometryType::AFFINE;
-}
-
-} // namespace
 
 EccAligner::EccAligner(const YAML::Node& cfg) {
     const YAML::Node params = cfg["params"] ? cfg["params"] : cfg;
@@ -73,11 +42,18 @@ bool EccAligner::align(RegistrationContext& ctx) {
     }
 
     // 2. 根据运动模型初始化 OpenCV ECC 所需的 warp 矩阵和终止条件。
-    const int motionType = eccMotionTypeFromString(_motionModel);
+    const int motionType = ecc_common::motionTypeFromString(_motionModel);
     // OpenCV ECC 的 HOMOGRAPHY 使用 3x3 初始化，其它模型使用 2x3 初始化。
     cv::Mat warp =
         motionType == cv::MOTION_HOMOGRAPHY ? cv::Mat::eye(3, 3, CV_32F)
                                             : cv::Mat::eye(2, 3, CV_32F);
+    if (ecc_common::initialWarpFromFeatureInitializer(ctx, motionType, warp)) {
+        dd.addDiagnostic("feature_initializer_ecc_seeded",
+                         "ECC seeded by feature init",
+                         1.0);
+        IR_LOG_INFO("ECC initialized from feature initializer: ",
+                    ctx.feature_initializer_data.method);
+    }
     const cv::TermCriteria criteria(cv::TermCriteria::COUNT | cv::TermCriteria::EPS,
                                     std::max(1, _maxIterations),
                                     _epsilon);
@@ -108,7 +84,7 @@ bool EccAligner::align(RegistrationContext& ctx) {
     }
 
     // 4. 将 ECC 优化得到的矩阵写回统一几何输出，供后续 warp/评估复用。
-    gd.type = geometryTypeFromEccMotion(motionType);
+    gd.type = ecc_common::geometryTypeFromMotionType(motionType);
     gd.valid = true;
     gd.num_inliers = 1;
     gd.inlier_ratio = score;
@@ -139,4 +115,3 @@ bool EccAligner::align(RegistrationContext& ctx) {
 }
 
 } // namespace ir
-

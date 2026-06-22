@@ -44,7 +44,7 @@
 |---|---|
 | 点特征法 | SIFT、SURF、ORB、BRISK、KAZE、AKAZE。 |
 | 结构特征法 | 边缘、直线、轮廓三类结构；支持 Chamfer、Hausdorff、ICP、相位相关、线段几何匹配、线描述子匹配和轮廓描述子匹配。 |
-| 直接法 | ECC、Global LK、ESM Rigid、ZNCC Rigid、Phase Correlation、Fourier-Mellin、KLT Sparse、Farneback、DIS、TV-L1。 |
+| 直接法 | ECC、ESM Rigid、Phase Correlation、Fourier-Mellin、KLT Sparse、Farneback、DIS、TV-L1。 |
 | 深度学习匹配法 | LoFTR、SuperPoint + LightGlue、SuperPoint + SuperGlue。 |
 
 ### 2.3 配置驱动机制
@@ -264,7 +264,7 @@ dataset:
 project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/compare_direct.yaml
 ```
 
-该配置会依次测试 ECC、Global LK、ESM Rigid、ZNCC Rigid、Phase Correlation、Fourier-Mellin、KLT Sparse、DIS、Farneback 和 TV-L1。
+该配置会依次测试 ECC、ESM Rigid、Phase Correlation、Fourier-Mellin、KLT Sparse、DIS、Farneback 和 TV-L1。
 
 直线结构方法对比：
 
@@ -452,7 +452,7 @@ visualization:
 | 情况 | 建议 |
 |---|---|
 | 只是新增 SIFT、ORB 之外的另一种关键点提取器 | 放在 `keypoint` 方法族内部。 |
-| 只是新增 ECC、ZNCC 之外的另一种直接法优化器 | 放在 `direct` 方法族内部。 |
+| 只是新增 ECC 之外的另一种直接法优化器 | 放在 `direct` 方法族内部。 |
 | 方法流程仍然是“提点、匹配、过滤、估计几何” | 复用 `keypoint` 或 `learning` 方法族。 |
 | 方法流程有独立的数据结构、核心阶段和摘要指标 | 新增同级方法族。 |
 | 方法不产生常规点对，但能直接输出几何矩阵或 dense field | 可以新增同级方法族，也可以视情况归入 `direct`。 |

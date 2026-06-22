@@ -59,7 +59,7 @@ void appendKeypointCsvHeader(std::ostringstream& oss) {
         << "num_raw_matches,num_filtered_matches,num_inliers,"
         << "inlier_ratio,mean_reproj_error,inlier_spatial_coverage,warp_overlap_containment,"
         << "warp_source_coverage,warp_target_coverage,warp_bidirectional_coverage,"
-        << "warp_photometric_error,"
+        << "warp_edge_alignment_iou,warp_photometric_error,"
         << "t_load_ms,t_extract_ms,t_match_ms,t_filter_ms,t_geometry_ms,t_warp_ms,t_total_ms";
 }
 
@@ -73,7 +73,7 @@ void appendKeypointCsvRow(std::ostringstream& oss,
         << r.inlier_spatial_coverage << ","
         << r.warp_overlap_containment << "," << r.warp_source_coverage << ","
         << r.warp_target_coverage << "," << r.warp_bidirectional_coverage << ","
-        << r.warp_photometric_error << ","
+        << r.warp_edge_alignment_iou << "," << r.warp_photometric_error << ","
         << r.t_load_ms << "," << r.t_extract_ms << "," << r.t_match_ms << ","
         << r.t_filter_ms << "," << r.t_geometry_ms << "," << r.t_warp_ms << ","
         << r.t_total_ms;
@@ -86,7 +86,7 @@ void appendStructureCsvHeader(std::ostringstream& oss) {
         << "num_inlier_structure_matches,structure_inlier_ratio,"
         << "mean_structure_reproj_error,inlier_spatial_coverage,warp_overlap_containment,"
         << "warp_source_coverage,warp_target_coverage,warp_bidirectional_coverage,"
-        << "warp_photometric_error,"
+        << "warp_edge_alignment_iou,warp_photometric_error,"
         << "structure_overlap_iou,"
         << "t_load_ms,t_extract_ms,t_associate_ms,t_filter_ms,t_geometry_ms,t_warp_ms,t_total_ms";
 }
@@ -101,7 +101,7 @@ void appendStructureCsvRow(std::ostringstream& oss,
         << r.inlier_spatial_coverage << ","
         << r.warp_overlap_containment << "," << r.warp_source_coverage << ","
         << r.warp_target_coverage << "," << r.warp_bidirectional_coverage << ","
-        << r.warp_photometric_error << ","
+        << r.warp_edge_alignment_iou << "," << r.warp_photometric_error << ","
         << r.structure_overlap_iou << ","
         << r.t_load_ms << "," << r.t_extract_ms << "," << r.t_match_ms << ","
         << r.t_filter_ms << "," << r.t_geometry_ms << "," << r.t_warp_ms << ","
@@ -110,10 +110,15 @@ void appendStructureCsvRow(std::ostringstream& oss,
 
 void appendDirectCsvHeader(std::ostringstream& oss) {
     oss << "sample_name,success,message,"
-        << "num_correspondences,num_inlier_correspondences,direct_confidence,"
+        << "num_correspondences,direct_confidence,final_validation_source,"
+        << "feature_initializer_attempted,feature_initializer_used,"
+        << "feature_initializer_method,feature_initializer_inliers,"
+        << "feature_initializer_inlier_ratio,feature_initializer_spatial_coverage,"
+        << "feature_initializer_warp_photometric_error,"
+        << "feature_initializer_warp_edge_alignment_iou,"
         << "mean_reproj_error,inlier_spatial_coverage,warp_overlap_containment,"
         << "warp_source_coverage,warp_target_coverage,warp_bidirectional_coverage,"
-        << "warp_photometric_error,"
+        << "warp_edge_alignment_iou,warp_photometric_error,"
         << "t_load_ms,t_align_ms,t_geometry_ms,t_warp_ms,t_total_ms";
 }
 
@@ -121,12 +126,21 @@ void appendDirectCsvRow(std::ostringstream& oss,
                         const std::string& sample_name,
                         const RegistrationResult& r) {
     appendCommonCsvPrefix(oss, sample_name, r);
-    oss << r.num_raw_matches << "," << r.num_inliers << "," << r.inlier_ratio << ","
+    oss << r.num_raw_matches << "," << r.direct_confidence << ","
+        << file_utils::csvEscape(r.final_validation_source) << ","
+        << (r.feature_initializer_attempted ? "1" : "0") << ","
+        << (r.feature_initializer_used ? "1" : "0") << ","
+        << file_utils::csvEscape(r.feature_initializer_method) << ","
+        << r.feature_initializer_inliers << ","
+        << r.feature_initializer_inlier_ratio << ","
+        << r.feature_initializer_spatial_coverage << ","
+        << r.feature_initializer_warp_photometric_error << ","
+        << r.feature_initializer_warp_edge_alignment_iou << ","
         << r.mean_reproj_error << "," << r.inlier_spatial_coverage << ","
         << r.warp_overlap_containment << ","
         << r.warp_source_coverage << "," << r.warp_target_coverage << ","
         << r.warp_bidirectional_coverage << ","
-        << r.warp_photometric_error << ","
+        << r.warp_edge_alignment_iou << "," << r.warp_photometric_error << ","
         << r.t_load_ms << "," << r.t_match_ms << "," << r.t_geometry_ms << ","
         << r.t_warp_ms << "," << r.t_total_ms;
 }
@@ -137,7 +151,7 @@ void appendLearningCsvHeader(std::ostringstream& oss) {
         << "num_raw_learning_matches,num_filtered_learning_matches,num_inlier_learning_matches,"
         << "learning_inlier_ratio,mean_reproj_error,inlier_spatial_coverage,warp_overlap_containment,"
         << "warp_source_coverage,warp_target_coverage,warp_bidirectional_coverage,"
-        << "warp_photometric_error,"
+        << "warp_edge_alignment_iou,warp_photometric_error,"
         << "t_load_ms,t_extract_ms,t_match_ms,t_filter_ms,t_geometry_ms,t_warp_ms,t_total_ms";
 }
 
@@ -151,7 +165,7 @@ void appendLearningCsvRow(std::ostringstream& oss,
         << r.inlier_spatial_coverage << ","
         << r.warp_overlap_containment << "," << r.warp_source_coverage << ","
         << r.warp_target_coverage << "," << r.warp_bidirectional_coverage << ","
-        << r.warp_photometric_error << ","
+        << r.warp_edge_alignment_iou << "," << r.warp_photometric_error << ","
         << r.t_load_ms << "," << r.t_extract_ms << "," << r.t_match_ms << ","
         << r.t_filter_ms << "," << r.t_geometry_ms << "," << r.t_warp_ms << ","
         << r.t_total_ms;

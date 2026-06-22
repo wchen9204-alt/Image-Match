@@ -19,10 +19,8 @@ private:
     int _searchRadius = 20;
     int _step = 1;
     int _maxPoints = 2000;
-    int _phaseBlurKernel = 5;
     double _scoreThreshold = 0.25;
     bool _bidirectional = true;
-    std::string _initialization = "PHASE_CORRELATE";
 };
 
 } // namespace ir

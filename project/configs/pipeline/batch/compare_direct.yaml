@@ -12,18 +12,9 @@ combinations:
   - label: global_ecc
     pipeline: ../direct/global_direct_pipeline.yaml
     direct: ../../direct/ecc.yaml
-  - label: global_global_lk
-    pipeline: ../direct/global_direct_pipeline.yaml
-    direct: ../../direct/global_lk.yaml
   - label: global_esm_rigid
     pipeline: ../direct/global_direct_pipeline.yaml
     direct: ../../direct/esm_rigid.yaml
-  - label: global_zncc_rigid
-    pipeline: ../direct/global_direct_pipeline.yaml
-    direct: ../../direct/zncc_rigid.yaml
-  - label: frequency_phase_correlation
-    pipeline: ../direct/frequency_direct_pipeline.yaml
-    direct: ../../direct/phase_correlation.yaml
   - label: frequency_fourier_mellin
     pipeline: ../direct/frequency_direct_pipeline.yaml
     direct: ../../direct/fourier_mellin.yaml
@@ -36,9 +27,6 @@ combinations:
   - label: dense_farneback
     pipeline: ../direct/dense_direct_pipeline.yaml
     direct: ../../direct/farneback.yaml
-  - label: dense_tvl1_flow
-    pipeline: ../direct/dense_direct_pipeline.yaml
-    direct: ../../direct/tvl1_flow.yaml
 
 dataset:
   root: ../../../datasets

@@ -9,6 +9,7 @@
 
 #include "core/config.h"
 #include "pipeline/base_pipeline_helpers.h"
+#include "evaluator/quality/warp_quality_evaluator.h"
 #include "transform/affine_warper.h"
 #include "transform/perspective_warper.h"
 #include "utils/logger.h"
@@ -18,10 +19,148 @@ namespace fs = std::filesystem;
 
 namespace ir {
 
+namespace {
+
+/// 将一次 warp 质量评估结果写回 RegistrationResult，供终端摘要、JSON 和 CSV 统一复用。
+void syncWarpQualityToResult(RegistrationResult& result,
+                             const warp_quality::WarpQualityResult& quality) {
+    result.warp_overlap_containment = quality.overlap_containment;
+    result.warp_source_coverage = quality.source_coverage;
+    result.warp_target_coverage = quality.target_coverage;
+    result.warp_bidirectional_coverage = quality.bidirectional_coverage;
+    result.warp_edge_alignment_iou = quality.edge_alignment_iou;
+    result.warp_photometric_error = quality.photometric_error;
+}
+
+/// 比较两个都已成功的 warp 质量结果，优先选择光度误差更低的结果；
+/// 若光度误差接近，再依次比较边缘对齐、双向 coverage 和 containment。
+bool preferInitializerResult(const warp_quality::WarpQualityResult& directQuality,
+                             const FeatureInitializerData& initializer) {
+    const double kEps = 1e-6;
+
+    if (initializer.warp_photometric_error >= 0.0 && directQuality.photometric_error >= 0.0) {
+        if (initializer.warp_photometric_error + kEps < directQuality.photometric_error) {
+            return true;
+        }
+        if (directQuality.photometric_error + kEps < initializer.warp_photometric_error) {
+            return false;
+        }
+    }
+
+    if (initializer.warp_edge_alignment_iou >= 0.0 && directQuality.edge_alignment_iou >= 0.0) {
+        if (initializer.warp_edge_alignment_iou > directQuality.edge_alignment_iou + kEps) {
+            return true;
+        }
+        if (directQuality.edge_alignment_iou > initializer.warp_edge_alignment_iou + kEps) {
+            return false;
+        }
+    }
+
+    if (initializer.warp_bidirectional_coverage >= 0.0 &&
+        directQuality.bidirectional_coverage >= 0.0) {
+        if (initializer.warp_bidirectional_coverage >
+            directQuality.bidirectional_coverage + kEps) {
+            return true;
+        }
+        if (directQuality.bidirectional_coverage >
+            initializer.warp_bidirectional_coverage + kEps) {
+            return false;
+        }
+    }
+
+    if (initializer.warp_overlap_containment >= 0.0 && directQuality.overlap_containment >= 0.0) {
+        if (initializer.warp_overlap_containment > directQuality.overlap_containment + kEps) {
+            return true;
+        }
+        if (directQuality.overlap_containment > initializer.warp_overlap_containment + kEps) {
+            return false;
+        }
+    }
+
+    return false;
+}
+
+/// 在 DIRECT_ONLY 模式下，只认 direct 最终结果；
+/// 在 BEST_OF_DIRECT_AND_INITIALIZER 模式下，按照 direct / initializer 各自已有成功状态选最终结果。
+bool resolveDirectFinalValidationReference(const PipelineConfig& cfg,
+                                           RegistrationContext& ctx,
+                                           const bool directOk,
+                                           const warp_quality::WarpQualityResult& directQuality) {
+    if (cfg.methodFamily() != MethodFamily::DIRECT ||
+        cfg.feature_initializer.final_validation_reference ==
+            DirectValidationReferenceMode::DIRECT_ONLY) {
+        ctx.result.final_validation_source = "DIRECT";
+        if (directOk) {
+            syncWarpQualityToResult(ctx.result, directQuality);
+        } else {
+            ctx.result.message = directQuality.message;
+        }
+        return directOk;
+    }
+
+    const bool initializerOk = ctx.feature_initializer_data.accepted;
+    ctx.result.feature_initializer_used = false;
+
+    if (!directOk && !initializerOk) {
+        ctx.result.final_validation_source.clear();
+        ctx.result.message = directQuality.message;
+        return false;
+    }
+
+    if (initializerOk && !directOk) {
+        ctx.result.final_validation_source = "INITIALIZER";
+        ctx.result.feature_initializer_used = true;
+        ctx.result.warp_overlap_containment = ctx.feature_initializer_data.warp_overlap_containment;
+        ctx.result.warp_source_coverage = ctx.feature_initializer_data.warp_source_coverage;
+        ctx.result.warp_target_coverage = ctx.feature_initializer_data.warp_target_coverage;
+        ctx.result.warp_bidirectional_coverage =
+            ctx.feature_initializer_data.warp_bidirectional_coverage;
+        ctx.result.warp_edge_alignment_iou =
+            ctx.feature_initializer_data.warp_edge_alignment_iou;
+        ctx.result.warp_photometric_error =
+            ctx.feature_initializer_data.warp_photometric_error;
+        ctx.result.message = "OK";
+        ctx.direct_data.addDiagnostic("final_validation_used_initializer",
+                                      "final validation used initializer",
+                                      1.0);
+        return true;
+    }
+
+    if (!initializerOk && directOk) {
+        ctx.result.final_validation_source = "DIRECT";
+        syncWarpQualityToResult(ctx.result, directQuality);
+        return true;
+    }
+
+    if (preferInitializerResult(directQuality, ctx.feature_initializer_data)) {
+        ctx.result.final_validation_source = "INITIALIZER";
+        ctx.result.feature_initializer_used = true;
+        ctx.result.warp_overlap_containment = ctx.feature_initializer_data.warp_overlap_containment;
+        ctx.result.warp_source_coverage = ctx.feature_initializer_data.warp_source_coverage;
+        ctx.result.warp_target_coverage = ctx.feature_initializer_data.warp_target_coverage;
+        ctx.result.warp_bidirectional_coverage =
+            ctx.feature_initializer_data.warp_bidirectional_coverage;
+        ctx.result.warp_edge_alignment_iou =
+            ctx.feature_initializer_data.warp_edge_alignment_iou;
+        ctx.result.warp_photometric_error =
+            ctx.feature_initializer_data.warp_photometric_error;
+        ctx.result.message = "OK";
+        ctx.direct_data.addDiagnostic("final_validation_used_initializer",
+                                      "final validation used initializer",
+                                      1.0);
+        return true;
+    }
+
+    ctx.result.final_validation_source = "DIRECT";
+    syncWarpQualityToResult(ctx.result, directQuality);
+    return true;
+}
+
+} // namespace
+
 bool BasePipeline::configure(const PipelineConfig& cfg) {
     // 1. 保存配置，并清空上一轮创建的阶段组件。
     _config = cfg;
-    _warper.reset();
     resetStages();
 
     // 2. 委托子类创建提取、关联和估计阶段组件。
@@ -35,10 +174,7 @@ bool BasePipeline::configure(const PipelineConfig& cfg) {
         return false;
     }
 
-    // 3. 创建通用 warp 组件；默认使用 2x3 仿射 warper，透视 warper 作为扩展保留。
-    _warper = std::make_shared<AffineWarper>();
-
-    // 4. 加载评测指标（可选）。
+    // 3. 加载评测指标（可选）。
     _evaluator.clear();
     if (!cfg.evaluator_path.empty()) {
         _evaluator.loadFromYaml(cfg.evaluator_path);
@@ -90,8 +226,8 @@ bool BasePipeline::loadImages(RegistrationContext& ctx) {
 bool BasePipeline::runWarp(RegistrationContext& ctx) {
     ScopedTimer st(ctx.result.t_warp_ms);
 
-    // 1. 若配置关闭 warp 或没有 warper，直接跳过。
-    if (!_config.warp || !_warper) {
+    // 1. 若配置关闭 warp，直接跳过。
+    if (!_config.warp) {
         return true;
     }
 
@@ -107,33 +243,65 @@ bool BasePipeline::runWarp(RegistrationContext& ctx) {
         return false;
     }
 
-    // 3. HOMOGRAPHY 必须保留完整 3x3 透视项；仿射族继续走默认 2x3 warper。
+    // 3. 根据当前几何模型在运行时选择 warper，避免 configure 阶段把 warper 预先固定死。
     if (t == GeometryType::HOMOGRAPHY) {
         PerspectiveWarper perspectiveWarper;
         return perspectiveWarper.warp(ctx);
     }
-    return _warper->warp(ctx);
+
+    AffineWarper affineWarper;
+    return affineWarper.warp(ctx);
 }
 
 bool BasePipeline::validateRegistrationQuality(RegistrationContext& ctx) {
     // 先重置可选验证结果。
     ctx.result.structure_overlap_iou = -1.0;
 
-    // 顺序执行各项验证。
-    if (!validateMatchQuality(ctx)) {
+    // 1. 先做方法特有判定，只检查当前方法族真正拥有的数据和信号。
+    if (!validateMethodSpecificQuality(ctx)) {
         return false;
     }
-    if (!validateStructureOverlap(ctx)) {
-        return false;
-    }
-    if (!validateWarpQuality(ctx)) {
+    // 2. 再做所有方法族共享的最终图像级判定，统一 success 口径。
+    if (!validateSharedFinalQuality(ctx)) {
         return false;
     }
     return true;
 }
 
+bool BasePipeline::validateMethodSpecificQuality(RegistrationContext& ctx) {
+    // 点特征法、学习法，以及确实输出离散点对的直接法，共用 match quality。
+    if (!validateMatchQuality(ctx)) {
+        return false;
+    }
+
+    // 直接法专属 confidence / response 判定，仅 direct 方法族启用时生效。
+    if (!validateDirectQuality(ctx)) {
+        return false;
+    }
+
+    // 结构法专属响应图重叠判定，仅 structure 方法族启用时生效。
+    if (!validateStructureOverlap(ctx)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool BasePipeline::validateSharedFinalQuality(RegistrationContext& ctx) {
+    // 当前共享最终判定统一落在 warp 质量上，覆盖几何重叠、光度一致性和边缘对齐。
+    return validateWarpQuality(ctx);
+}
+
 bool BasePipeline::validateMatchQuality(RegistrationContext& ctx) {
+    // 只有显式启用了 match_quality 的 pipeline 才做该项检查。
     if (!_config.validate_match_quality) {
+        return true;
+    }
+
+    // 非点特征/学习/直接法不进入该逻辑，避免结构法误配了配置后跑进无关分支。
+    if (_config.methodFamily() != MethodFamily::KEYPOINT &&
+        _config.methodFamily() != MethodFamily::LEARNING &&
+        _config.methodFamily() != MethodFamily::DIRECT) {
         return true;
     }
 
@@ -147,18 +315,54 @@ bool BasePipeline::validateMatchQuality(RegistrationContext& ctx) {
         return true;
     };
 
-    // 统一读取结果对象里的匹配统计。
-    const auto& r = ctx.result;
+    int effectiveInliers = ctx.result.num_inliers;
+    double effectiveRatio = ctx.result.inlier_ratio;
+    double effectiveReprojError = ctx.result.mean_reproj_error;
+    std::vector<cv::Point2f> sourceCoveragePoints;
+    std::vector<cv::Point2f> targetCoveragePoints;
+    bool hasDiscreteCorrespondences = true;
+
+    if (_config.methodFamily() == MethodFamily::DIRECT) {
+        const size_t pointCount =
+            std::min(ctx.direct_data.points1.size(), ctx.direct_data.points2.size());
+        if (pointCount == 0) {
+            IR_LOG_INFO("Match quality skipped for direct method without point correspondences.");
+            ctx.result.inlier_spatial_coverage = -1.0;
+            return true;
+        }
+
+        hasDiscreteCorrespondences = true;
+        const bool hasMask = !ctx.direct_data.inlier_mask.empty();
+        sourceCoveragePoints.reserve(pointCount);
+        targetCoveragePoints.reserve(pointCount);
+        effectiveInliers = 0;
+        for (size_t i = 0; i < pointCount; ++i) {
+            const bool isInlier = !hasMask || (i < ctx.direct_data.inlier_mask.size() &&
+                                               ctx.direct_data.inlier_mask[i] != 0);
+            if (!isInlier) {
+                continue;
+            }
+            sourceCoveragePoints.push_back(ctx.direct_data.points1[i]);
+            targetCoveragePoints.push_back(ctx.direct_data.points2[i]);
+            ++effectiveInliers;
+        }
+        effectiveRatio =
+            pointCount == 0 ? 0.0
+                            : static_cast<double>(effectiveInliers) /
+                                  static_cast<double>(pointCount);
+        effectiveReprojError = -1.0;
+    }
+
     IR_LOG_INFO("Match quality: inliers=",
-                r.num_inliers,
+                effectiveInliers,
                 ", ratio=",
-                r.inlier_ratio,
+                effectiveRatio,
                 ", reproj=",
-                r.mean_reproj_error);
+                effectiveReprojError);
 
     // 条件1：最少内点数。是否判失败由 fail_on_violation 控制。
-    if (_config.min_match_inliers > 0 && r.num_inliers < _config.min_match_inliers) {
-        const std::string message = "inliers " + std::to_string(r.num_inliers) + " < " +
+    if (_config.min_match_inliers > 0 && effectiveInliers < _config.min_match_inliers) {
+        const std::string message = "inliers " + std::to_string(effectiveInliers) + " < " +
                                     std::to_string(_config.min_match_inliers);
         if (!handleViolation(message)) {
             return false;
@@ -167,8 +371,8 @@ bool BasePipeline::validateMatchQuality(RegistrationContext& ctx) {
 
     // 条件2：最低内点率。是否判失败由 fail_on_violation 控制。
     if (_config.min_match_inlier_ratio >= 0.0 &&
-        r.inlier_ratio < _config.min_match_inlier_ratio) {
-        const std::string message = "inlier ratio " + std::to_string(r.inlier_ratio) +
+        effectiveRatio < _config.min_match_inlier_ratio) {
+        const std::string message = "inlier ratio " + std::to_string(effectiveRatio) +
                                     " < " + std::to_string(_config.min_match_inlier_ratio);
         if (!handleViolation(message)) {
             return false;
@@ -177,9 +381,10 @@ bool BasePipeline::validateMatchQuality(RegistrationContext& ctx) {
 
     // 条件3：最大重投影误差。是否判失败由 fail_on_violation 控制。
     if (_config.max_match_reproj_error >= 0.0 &&
-        r.mean_reproj_error > _config.max_match_reproj_error) {
+        effectiveReprojError >= 0.0 &&
+        effectiveReprojError > _config.max_match_reproj_error) {
         const std::string message = "reprojection error " +
-                                    std::to_string(r.mean_reproj_error) + " > " +
+                                    std::to_string(effectiveReprojError) + " > " +
                                     std::to_string(_config.max_match_reproj_error);
         if (!handleViolation(message)) {
             return false;
@@ -191,7 +396,7 @@ bool BasePipeline::validateMatchQuality(RegistrationContext& ctx) {
     if (_config.min_inlier_spatial_coverage >= 0.0) {
         cv::Mat sourceMask;
         cv::Mat targetMask;
-        const int thresholdValue = _config.warp_overlap_foreground_threshold;
+        const int thresholdValue = _config.warp_quality.overlap.foreground_threshold;
         if (!base_pipeline_helpers::buildForegroundMask(ctx.images.first,
                                                         thresholdValue,
                                                         sourceMask) ||
@@ -204,8 +409,17 @@ bool BasePipeline::validateMatchQuality(RegistrationContext& ctx) {
         } else {
             double sourceSpatialCoverage = -1.0;
             double targetSpatialCoverage = -1.0;
-            const double spatialCoverage =
-                base_pipeline_helpers::computeInlierSpatialCoverage(
+            double spatialCoverage = -1.0;
+            if (_config.methodFamily() == MethodFamily::DIRECT && hasDiscreteCorrespondences) {
+                spatialCoverage = base_pipeline_helpers::computePointSpatialCoverage(
+                    sourceCoveragePoints,
+                    targetCoveragePoints,
+                    sourceMask,
+                    targetMask,
+                    sourceSpatialCoverage,
+                    targetSpatialCoverage);
+            } else {
+                spatialCoverage = base_pipeline_helpers::computeInlierSpatialCoverage(
                     ctx.keypoint_data.first.keypoints,
                     ctx.keypoint_data.second.keypoints,
                     ctx.keypoint_match_data.inlier_matches,
@@ -213,6 +427,7 @@ bool BasePipeline::validateMatchQuality(RegistrationContext& ctx) {
                     targetMask,
                     sourceSpatialCoverage,
                     targetSpatialCoverage);
+            }
             ctx.result.inlier_spatial_coverage = spatialCoverage;
             IR_LOG_INFO("Inlier spatial coverage=",
                         spatialCoverage,
@@ -235,8 +450,40 @@ bool BasePipeline::validateMatchQuality(RegistrationContext& ctx) {
     return true;
 }
 
+bool BasePipeline::validateDirectQuality(RegistrationContext& ctx) {
+    // 只有直接法且启用了 direct_quality 配置时，才进入该分支。
+    if (_config.methodFamily() != MethodFamily::DIRECT || !_config.validate_direct_quality) {
+        return true;
+    }
+
+    auto handleViolation = [&](const std::string& message) {
+        if (_config.fail_on_direct_quality) {
+            ctx.result.message = "direct quality validation failed: " + message;
+            IR_LOG_WARN(ctx.result.message);
+            return false;
+        }
+        IR_LOG_WARN("Direct quality warning: ", message);
+        return true;
+    };
+
+    const double confidence = ctx.direct_data.score;
+    IR_LOG_INFO("Direct quality: confidence=", confidence);
+
+    if (_config.min_direct_confidence >= 0.0 &&
+        confidence < _config.min_direct_confidence) {
+        const std::string message = "confidence " + std::to_string(confidence) + " < " +
+                                    std::to_string(_config.min_direct_confidence);
+        if (!handleViolation(message)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool BasePipeline::validateStructureOverlap(RegistrationContext& ctx) {
-    if (!_config.validate_structure_overlap) {
+    // 只有结构法且显式启用了 structure_overlap 的 pipeline 才进入结构重叠验证。
+    if (_config.methodFamily() != MethodFamily::STRUCTURE || !_config.validate_structure_overlap) {
         return true;
     }
 
@@ -297,15 +544,18 @@ bool BasePipeline::validateStructureOverlap(RegistrationContext& ctx) {
 }
 
 bool BasePipeline::validateWarpQuality(RegistrationContext& ctx) {
+    ctx.result.final_validation_source.clear();
     ctx.result.warp_overlap_containment = -1.0;
     ctx.result.warp_source_coverage = -1.0;
     ctx.result.warp_target_coverage = -1.0;
     ctx.result.warp_bidirectional_coverage = -1.0;
+    ctx.result.warp_edge_alignment_iou = -1.0;
     ctx.result.warp_photometric_error = -1.0;
 
+    const auto options = warp_quality::makeFinalWarpQualityOptions(_config);
+
     // 没启用任何 warp 质量验证时，直接视为通过。
-    if (!_config.validate_warp_containment && !_config.validate_warp_bidirectional_coverage &&
-        !_config.validate_warp_photometric) {
+    if (!warp_quality::hasEnabledWarpQualityChecks(options)) {
         return true;
     }
 
@@ -324,197 +574,42 @@ bool BasePipeline::validateWarpQuality(RegistrationContext& ctx) {
         return false;
     }
 
-    // 条件3：两张图都要能提取前景 mask。
-    cv::Mat warpedMask;
-    cv::Mat targetMask;
-    const int thresholdValue = _config.warp_overlap_foreground_threshold;
-    if (!base_pipeline_helpers::buildForegroundMask(ctx.warped_image, thresholdValue, warpedMask) ||
-        !base_pipeline_helpers::buildForegroundMask(ctx.images.second,
-                                                     thresholdValue,
-                                                     targetMask)) {
-        ctx.result.message = "warp validation failed: cannot build foreground masks";
+    cv::Mat matrix;
+    const bool needsTransformMatrix =
+        options.validate_containment || options.validate_bidirectional_coverage;
+    if (needsTransformMatrix && !base_pipeline_helpers::activeTransformMatrix(ctx, matrix)) {
+        ctx.result.message = "warp mask validation failed: no transform matrix";
         IR_LOG_WARN(ctx.result.message);
         return false;
     }
 
-    cv::Mat matrix;
-    cv::Mat inverseMatrix;
-    cv::Mat sourceMask;
-    cv::Mat reverseWarpedTargetMask;
-    cv::Mat warpedSourceMask;
-    double sourceCoverage = -1.0;
-    double targetCoverage = -1.0;
-    double bidirectionalCoverage = -1.0;
-    double containment = -1.0;
-    // - containmentPassForEither 表示局部包含率这一侧是否达标；
-    // - coveragePassForEither 表示双向 coverage 这一侧是否达标。
-    bool containmentPassForEither = false;
-    bool coveragePassForEither = false;
-    if (_config.validate_warp_bidirectional_coverage || _config.validate_warp_containment) {
-        if (!base_pipeline_helpers::activeTransformMatrix(ctx, matrix)) {
-            ctx.result.message = "warp mask validation failed: no transform matrix";
-            IR_LOG_WARN(ctx.result.message);
-            return false;
-        }
-        if (!base_pipeline_helpers::buildForegroundMask(ctx.images.first,
-                                                        thresholdValue,
-                                                        sourceMask) ||
-            !base_pipeline_helpers::warpMaskToTargetSize(sourceMask,
-                                                         ctx.images.second.size(),
-                                                         matrix,
-                                                         warpedSourceMask)) {
-            ctx.result.message = "warp mask validation failed: cannot warp source mask";
-            IR_LOG_WARN(ctx.result.message);
-            return false;
-        }
-        if (_config.validate_warp_bidirectional_coverage) {
-            if (!base_pipeline_helpers::invertTransformMatrix(matrix, inverseMatrix) ||
-                !base_pipeline_helpers::warpMaskToTargetSize(targetMask,
-                                                             ctx.images.first.size(),
-                                                             inverseMatrix,
-                                                             reverseWarpedTargetMask)) {
-                ctx.result.message = "warp mask validation failed: cannot inverse-warp target mask";
-                IR_LOG_WARN(ctx.result.message);
-                return false;
-            }
-        }
+    warp_quality::WarpQualityResult quality;
+    const bool ok = warp_quality::evaluateWarpQuality(options,
+                                                      ctx.images.first,
+                                                      ctx.images.second,
+                                                      matrix,
+                                                      ctx.warped_image,
+                                                      quality);
+    const bool finalOk = resolveDirectFinalValidationReference(_config, ctx, ok, quality);
+    if (!finalOk) {
+        IR_LOG_WARN(ctx.result.message);
+        return false;
     }
 
-    // 条件5：双向 coverage 用于判断局部图是否在某个方向上被完整保留。
-    if (_config.validate_warp_bidirectional_coverage) {
-        // 1. 正向看 source warp 到 target 画布后保留了多少前景。
-        sourceCoverage = base_pipeline_helpers::computeMaskCoverage(sourceMask, warpedSourceMask);
-        // 2. 反向看 target inverse-warp 到 source 画布后保留了多少前景。
-        targetCoverage =
-            base_pipeline_helpers::computeMaskCoverage(targetMask, reverseWarpedTargetMask);
-        bidirectionalCoverage = std::max(sourceCoverage, targetCoverage);
-
-        ctx.result.warp_source_coverage = sourceCoverage;
-        ctx.result.warp_target_coverage = targetCoverage;
-        ctx.result.warp_bidirectional_coverage = bidirectionalCoverage;
-
-        if (sourceCoverage < 0.0 || targetCoverage < 0.0 || bidirectionalCoverage < 0.0) {
-            ctx.result.message = "warp bidirectional coverage validation failed: invalid coverage";
-            IR_LOG_WARN(ctx.result.message);
-            return false;
-        }
-
-        IR_LOG_INFO("Warp source coverage=",
-                    sourceCoverage,
-                    ", target coverage=",
-                    targetCoverage,
-                    ", bidirectional coverage=",
-                    bidirectionalCoverage,
-                    ", min=",
-                    _config.min_warp_bidirectional_coverage);
-        // 严格模式下，双向 coverage 单项不达标就直接失败。
-        // either-pass 模式下先只记录结果，等 containment 也算完后统一判断。
-        if (!_config.accept_warp_overlap_if_either_passes &&
-            bidirectionalCoverage < _config.min_warp_bidirectional_coverage) {
-            ctx.result.message = "warp bidirectional coverage below threshold: " +
-                                 std::to_string(bidirectionalCoverage) + " < " +
-                                 std::to_string(_config.min_warp_bidirectional_coverage);
-            IR_LOG_WARN(ctx.result.message);
-            return false;
-        }
-    }
-
-    // 条件6：局部包含率要达到阈值，适配一张图是另一张图局部的场景。
-    if (_config.validate_warp_containment) {
-        containment = base_pipeline_helpers::computeMaskLocalContainment(sourceMask,
-                                                                         warpedSourceMask,
-                                                                         targetMask);
-        ctx.result.warp_overlap_containment = containment;
-        if (containment < 0.0) {
-            ctx.result.message = "warp local containment failed: empty foreground";
-            IR_LOG_WARN(ctx.result.message);
-            return false;
-        }
-
-        IR_LOG_INFO("Warp local containment=",
-                    containment,
-                    ", min=",
-                    _config.min_warp_overlap_containment);
-        // 严格模式下，局部包含率单项不达标就直接失败。
-        // either-pass 模式下改为和 coverage 一起看，允许“局部图完整落入大图”
-        // 或“反向覆盖关系成立”中的任意一种成立。
-        if (!_config.accept_warp_overlap_if_either_passes &&
-            containment < _config.min_warp_overlap_containment) {
-            ctx.result.message = "warp local containment below threshold: " +
-                                 std::to_string(containment) + " < " +
-                                 std::to_string(_config.min_warp_overlap_containment);
-            IR_LOG_WARN(ctx.result.message);
-            return false;
-        }
-    }
-
-    // either-pass 模式用于“其中一张图可能只是另一张图局部”的场景。
-    // 只要两者至少有一个成立，就允许 warp overlap 这一关先通过。
-    if (_config.accept_warp_overlap_if_either_passes &&
-        (_config.validate_warp_bidirectional_coverage || _config.validate_warp_containment)) {
-        containmentPassForEither =
-            !_config.validate_warp_containment ||
-            (containment >= 0.0 && containment >= _config.min_warp_overlap_containment);
-        coveragePassForEither =
-            !_config.validate_warp_bidirectional_coverage ||
-            (bidirectionalCoverage >= 0.0 &&
-             bidirectionalCoverage >= _config.min_warp_bidirectional_coverage);
-        if (!containmentPassForEither && !coveragePassForEither) {
-            ctx.result.message =
-                "warp overlap validation failed: containment " +
-                std::to_string(containment) + " < " +
-                std::to_string(_config.min_warp_overlap_containment) +
-                " and bidirectional coverage " +
-                std::to_string(bidirectionalCoverage) + " < " +
-                std::to_string(_config.min_warp_bidirectional_coverage);
-            IR_LOG_WARN(ctx.result.message);
-            return false;
-        }
-    }
-
-    // 条件7：重叠区域光度误差不能过大。
-    if (_config.validate_warp_photometric) {
-        cv::Mat overlapMask;
-        cv::bitwise_and(warpedMask, targetMask, overlapMask);
-        const double nmad =
-            base_pipeline_helpers::computePhotometricError(ctx.warped_image,
-                                                            ctx.images.second,
-                                                            overlapMask);
-        ctx.result.warp_photometric_error = nmad;
-        if (nmad < 0.0) {
-            ctx.result.message = "warp photometric validation failed: empty overlap";
-            IR_LOG_WARN(ctx.result.message);
-            return false;
-        }
-        IR_LOG_INFO("Warp photometric NMAD=",
-                    nmad,
-                    ", max=",
-                    _config.max_warp_photometric_error);
-        if (nmad > _config.max_warp_photometric_error) {
-            ctx.result.message = "warp photometric error above threshold: " +
-                                 std::to_string(nmad) +
-                                 " > " + std::to_string(_config.max_warp_photometric_error);
-            IR_LOG_WARN(ctx.result.message);
-            return false;
-        }
-        // 当 overlap 只是靠 coverage 通过、而 containment 没通过时，
-        // 说明几何关系仍然偏可疑，例如可能只是边缘大面积重叠、
-        // 或者发生了“形状能盖住但内容没有真对齐”的误配。
-        // 所以这里额外套一个更严格的 photometric 阈值，专门压这类误判。
-        if (_config.max_warp_photometric_error_for_coverage_only >= 0.0 &&
-            _config.accept_warp_overlap_if_either_passes &&
-            coveragePassForEither &&
-            !containmentPassForEither &&
-            nmad > _config.max_warp_photometric_error_for_coverage_only) {
-            ctx.result.message =
-                "warp coverage-only photometric error above threshold: " +
-                std::to_string(nmad) + " > " +
-                std::to_string(_config.max_warp_photometric_error_for_coverage_only);
-            IR_LOG_WARN(ctx.result.message);
-            return false;
-        }
-    }
-
+    IR_LOG_INFO("Warp quality: final_source=",
+                ctx.result.final_validation_source,
+                ", containment=",
+                ctx.result.warp_overlap_containment,
+                ", source_coverage=",
+                ctx.result.warp_source_coverage,
+                ", target_coverage=",
+                ctx.result.warp_target_coverage,
+                ", bidirectional_coverage=",
+                ctx.result.warp_bidirectional_coverage,
+                ", edge_iou=",
+                ctx.result.warp_edge_alignment_iou,
+                ", nmad=",
+                ctx.result.warp_photometric_error);
     return true;
 }
 
@@ -580,7 +675,7 @@ bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
             if (base_pipeline_helpers::buildFalseColorOverlay(
                     ctx.warped_image,
                     ctx.images.second,
-                    _config.warp_overlap_foreground_threshold,
+                    _config.warp_quality.overlap.foreground_threshold,
                     falseColorOverlay)) {
                 const fs::path false_color_out =
                     false_color_overlay_dir / (stem + "_false_color_overlay.png");

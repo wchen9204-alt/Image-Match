@@ -51,8 +51,10 @@ bool buildRigidCandidateFromPair(const std::vector<cv::Point2f>& src,
                                  cv::Mat& candidateA,
                                  std::vector<unsigned char>& candidateMask);
 
-/// 从 filtered 点对中构建混合式候选 seed：
-/// 距离池 + 空间分散 + 距离优先补点 + 主旋转峰补点。
+/// 从 filtered 点对中构建混合式候选 seed。
+/// 核心做法是在同一个 filtered 距离池里，按不同排序策略依次选出更好的点，
+/// 再把这些点合并成 seed 集合，而不是从别处新增匹配。
+/// 整体流程是：距离池 -> 空间分散优先选点 -> 距离最优选点 -> 主旋转峰一致选点。
 std::vector<int> buildMixedCandidateSeedIndices(const std::vector<cv::Point2f>& src,
                                                 const std::vector<cv::Point2f>& dst,
                                                 const std::vector<float>& distances,

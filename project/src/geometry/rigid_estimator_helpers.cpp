@@ -101,7 +101,8 @@ void appendUniqueIndex(std::vector<int>& indices, int value) {
     }
 }
 
-// 从距离较好的候选池中挑一批空间上更分散的 seed。
+// 从距离池中按“空间更分散”这一排序倾向挑点。
+// 这一阶段只是在当前候选池内部选点，并不会引入任何新匹配。
 std::vector<int> selectSpatiallyDiverseIndices(const std::vector<int>& sortedPoolIndices,
                                                const std::vector<cv::Point2f>& src,
                                                const std::vector<cv::Point2f>& dst,
@@ -297,7 +298,9 @@ bool buildRigidCandidateFromPair(const std::vector<cv::Point2f>& src,
     return partial_affine_utils::countInliers(candidateMask) >= 2;
 }
 
-// 通过“距离池 + 空间分散 + 距离优先补点 + 主旋转峰补点”生成混合式候选 seed。
+// 通过“距离池 + 多种排序策略选点”生成混合式候选 seed。
+// 这里后续几轮选点都仍然发生在同一个 sortedIndices 距离池里，
+// 只是按不同规则重新排序或筛选，再把选中的好点合并进 seedIndices。
 std::vector<int> buildMixedCandidateSeedIndices(const std::vector<cv::Point2f>& src,
                                                 const std::vector<cv::Point2f>& dst,
                                                 const std::vector<float>& distances,
@@ -322,20 +325,24 @@ std::vector<int> buildMixedCandidateSeedIndices(const std::vector<cv::Point2f>& 
     std::vector<int> seedIndices;
     seedIndices.reserve(static_cast<size_t>(std::max(topK, effectivePoolSize)));
 
-    // 第 2 步：优先加入空间更分散的点，保证候选 seed 的几何覆盖范围。
+    // 第 2 步：从距离池中优先选出空间更分散的点，保证候选 seed 的几何覆盖范围。
+    // 这一轮先保“分布别太挤”，避免后续两点构造 rigid 时老是取到局部小对。
     const std::vector<int> spatialSeeds =
         selectSpatiallyDiverseIndices(sortedIndices, src, dst, minPairDistance, topK);
     for (const int index : spatialSeeds) {
         appendUniqueIndex(seedIndices, index);
     }
 
-    // 第 3 步：再补一部分纯距离最优的点，保留描述子质量最强的一批候选。
+    // 第 3 步：再从同一个距离池中按 descriptor distance 排序，选一部分距离最优的点。
+    // 这样即使某些点因为空间上靠得近，在第 2 步没被选进来，只要匹配质量足够好，
+    // 仍然可以进入最终 seed 集合。
     for (int i = 0; i < std::min(topK / 2, effectivePoolSize); ++i) {
         appendUniqueIndex(seedIndices, sortedIndices[static_cast<size_t>(i)]);
     }
 
-    // 第 4 步：根据距离池内估计出的主旋转峰，再补一批旋转更一致的点，
+    // 第 4 步：根据距离池内估计出的主旋转峰，再从同一个距离池中选一批旋转更一致的点，
     // 缓解弱纹理 / 长方形 / 180 度歧义场景里只靠距离选点的局限。
+    // 这一轮本质上也是换一种排序标准，把和主旋转方向更合拍的点优先加入 seed。
     const double dominantRotationDeg = estimateDominantRotationPeakDeg(
         src, dst, sortedIndices, minPairDistance, 36, 8.0);
     std::vector<std::pair<double, int>> rotationRanked;

@@ -72,12 +72,16 @@ void appendDirectDiagnostics(std::ostringstream& oss, const DirectData& direct) 
 
 void appendValidationQuality(std::ostringstream& oss, const RegistrationResult& r) {
     if (r.inlier_spatial_coverage >= 0.0) {
-        oss << "  inlier spread : " << std::fixed << std::setprecision(3)
+        oss << "  match spread  : " << std::fixed << std::setprecision(3)
             << r.inlier_spatial_coverage << "\n";
     }
     if (r.structure_overlap_iou >= 0.0) {
         oss << "  structure IoU : " << std::fixed << std::setprecision(3)
             << r.structure_overlap_iou << "\n";
+    }
+    if (r.warp_edge_alignment_iou >= 0.0) {
+        oss << "  edge align    : " << std::fixed << std::setprecision(3)
+            << r.warp_edge_alignment_iou << "\n";
     }
 }
 
@@ -344,8 +348,35 @@ std::string buildDirectSummaryText(const RegistrationContext& ctx) {
     }
 
     oss << "  correspondences: " << r.num_raw_matches << "\n";
-    oss << "  inliers       : " << r.num_inliers << " (" << std::fixed << std::setprecision(3)
-        << r.inlier_ratio << ")\n";
+    oss << "  confidence    : " << std::fixed << std::setprecision(3) << r.direct_confidence
+        << "\n";
+    if (!r.final_validation_source.empty()) {
+        oss << "  final source  : " << r.final_validation_source << "\n";
+    }
+    if (r.feature_initializer_attempted) {
+        oss << "  feature init  : " << (r.feature_initializer_used ? "USED" : "SKIPPED");
+        if (!r.feature_initializer_method.empty()) {
+            oss << " (" << r.feature_initializer_method << ")";
+        }
+        oss << "\n";
+        if (r.feature_initializer_used) {
+            oss << "  init inliers  : " << r.feature_initializer_inliers << " ("
+                << std::fixed << std::setprecision(3)
+                << r.feature_initializer_inlier_ratio << ")\n";
+            if (r.feature_initializer_spatial_coverage >= 0.0) {
+                oss << "  init spread   : " << std::fixed << std::setprecision(3)
+                    << r.feature_initializer_spatial_coverage << "\n";
+            }
+            if (r.feature_initializer_warp_photometric_error >= 0.0) {
+                oss << "  init NMAD     : " << std::fixed << std::setprecision(4)
+                    << r.feature_initializer_warp_photometric_error << "\n";
+            }
+            if (r.feature_initializer_warp_edge_alignment_iou >= 0.0) {
+                oss << "  init edge     : " << std::fixed << std::setprecision(3)
+                    << r.feature_initializer_warp_edge_alignment_iou << "\n";
+            }
+        }
+    }
     summary_text::appendDirectDiagnostics(oss, dd);
     if (dd.photometric_error >= 0.0) {
         oss << "  photometric MSE: " << std::fixed << std::setprecision(6)
@@ -408,22 +439,50 @@ std::string buildSummaryJson(const RegistrationContext& ctx,
     if (isStructure) {
         oss << "    \"num_structures_first\": " << r.num_structures_first << ",\n";
         oss << "    \"num_structures_second\": " << r.num_structures_second << ",\n";
+        oss << "    \"num_raw_matches\": " << r.num_raw_matches << ",\n";
+        oss << "    \"num_filtered_matches\": " << r.num_filtered_matches << ",\n";
+        oss << "    \"num_inliers\": " << r.num_inliers << "\n";
+    } else if (isDirect) {
+        oss << "    \"num_correspondences\": " << r.num_raw_matches << ",\n";
+        oss << "    \"direct_confidence\": " << r.direct_confidence << ",\n";
+        oss << "    \"final_validation_source\": \""
+            << json_output::escapeString(r.final_validation_source) << "\",\n";
+        oss << "    \"feature_initializer_attempted\": "
+            << (r.feature_initializer_attempted ? "true" : "false") << ",\n";
+        oss << "    \"feature_initializer_used\": "
+            << (r.feature_initializer_used ? "true" : "false") << ",\n";
+        oss << "    \"feature_initializer_method\": \""
+            << json_output::escapeString(r.feature_initializer_method) << "\"\n";
     } else {
         oss << "    \"num_keypoints_first\": " << r.num_keypoints_first << ",\n";
         oss << "    \"num_keypoints_second\": " << r.num_keypoints_second << ",\n";
+        oss << "    \"num_raw_matches\": " << r.num_raw_matches << ",\n";
+        oss << "    \"num_filtered_matches\": " << r.num_filtered_matches << ",\n";
+        oss << "    \"num_inliers\": " << r.num_inliers << "\n";
     }
-    oss << "    \"num_raw_matches\": " << r.num_raw_matches << ",\n";
-    oss << "    \"num_filtered_matches\": " << r.num_filtered_matches << ",\n";
-    oss << "    \"num_inliers\": " << r.num_inliers << "\n";
     oss << "  },\n";
     oss << "  \"quality\": {\n";
-    oss << "    \"inlier_ratio\": " << r.inlier_ratio << ",\n";
+    if (isDirect) {
+        oss << "    \"feature_initializer_inliers\": "
+            << r.feature_initializer_inliers << ",\n";
+        oss << "    \"feature_initializer_inlier_ratio\": "
+            << r.feature_initializer_inlier_ratio << ",\n";
+        oss << "    \"feature_initializer_spatial_coverage\": "
+            << r.feature_initializer_spatial_coverage << ",\n";
+        oss << "    \"feature_initializer_warp_photometric_error\": "
+            << r.feature_initializer_warp_photometric_error << ",\n";
+        oss << "    \"feature_initializer_warp_edge_alignment_iou\": "
+            << r.feature_initializer_warp_edge_alignment_iou << ",\n";
+    } else {
+        oss << "    \"inlier_ratio\": " << r.inlier_ratio << ",\n";
+    }
     oss << "    \"mean_reproj_error\": " << r.mean_reproj_error << ",\n";
     oss << "    \"inlier_spatial_coverage\": " << r.inlier_spatial_coverage << ",\n";
     oss << "    \"warp_overlap_containment\": " << r.warp_overlap_containment << ",\n";
     oss << "    \"warp_source_coverage\": " << r.warp_source_coverage << ",\n";
     oss << "    \"warp_target_coverage\": " << r.warp_target_coverage << ",\n";
     oss << "    \"warp_bidirectional_coverage\": " << r.warp_bidirectional_coverage << ",\n";
+    oss << "    \"warp_edge_alignment_iou\": " << r.warp_edge_alignment_iou << ",\n";
     oss << "    \"warp_photometric_error\": " << r.warp_photometric_error << ",\n";
     oss << "    \"structure_overlap_iou\": " << r.structure_overlap_iou;
     if (isDirect) {

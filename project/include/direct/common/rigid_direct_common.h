@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <algorithm>
 #include <cmath>
@@ -18,29 +18,34 @@ namespace rigid_direct_common {
 constexpr int kMinSamples = 12;
 constexpr double kPi = 3.14159265358979323846;
 
+/// 功能：表示刚体直接法优化的 3 个自由度参数。
 struct RigidParams {
     double theta = 0.0;
     double tx = 0.0;
     double ty = 0.0;
 };
 
+/// 功能：保存源图上的一个采样点及其光度值。
 struct SamplePoint {
     float x = 0.0f;
     float y = 0.0f;
     float value = 0.0f;
 };
 
+/// 功能：统计当前参数下的有效采样数和均方残差。
 struct ResidualStats {
     int valid_samples = 0;
     double mse = -1.0;
 };
 
+/// 功能：记录单层金字塔优化的迭代结果。
 struct LevelStats {
     int iterations = 0;
     bool converged = false;
     ResidualStats residual;
 };
 
+/// 功能：汇总刚体直接法共用优化配置。
 struct RigidDirectOptions {
     int max_iterations = 50;
     double epsilon = 1e-4;
@@ -50,6 +55,7 @@ struct RigidDirectOptions {
     int sample_step = 2;
 };
 
+/// 功能：抽象单层优化器接口，允许 ESM/LK 等方法复用同一套金字塔调度逻辑。
 using LevelOptimizer = bool (*)(const cv::Mat& source,
                                 const cv::Mat& target,
                                 const std::vector<SamplePoint>& samples,
@@ -59,6 +65,8 @@ using LevelOptimizer = bool (*)(const cv::Mat& source,
                                 LevelStats& stats,
                                 std::string& message);
 
+/// 功能：从原图构建由粗到细的金字塔。
+/// 作用：为刚体直接法提供多尺度初值传播，扩大初始位姿的可收敛范围。
 inline std::vector<cv::Mat> buildPyramid(const cv::Mat& base, int requestedLevels) {
     std::vector<cv::Mat> pyramid;
     if (base.empty()) {
@@ -84,6 +92,8 @@ inline std::vector<cv::Mat> buildPyramid(const cv::Mat& base, int requestedLevel
     return pyramid;
 }
 
+/// 功能：在单通道浮点图上做双线性插值采样。
+/// 作用：把连续坐标上的 warp 结果映射成可比较的目标灰度值。
 inline bool sampleBilinear(const cv::Mat& image, double x, double y, float& value) {
     if (image.empty() || image.type() != CV_32F || x < 0.0 || y < 0.0 ||
         x >= static_cast<double>(image.cols - 1) || y >= static_cast<double>(image.rows - 1)) {
@@ -107,11 +117,15 @@ inline bool sampleBilinear(const cv::Mat& image, double x, double y, float& valu
     return true;
 }
 
+/// 功能：计算图像在 x/y 方向上的一阶梯度。
+/// 作用：为采样点筛选和直接法雅可比构建提供局部光度变化信息。
 inline void computeImageGradient(const cv::Mat& image, cv::Mat& gradX, cv::Mat& gradY) {
     cv::Sobel(image, gradX, CV_32F, 1, 0, 3, 1.0 / 8.0);
     cv::Sobel(image, gradY, CV_32F, 0, 1, 3, 1.0 / 8.0);
 }
 
+/// 功能：从源图中挑选可用于直接法优化的采样点。
+/// 作用：跳过低梯度平坦区域，优先保留对位姿更新更敏感的像素。
 inline std::vector<SamplePoint>
 buildSamples(const cv::Mat& source, int sampleStep, double gradientThreshold) {
     std::vector<SamplePoint> samples;
@@ -148,6 +162,8 @@ buildSamples(const cv::Mat& source, int sampleStep, double gradientThreshold) {
     return samples;
 }
 
+/// 功能：在给定刚体参数下统计目标图上的光度残差。
+/// 作用：为最终结果验收和各层优化状态记录提供统一误差度量。
 inline bool computeResidualStats(const cv::Mat& target,
                                  const std::vector<SamplePoint>& samples,
                                  const RigidParams& params,
@@ -187,6 +203,8 @@ inline bool computeResidualStats(const cv::Mat& target,
     return true;
 }
 
+/// 功能：求解 3x3 法方程的位姿增量。
+/// 作用：优先用 Cholesky 保持效率，退化时回退到 SVD 提高可解性。
 inline bool solveNormalEquation(const cv::Matx33d& h,
                                 const cv::Vec3d& g,
                                 cv::Vec3d& delta) {
@@ -216,12 +234,50 @@ inline bool solveNormalEquation(const cv::Matx33d& h,
     return std::isfinite(delta[0]) && std::isfinite(delta[1]) && std::isfinite(delta[2]);
 }
 
+/// 功能：把刚体参数打包成 2x3 仿射矩阵。
+/// 作用：统一下游 warp、验证和输出阶段读取的几何表示。
 inline cv::Mat rigidMatrix(const RigidParams& params) {
     const double c = std::cos(params.theta);
     const double s = std::sin(params.theta);
     return (cv::Mat_<double>(2, 3) << c, -s, params.tx, s, c, params.ty);
 }
 
+/// 功能：从仿射初值中提取刚体参数。
+/// 作用：把点特征粗估给出的 similarity/rigid 结果转换成直接法可继续优化的初始位姿。
+inline bool rigidParamsFromAffine(const cv::Mat& affine, RigidParams& params) {
+    if (affine.empty() || affine.rows < 2 || affine.cols < 3) {
+        return false;
+    }
+
+    // 初值可能来自 similarity；这里提取旋转和平移，避免把缩放带入刚体优化。
+    cv::Mat a64;
+    affine.convertTo(a64, CV_64F);
+    const double a00 = a64.at<double>(0, 0);
+    const double a10 = a64.at<double>(1, 0);
+    const double scale = std::sqrt(a00 * a00 + a10 * a10);
+    if (!std::isfinite(scale) || scale <= 1e-9) {
+        return false;
+    }
+
+    params.theta = std::atan2(a10 / scale, a00 / scale);
+    params.tx = a64.at<double>(0, 2);
+    params.ty = a64.at<double>(1, 2);
+    return std::isfinite(params.theta) && std::isfinite(params.tx) && std::isfinite(params.ty);
+}
+
+/// 功能：从上下文中的点特征初始化结果读取刚体初值。
+/// 作用：仅在粗估已通过采用条件时，为直接法提供更稳定的起点。
+inline bool rigidParamsFromContextInitializer(const RegistrationContext& ctx,
+                                              RigidParams& params) {
+    const auto& init = ctx.feature_initializer_data;
+    if (!init.accepted || init.A.empty()) {
+        return false;
+    }
+    return rigidParamsFromAffine(init.A, params);
+}
+
+/// 功能：执行刚体直接法公共主流程。
+/// 作用：统一完成灰度预处理、金字塔调度、初值注入、逐层优化和结果写回。
 inline bool runRigidAlignment(RegistrationContext& ctx,
                               const std::string& methodName,
                               const std::string& displayName,
@@ -260,8 +316,20 @@ inline bool runRigidAlignment(RegistrationContext& ctx,
         return false;
     }
 
-    // 初始化位姿优化暂时关闭；后续统一设计前，所有刚体直接法都从零旋转/零平移开始。
+    // 可选使用点特征安全门通过后的初始位姿；失败时保持零旋转、零平移起步。
     RigidParams fullParams;
+    if (rigidParamsFromContextInitializer(ctx, fullParams)) {
+        dd.addDiagnostic("feature_initializer_rigid_seeded",
+                         "rigid seeded by feature init",
+                         1.0);
+        IR_LOG_INFO(displayName,
+                    " initialized from feature initializer: theta=",
+                    fullParams.theta * 180.0 / kPi,
+                    " deg, tx=",
+                    fullParams.tx,
+                    ", ty=",
+                    fullParams.ty);
+    }
 
     // 3. 逐层采样高梯度像素并调用具体优化器，在金字塔层之间传播刚体参数。
     LevelStats lastStats;
@@ -343,4 +411,3 @@ inline bool runRigidAlignment(RegistrationContext& ctx,
 
 } // namespace rigid_direct_common
 } // namespace ir
-

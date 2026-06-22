@@ -22,6 +22,15 @@ double computePhotometricError(const cv::Mat& warped,
                                const cv::Mat& target,
                                const cv::Mat& overlapMask);
 
+/// 计算重叠区域内 warped source 与 target 的边缘 IoU，用于发现覆盖充分但内容错位的结果。
+double computeEdgeAlignmentIou(const cv::Mat& warped,
+                               const cv::Mat& target,
+                               const cv::Mat& overlapMask,
+                               int cannyLowThreshold,
+                               int cannyHighThreshold,
+                               int dilateSize,
+                               int minEdgePixels);
+
 /// 计算两个前景 mask 的交并比，主要用于结构重叠验证。
 double computeMaskIou(const cv::Mat& a, const cv::Mat& b);
 
@@ -33,7 +42,7 @@ double computeMaskLocalContainment(const cv::Mat& sourceMask,
 /// 计算前景 mask 经过 warp 后仍落在目标画布内的比例。
 double computeMaskCoverage(const cv::Mat& originalMask, const cv::Mat& warpedMask);
 
-/// 统计最终内点在 source / target 前景包围盒中的空间覆盖率。
+/// 统计 keypoint/learning 等离散内点在 source/target 前景包围盒中的空间覆盖率。
 double computeInlierSpatialCoverage(const std::vector<cv::KeyPoint>& sourceKeypoints,
                                     const std::vector<cv::KeyPoint>& targetKeypoints,
                                     const std::vector<cv::DMatch>& inlierMatches,
@@ -41,6 +50,14 @@ double computeInlierSpatialCoverage(const std::vector<cv::KeyPoint>& sourceKeypo
                                     const cv::Mat& targetMask,
                                     double& sourceCoverage,
                                     double& targetCoverage);
+
+/// 统计直接法点对在 source/target 前景包围盒中的空间覆盖率。
+double computePointSpatialCoverage(const std::vector<cv::Point2f>& sourcePoints,
+                                   const std::vector<cv::Point2f>& targetPoints,
+                                   const cv::Mat& sourceMask,
+                                   const cv::Mat& targetMask,
+                                   double& sourceCoverage,
+                                   double& targetCoverage);
 
 /// 从当前上下文中提取可用于 warp 的 2D 变换矩阵。
 bool activeTransformMatrix(const RegistrationContext& ctx, cv::Mat& matrix);

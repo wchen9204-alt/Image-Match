@@ -1,0 +1,74 @@
+# ---------------------------------------------------------------------------
+# 频域直接法 + AKAZE 点特征初始值临时对比 pipeline
+# 当前文件仅用于和其它点特征初始值做横向对比；测试完成后可直接删除整个 frequency_compare 目录。
+# ---------------------------------------------------------------------------
+name: frequency_direct_akaze_pipeline
+
+method_family: direct
+direct: ../../direct/fourier_mellin.yaml
+evaluator: ../../evaluator/metrics.yaml
+
+io:
+  image1: ../../../datasets/Test01/source.png
+  image2: ../../../datasets/Test01/target.png
+  output_dir: ../../../outputs
+
+visualization:
+  draw_matches: false
+  warp: true
+  show_source_window: false
+  show_target_window: false
+  show_warped_window: false
+  wait_key: 0
+
+feature_initializer:
+  enabled: true
+  final_validation_reference: BEST_OF_DIRECT_AND_INITIALIZER
+  candidate:
+    # 可选值示例：SIFT / SURF / ORB / BRISK / KAZE / AKAZE。
+    name: AKAZE
+    keypoint: ../../keypoint/akaze.yaml
+  matcher: ../../matcher/bf.yaml
+  filters:
+    - ../../filter/ratio_test.yaml
+    - ../../filter/cross_check.yaml
+    - ../../filter/pairwise_rigid_consistency.yaml
+  geometry: ../../geometry/rigid.yaml
+  acceptance:
+    min_inliers: 1
+    min_inlier_ratio: -1
+    min_inlier_spatial_coverage: 0.05
+  validation:
+    warp_overlap:
+      enabled: true
+      min_containment: 0.90
+      min_bidirectional_coverage: 0.98
+      accept_if_either_passes: true
+      foreground_threshold: 10
+    photometric:
+      enabled: true
+      max_nmad: 0.15
+      max_nmad_for_coverage_only: 0.095
+
+validation:
+  warp_overlap:
+    enabled: true
+    min_containment: 0.70
+    min_bidirectional_coverage: 0.98
+    accept_if_either_passes: true
+    foreground_threshold: 5
+  photometric:
+    enabled: true
+    max_nmad: 0.15
+    max_nmad_for_coverage_only: -1
+  edge_alignment:
+    enabled: true
+    min_iou: 0.08
+    canny_low_threshold: 50
+    canny_high_threshold: 150
+    dilate_size: 3
+    min_edge_pixels: 20
+  direct_quality:
+    enabled: true
+    fail_on_violation: true
+    min_confidence: 0.01

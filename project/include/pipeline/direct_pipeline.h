@@ -5,6 +5,7 @@
 
 #include "interfaces/i_direct_aligner.h"
 #include "pipeline/base_pipeline.h"
+#include "pipeline/direct_feature_initializer.h"
 
 namespace ir {
 
@@ -41,6 +42,9 @@ protected:
 private:
     /// 当前 pipeline 配置创建出的直接法配准器实例。
     std::shared_ptr<IDirectAligner> _aligner;
+
+    /// 可选的点特征初始值估计器；失败时不影响直接法继续从默认初值运行。
+    std::unique_ptr<DirectFeatureInitializer> _featureInitializer;
 };
 
 } // namespace ir

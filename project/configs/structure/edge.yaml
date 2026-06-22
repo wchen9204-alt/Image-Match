@@ -3,7 +3,7 @@ type: EDGE
 
 # 边缘响应生成配置。
 # 已实现的边缘提取方法：CANNY / SOBEL / LOG / LAPLACIAN。
-# 已实现的通用结构匹配方法：PHASE_CORRELATE / CHAMFER / HAUSDORFF / ICP。
+# 已实现的通用结构匹配方法：CHAMFER / HAUSDORFF / ICP。
 extractor:
   # 默认值：CANNY。
   method: CANNY
@@ -30,16 +30,11 @@ extractor:
     responseThreshold: 50.0
 
 association:
-  # 默认值：PHASE_CORRELATE。
-  # 可选：PHASE_CORRELATE / CHAMFER / HAUSDORFF / ICP。
+  # 默认值：CHAMFER。
+  # 可选：CHAMFER / HAUSDORFF / ICP。
   method: HAUSDORFF
   # 按匹配方法分组配置参数，避免不同方法共用同一层键名。
   params:
-    phase_correlate:
-      # 默认值：0.01。相位相关响应阈值，低于该值时认为匹配不可靠。
-      responseThreshold: 0.01
-      # 默认值：5。phaseCorrelate 前使用的高斯模糊核大小。
-      phaseBlurKernel: 5
     chamfer:
       # 默认值：20。平移搜索半径，单位为像素。
       searchRadius: 20
@@ -52,10 +47,6 @@ association:
       scoreThreshold: 0.25
       # 默认值：true。是否同时计算正向和反向平均距离。
       bidirectional: true
-      # 默认值：PHASE_CORRELATE。初始平移方式，可选：PHASE_CORRELATE / ZERO。
-      initialization: PHASE_CORRELATE
-      # 默认值：5。使用 PHASE_CORRELATE 初始化时的高斯模糊核大小。
-      phaseBlurKernel: 5
     hausdorff:
       # 默认值：20。平移搜索半径，单位为像素。
       searchRadius: 20

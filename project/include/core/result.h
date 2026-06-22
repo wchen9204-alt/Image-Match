@@ -24,6 +24,8 @@ struct RegistrationResult {
 
     /// 几何质量统计。
     double inlier_ratio = 0.0;
+    /// 直接法算法自身的 confidence / response 分数；非直接法保持为 -1。
+    double direct_confidence = -1.0;
     double mean_reproj_error = 0.0;
     /// 最终内点在 source / target 前景包围盒中的最大空间覆盖率。
     double inlier_spatial_coverage = -1.0;
@@ -35,8 +37,30 @@ struct RegistrationResult {
     double warp_target_coverage = -1.0;
     /// 双向 coverage，取 source / target coverage 的较大值。
     double warp_bidirectional_coverage = -1.0;
+    /// warped source 与 target 重叠区域内的边缘对齐 IoU。
+    double warp_edge_alignment_iou = -1.0;
     double warp_photometric_error = -1.0;
     double structure_overlap_iou = -1.0;
+
+    /// 直接法点特征初始化是否尝试过。
+    bool feature_initializer_attempted = false;
+    /// 直接法点特征初始化是否被最终选为输出结果来源。
+    bool feature_initializer_used = false;
+    /// 直接法最终判定实际采用的结果来源；例如 DIRECT / INITIALIZER。
+    std::string final_validation_source;
+    /// 被采用的点特征初始化方法名。
+    std::string feature_initializer_method;
+    /// 被采用初始值的内点数。
+    int feature_initializer_inliers = 0;
+    /// 被采用初始值的内点率。
+    double feature_initializer_inlier_ratio = -1.0;
+    /// 被采用初始值的内点空间覆盖率。
+    double feature_initializer_spatial_coverage = -1.0;
+    /// 被采用初始值临时 warp 的 NMAD。
+    double feature_initializer_warp_photometric_error = -1.0;
+    /// 被采用初始值临时 warp 的边缘 IoU。
+    double feature_initializer_warp_edge_alignment_iou = -1.0;
+
     /// 各阶段耗时，单位毫秒。
     double t_load_ms = 0.0;
     double t_extract_ms = 0.0;

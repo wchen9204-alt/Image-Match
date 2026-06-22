@@ -4,7 +4,7 @@
 
 #include <yaml-cpp/yaml.h>
 
-#include "direct/dense/dense_flow_common.h"
+#include "direct/common/dense_flow_common.h"
 #include "interfaces/i_direct_aligner.h"
 
 namespace ir {

@@ -29,10 +29,10 @@ public:
     /// 创建结构特征提取器，例如边缘、直线或轮廓提取器。
     static std::shared_ptr<IStructureExtractor> createStructureExtractor(const YAML::Node& cfg);
 
-    /// 创建结构关联/匹配器，例如 PHASE_CORRELATE 或 CHAMFER。
+    /// 创建结构关联/匹配器，例如 CHAMFER、HAUSDORFF、ICP 或轮廓/直线描述子方法。
     static std::shared_ptr<IStructureAssociator> createStructureAssociator(const YAML::Node& cfg);
 
-    /// 创建直接法配准器，例如 ECC、Global LK、ESM、ZNCC、相位相关、KLT、Farneback、DIS 或 TV-L1。
+    /// 创建直接法配准器，例如 ECC、ESM、Fourier-Mellin、KLT、Farneback、DIS 或 TV-L1。
     static std::shared_ptr<IDirectAligner> createDirectAligner(const YAML::Node& cfg);
 
     /// 创建匹配过滤器，例如 ratio test、cross-check 或 GMS。

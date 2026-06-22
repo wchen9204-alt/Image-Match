@@ -9,6 +9,7 @@
 #include "core/types.h"
 #include "data/evaluation_data.h"
 #include "data/direct_data.h"
+#include "data/feature_initializer_data.h"
 #include "data/geometry_data.h"
 #include "data/image_data.h"
 #include "data/keypoint_data.h"
@@ -36,6 +37,9 @@ public:
     /// 直接法阶段的专属输出；DirectPipeline 会从这里同步通用几何结果和可视化点对。
     DirectData direct_data;
 
+    /// 直接法前置点特征初始化结果；仅表示是否可作为直接法初始值，不代表最终配准结果。
+    FeatureInitializerData feature_initializer_data;
+
     GeometryData geometry_data;
     TransformData transform_data;
     EvaluationData evaluation;
@@ -57,6 +61,7 @@ public:
         keypoint_match_data.clear();
         correspondence_source.clear();
         direct_data.clear();
+        feature_initializer_data.clear();
         geometry_data.clear();
         transform_data.clear();
         evaluation.clear();

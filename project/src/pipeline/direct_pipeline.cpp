@@ -2,10 +2,15 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <memory>
 #include <string>
+
+#include <opencv2/imgcodecs.hpp>
 
 #include "core/config.h"
 #include "core/factory.h"
+#include "pipeline/base_pipeline_helpers.h"
+#include "pipeline/direct_pipeline_helpers.h"
 #include "utils/logger.h"
 #include "utils/timer.h"
 
@@ -13,24 +18,12 @@ namespace fs = std::filesystem;
 
 namespace ir {
 
-namespace {
-
-void removeStaleDirectOutput(const fs::path& out) {
-    std::error_code ec;
-    if (fs::exists(out, ec)) {
-        fs::remove(out, ec);
-        if (ec) {
-            IR_LOG_WARN("Failed to remove stale direct visualization: ", out.string());
-        } else {
-            IR_LOG_INFO("Removed stale direct visualization: ", out.string());
-        }
-    }
-}
-
-} // namespace
-
 void DirectPipeline::resetStages() {
     _aligner.reset();
+    if (_featureInitializer) {
+        _featureInitializer->reset();
+    }
+    _featureInitializer.reset();
 }
 
 bool DirectPipeline::configureStages(const PipelineConfig& cfg) {
@@ -40,6 +33,13 @@ bool DirectPipeline::configureStages(const PipelineConfig& cfg) {
     }
 
     _aligner = Factory::createDirectAligner(Config::load(cfg.direct_path));
+    if (cfg.feature_initializer.enabled) {
+        _featureInitializer = std::make_unique<DirectFeatureInitializer>();
+        if (!_featureInitializer->configure(cfg)) {
+            return false;
+        }
+    }
+
     IR_LOG_INFO("DirectPipeline stages configured: aligner=", _aligner->name());
     return true;
 }
@@ -59,28 +59,69 @@ bool DirectPipeline::runAssociation(RegistrationContext& ctx) {
 bool DirectPipeline::runEstimation(RegistrationContext& ctx) {
     ScopedTimer st(ctx.result.t_geometry_ms);
 
+    /// 先确认当前 pipeline 已经根据配置创建出直接法对齐器。
     if (!_aligner) {
         ctx.geometry_data.message = "no direct aligner configured";
         IR_LOG_ERROR("DirectPipeline::runEstimation: no direct aligner configured.");
         return false;
     }
 
+    /// 若启用了点特征初始值，则先执行它；未通过采用条件时直接法仍继续跑默认初值。
+    if (_featureInitializer && _featureInitializer->enabled()) {
+        _featureInitializer->run(ctx);
+        if (ctx.feature_initializer_data.accepted) {
+            IR_LOG_INFO("DirectPipeline will use feature initializer: ",
+                        ctx.feature_initializer_data.method);
+        } else {
+            IR_LOG_INFO("DirectPipeline skipped feature initializer: ",
+                        ctx.feature_initializer_data.message);
+        }
+    }
+
+    /// 对不会自行消费初始值的直接法，先把 source 预 warp 到初始位姿，再让算法估计残差。
+    cv::Mat initializerMatrix;
+    cv::Mat originalSourceColor;
+    cv::Mat originalSourceGray;
+    bool usedGenericPrewarp = false;
+    if (!direct_pipeline_helpers::applyFeatureInitializerPrewarp(ctx,
+                                                                 _aligner->name(),
+                                                                 initializerMatrix,
+                                                                 originalSourceColor,
+                                                                 originalSourceGray,
+                                                                 usedGenericPrewarp)) {
+        ctx.geometry_data.message = "failed to apply feature initializer prewarp";
+        IR_LOG_WARN("DirectPipeline::runEstimation: ", ctx.geometry_data.message);
+        return false;
+    }
+
+    /// 执行具体直接法，并在需要时把“初始值 + 残差”合成为最终 source -> target 变换。
     ctx.correspondence_source = "DIRECT";
     const bool ok = _aligner->align(ctx);
+    if (usedGenericPrewarp) {
+        ctx.images.first = std::move(originalSourceColor);
+        ctx.images.first_gray = std::move(originalSourceGray);
+        if (ok &&
+            !direct_pipeline_helpers::mergeFeatureInitializerAndDirectResult(ctx,
+                                                                             initializerMatrix)) {
+            ctx.geometry_data.message = "failed to compose feature initializer with direct result";
+            ctx.direct_data.message = ctx.geometry_data.message;
+            IR_LOG_WARN("DirectPipeline::runEstimation: ", ctx.geometry_data.message);
+            direct_pipeline_helpers::syncFeatureInitializerDiagnostics(ctx);
+            return false;
+        }
+    }
+    direct_pipeline_helpers::syncFeatureInitializerDiagnostics(ctx);
 
-    // Direct methods report summary stats from direct_data/geometry_data.
-    const int pairCount = static_cast<int>(
-        std::max(ctx.direct_data.matches.size(),
-                 std::min(ctx.direct_data.points1.size(), ctx.direct_data.points2.size())));
+    /// 直接法没有复用点特征法的内点语义，这里只同步通用摘要字段给 CSV/JSON/日志复用。
+    const int pairCount = static_cast<int>(std::max(
+        ctx.direct_data.matches.size(),
+        std::min(ctx.direct_data.points1.size(), ctx.direct_data.points2.size())));
     ctx.result.num_raw_matches = pairCount;
     ctx.result.num_filtered_matches = pairCount;
-    ctx.result.num_inliers = ctx.geometry_data.num_inliers;
-    ctx.result.inlier_ratio = ctx.geometry_data.inlier_ratio;
-    if (ctx.result.num_inliers == 0 && ctx.direct_data.valid) {
-        // Methods without point pairs may only provide a score; reuse it as confidence.
-        ctx.result.num_inliers = pairCount;
-        ctx.result.inlier_ratio = ctx.direct_data.score;
-    }
+    ctx.result.num_inliers = 0;
+    ctx.result.direct_confidence = ctx.direct_data.valid ? ctx.direct_data.score : -1.0;
+    ctx.result.inlier_ratio = ctx.direct_data.valid ? ctx.direct_data.score
+                                                    : ctx.geometry_data.inlier_ratio;
     return ok;
 }
 
@@ -90,19 +131,61 @@ std::string DirectPipeline::buildOutputStem(const RegistrationContext& ctx) cons
 }
 
 bool DirectPipeline::saveOutputs(RegistrationContext& ctx) {
-    if (_config.output_dir.empty()) {
+    if (ctx.output_dir.empty()) {
         return true;
     }
 
-    const fs::path directDir = _config.output_dir / "direct";
+    const fs::path directDir = ctx.output_dir / "direct";
+    const std::string stem = buildOutputStem(ctx);
     if (_aligner) {
-        const std::string stem = buildOutputStem(ctx);
-        removeStaleDirectOutput(directDir / (stem + "_matches.png"));
-        removeStaleDirectOutput(directDir / (stem + "_flow.png"));
-        removeStaleDirectOutput(directDir / (stem + "_warp_diff.png"));
+        direct_pipeline_helpers::removeStaleDirectVisualization(directDir / (stem + "_matches.png"));
+        direct_pipeline_helpers::removeStaleDirectVisualization(directDir / (stem + "_flow.png"));
+        direct_pipeline_helpers::removeStaleDirectVisualization(directDir / (stem + "_warp_diff.png"));
+    }
+    direct_pipeline_helpers::removeStaleDirectVisualization(
+        ctx.output_dir / "false_color_overlay" / (stem + "_initializer_false_color_overlay.png"));
+    direct_pipeline_helpers::removeStaleDirectVisualization(
+        ctx.output_dir / "final_false_color_overlay" / (stem + "_final_false_color_overlay.png"));
+
+    const bool ok = BasePipeline::saveOutputs(ctx);
+
+    cv::Mat initializerWarped;
+    cv::Mat initializerOverlay;
+    if (direct_pipeline_helpers::buildInitializerWarpedSource(ctx, initializerWarped) &&
+        base_pipeline_helpers::buildFalseColorOverlay(initializerWarped,
+                                                      ctx.images.second,
+                                                      _config.warp_quality.overlap.foreground_threshold,
+                                                      initializerOverlay)) {
+        const fs::path overlayDir = ctx.output_dir / "false_color_overlay";
+        std::error_code ec;
+        fs::create_directories(overlayDir, ec);
+        const fs::path out = overlayDir / (stem + "_initializer_false_color_overlay.png");
+        if (cv::imwrite(out.string(), initializerOverlay)) {
+            IR_LOG_INFO("Wrote feature initializer false-color overlay image: ", out.string());
+        } else {
+            IR_LOG_WARN("Failed to write feature initializer false-color overlay image: ",
+                        out.string());
+        }
     }
 
-    return BasePipeline::saveOutputs(ctx);
+    cv::Mat finalOverlay;
+    if (direct_pipeline_helpers::buildFinalSelectedFalseColorOverlay(
+            ctx,
+            _config.warp_quality.overlap.foreground_threshold,
+            finalOverlay)) {
+        const fs::path finalOverlayDir = ctx.output_dir / "final_false_color_overlay";
+        std::error_code ec;
+        fs::create_directories(finalOverlayDir, ec);
+        const fs::path out = finalOverlayDir / (stem + "_final_false_color_overlay.png");
+        if (cv::imwrite(out.string(), finalOverlay)) {
+            IR_LOG_INFO("Wrote final selected false-color overlay image: ", out.string());
+        } else {
+            IR_LOG_WARN("Failed to write final selected false-color overlay image: ",
+                        out.string());
+        }
+    }
+
+    return ok;
 }
 
 } // namespace ir

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <string>
 
@@ -6,27 +6,12 @@
 #include <yaml-cpp/yaml.h>
 
 #include "core/context.h"
+#include "direct/common/direct_geometry_common.h"
 
 namespace ir {
 namespace dense_flow_common {
 
-/// 稠密光流全局几何拟合的鲁棒估计参数。
-struct RobustFitOptions {
-    /// 鲁棒估计方法，可选 RANSAC / LMEDS；HOMOGRAPHY 额外支持 RHO。
-    std::string method = "RANSAC";
-
-    /// RANSAC 重投影内点阈值，单位为像素。
-    double threshold = 3.0;
-
-    /// RANSAC 最大迭代次数。
-    int max_iters = 2000;
-
-    /// RANSAC 置信度。
-    double confidence = 0.99;
-
-    /// OpenCV affine 族估计后的 refine 迭代次数。
-    int refine_iters = 10;
-};
+using RobustFitOptions = direct_geometry_common::RobustFitOptions;
 
 /// 稠密光流后处理参数，Farneback / DIS / TV-L1 等方法可共享。
 struct PostprocessOptions {
@@ -70,6 +55,13 @@ PostprocessOptions readPostprocessOptions(const YAML::Node& params);
 /// 为稠密光流准备灰度输入；当前只做可选预平滑，保持原图尺度不变。
 cv::Mat prepareGray(const cv::Mat& gray, int blurKernel);
 
+/// 为稠密光流直接法统一准备输入灰度图，并检查尺寸合法性。
+bool prepareFlowInputs(RegistrationContext& ctx,
+                       const std::string& methodLabel,
+                       int blurKernel,
+                       cv::Mat& firstGray,
+                       cv::Mat& secondGray);
+
 /// 将稠密光流转换为采样点对并拟合全局几何，同时写回 direct_data 与 geometry_data。
 bool finalizeFlowAlignment(RegistrationContext& ctx,
                            const cv::Mat& firstGray,
@@ -79,4 +71,3 @@ bool finalizeFlowAlignment(RegistrationContext& ctx,
 
 } // namespace dense_flow_common
 } // namespace ir
-

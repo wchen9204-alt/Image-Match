@@ -32,61 +32,48 @@ extractor:
 
 association:
   # 可选：
-  #   PHASE_CORRELATE / CHAMFER / HAUSDORFF / ICP
-  #       结构响应图关联方法。PHASE_CORRELATE 只估计平移，不属于轮廓描述子法。
-  #   CONTOUR_DESCRIPTOR
-  #       轮廓描述子匹配方法。
-  method: CONTOUR_DESCRIPTOR
+  #   CHAMFER / HAUSDORFF / ICP
+  #       �ṹ��Ӧͼ����������
+  #       轮廓描述子匹配方法�?  method: CONTOUR_DESCRIPTOR
   params:
     contour_descriptor:
       # 描述子类型，可选：
       #   HU             HuMoments，全局 7 维形状描述子
       #   MATCH_SHAPES   cv::matchShapes 直接比较
       #   SHAPE_CONTEXT  简化版 Shape Context 轮廓直方图描述子
-      #   FD             Fourier Descriptor，固定重采样 + DFT 低频幅值
-      #   EFD            Elliptic Fourier Descriptor，闭合轮廓谐波系数描述子
-      # 说明：
-      #   FD / EFD 属于轮廓级形状描述子，可以放在这里。
-      #   EFD / Fourier-Mellin / FFT 相位相关暂不在本文件中实现，
-      #   它们留给后续频域或直接法模块。
-      # 默认值：HU
+      #   FD             Fourier Descriptor，固定重采样 + DFT 低频幅�?      #   EFD            Elliptic Fourier Descriptor，闭合轮廓谐波系数描述子
+      # 说明�?      #   FD / EFD 属于轮廓级形状描述子，可以放在这里�?      #   EFD / Fourier-Mellin / FFT 相位相关暂不在本文件中实现，
+      #   它们留给后续频域或直接法模块�?      # 默认值：HU
       descriptor: HU
 
       # 匹配器类型：
       #   BF
-      # 当前轮廓描述子匹配统一使用 BFMatcher。
-      # 默认值：BF
+      # 当前轮廓描述子匹配统一使用 BFMatcher�?      # 默认值：BF
       matcher: BF
 
       # 匹配模式，可选：
-      #   KNN     为每个源轮廓保留前 k 个最近邻，配合 knn_k 使用
-      #   MATCH   只保留每个源轮廓的最佳匹配
-      #   RADIUS  保留距离阈值内的所有匹配，配合 match_radius 使用
+      #   KNN     为每个源轮廓保留�?k 个最近邻，配�?knn_k 使用
+      #   MATCH   只保留每个源轮廓的最佳匹�?      #   RADIUS  保留距离阈值内的所有匹配，配合 match_radius 使用
       # 默认值：KNN
       match_mode: MATCH
-      # KNN 模式参数：保留前 k 个近邻
-      # 默认值：2
+      # KNN 模式参数：保留前 k 个近�?      # 默认值：2
       knn_k: 2
-      # RADIUS 模式参数：距离阈值
-      # 默认值：50.0
+      # RADIUS 模式参数：距离阈�?      # 默认值：50.0
       match_radius: 50.0
       # 默认值：2
       min_matches: 2
 
       # 几何一致性预筛选：
-      #   先做面积比预筛和一对一去重，再按 geometric_model 做几何一致性筛选。
-      #   TRANSLATION 使用旧的质心平移一致性；
-      #   RIGID 使用基于质心点对的刚体 RANSAC，更适合旋转 + 平移场景。
-      # 默认值：true
+      #   先做面积比预筛和一对一去重，再�?geometric_model 做几何一致性筛选�?      #   TRANSLATION 使用旧的质心平移一致性；
+      #   RIGID 使用基于质心点对的刚�?RANSAC，更适合旋转 + 平移场景�?      # 默认值：true
       geometric_filter: true
       # 默认值：RIGID
       geometric_model: RIGID
       # 默认值：0.30
       area_ratio_min: 0.30
-      # TRANSLATION 模式参数：质心平移一致性阈值
-      # 默认值：30.0
+      # TRANSLATION 模式参数：质心平移一致性阈�?      # 默认值：30.0
       shift_consistency_threshold: 30.0
-      # RIGID 模式参数：质心点对刚体 RANSAC 阈值/迭代次数/最小内点数
+      # RIGID 模式参数：质心点对刚�?RANSAC 阈�?迭代次数/最小内点数
       # 默认值：8.0 / 200 / 2
       rigid_ransac_threshold: 8.0
       rigid_ransac_iterations: 200
@@ -111,20 +98,6 @@ association:
       shape_context_inner_radius: 0.125
       shape_context_outer_radius: 2.0
 
-    phase_correlate:
-      # 默认值：0.01 / 5
-      responseThreshold: 0.01
-      phaseBlurKernel: 5
-
-    chamfer:
-      # 默认值：20 / 1 / 2000 / 5 / 0.25 / true / PHASE_CORRELATE
-      searchRadius: 20
-      step: 1
-      maxPoints: 2000
-      phaseBlurKernel: 5
-      scoreThreshold: 0.25
-      bidirectional: true
-      initialization: PHASE_CORRELATE
 
     hausdorff:
       # 默认值：20 / 1 / 2000 / 0.95 / 3.0 / true

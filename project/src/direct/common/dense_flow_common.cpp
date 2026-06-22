@@ -1,4 +1,4 @@
-﻿#include "direct/dense/dense_flow_common.h"
+#include "direct/common/dense_flow_common.h"
 
 #include <algorithm>
 #include <cmath>
@@ -8,32 +8,13 @@
 #include <opencv2/calib3d.hpp>
 #include <opencv2/imgproc.hpp>
 
-#include "geometry/partial_affine_utils.h"
 #include "utils/image_utils.h"
 #include "utils/logger.h"
-#include "utils/string_utils.h"
 #include "utils/yaml_utils.h"
 
 namespace ir {
 namespace dense_flow_common {
 namespace {
-
-int normalizedRobustMethod(const std::string& method, bool allowRho) {
-    const int robustMethod = robustMethodFromString(method);
-    if (robustMethod == cv::RANSAC || robustMethod == cv::LMEDS) {
-        return robustMethod;
-    }
-    if (allowRho && robustMethod == cv::RHO) {
-        return robustMethod;
-    }
-    return cv::RANSAC;
-}
-
-bool isPointInsideWithMargin(const cv::Point2f& pt, const cv::Size& size, int borderMargin) {
-    const float margin = static_cast<float>(std::max(0, borderMargin));
-    return pt.x >= margin && pt.y >= margin && pt.x < static_cast<float>(size.width) - margin &&
-           pt.y < static_cast<float>(size.height) - margin;
-}
 
 bool sampleFlowBilinear(const cv::Mat& flow, const cv::Point2f& pt, cv::Point2f& value) {
     if (flow.empty() || flow.type() != CV_32FC2 || pt.x < 0.0f || pt.y < 0.0f ||
@@ -64,84 +45,6 @@ cv::Mat computeGradientMagnitude(const cv::Mat& gray) {
     cv::Mat magnitude;
     cv::magnitude(gradX, gradY, magnitude);
     return magnitude;
-}
-
-bool fitGlobalTransform(const std::vector<cv::Point2f>& srcPts,
-                        const std::vector<cv::Point2f>& dstPts,
-                        const std::string& fitModel,
-                        const RobustFitOptions& options,
-                        cv::Mat& A,
-                        cv::Mat& H,
-                        std::vector<unsigned char>& mask,
-                        GeometryType& type) {
-    A.release();
-    H.release();
-    mask.clear();
-    const std::string model = string_utils::toUpperAscii(fitModel);
-    const double ransacThreshold = std::max(0.0, options.threshold);
-    const int maxIters = std::max(1, options.max_iters);
-    const double confidence = std::clamp(options.confidence, 1e-6, 0.999999);
-    const int refineIters = std::max(0, options.refine_iters);
-
-    // HOMOGRAPHY 分支保留给存在透视形变的配置；当前平移+旋转主场景通常不走该分支。
-    if (model == "HOMOGRAPHY") {
-        if (srcPts.size() < 4) {
-            return false;
-        }
-        H = cv::findHomography(srcPts,
-                               dstPts,
-                               normalizedRobustMethod(options.method, true),
-                               ransacThreshold,
-                               mask,
-                               maxIters,
-                               confidence);
-        type = GeometryType::HOMOGRAPHY;
-        return !H.empty();
-    }
-
-    // RIGID/SIMILARITY 先复用 OpenCV 的 partial affine RANSAC 做鲁棒内点筛选。
-    // 注意 partial affine 本身允许等比缩放，因此 RIGID 还会在内点上回归严格旋转+平移矩阵。
-    if (model == "RIGID" || model == "SIMILARITY") {
-        if (srcPts.size() < 2) {
-            return false;
-        }
-        A = cv::estimateAffinePartial2D(srcPts,
-                                        dstPts,
-                                        mask,
-                                        normalizedRobustMethod(options.method, false),
-                                        ransacThreshold,
-                                        static_cast<size_t>(maxIters),
-                                        confidence,
-                                        static_cast<size_t>(refineIters));
-        type = model == "SIMILARITY" ? GeometryType::SIMILARITY : GeometryType::RIGID;
-        if (model == "RIGID" &&
-            // 当前业务只接受平移+旋转，最终矩阵不能直接使用带 scale 自由度的 OpenCV 结果。
-            !partial_affine_utils::refineRigidFromMask(srcPts, dstPts, ransacThreshold, mask, A)) {
-            return false;
-        }
-        return !A.empty();
-    }
-
-    // AFFINE 明确允许剪切和非等比缩放，只在配置显式要求时启用，避免误把未知模型当 AFFINE。
-    if (model == "AFFINE") {
-        if (srcPts.size() < 3) {
-            return false;
-        }
-        A = cv::estimateAffine2D(srcPts,
-                                 dstPts,
-                                 mask,
-                                 normalizedRobustMethod(options.method, false),
-                                 ransacThreshold,
-                                 static_cast<size_t>(maxIters),
-                                 confidence,
-                                 static_cast<size_t>(refineIters));
-        type = GeometryType::AFFINE;
-        return !A.empty();
-    }
-
-    // 未知模型直接拒绝，避免静默回退造成配置拼写错误时输出不符合预期的几何结果。
-    IR_LOG_WARN("Dense flow direct: unsupported fit_model=", fitModel);
-    return false;
 }
 
 std::string labelOrDefault(const std::string& methodLabel) {
@@ -181,6 +84,38 @@ cv::Mat prepareGray(const cv::Mat& gray, int blurKernel) {
     return prepared;
 }
 
+bool prepareFlowInputs(RegistrationContext& ctx,
+                       const std::string& methodLabel,
+                       int blurKernel,
+                       cv::Mat& firstGray,
+                       cv::Mat& secondGray) {
+    auto& dd = ctx.direct_data;
+    auto& gd = ctx.geometry_data;
+    const std::string label = labelOrDefault(methodLabel);
+
+    firstGray.release();
+    secondGray.release();
+    if (ctx.images.first_gray.empty() || ctx.images.second_gray.empty()) {
+        dd.message = label + " requires non-empty grayscale images";
+        gd.message = dd.message;
+        return false;
+    }
+    if (ctx.images.first_gray.size() != ctx.images.second_gray.size()) {
+        dd.message = label + " requires grayscale images with the same size";
+        gd.message = dd.message;
+        return false;
+    }
+
+    firstGray = prepareGray(ctx.images.first_gray, blurKernel);
+    secondGray = prepareGray(ctx.images.second_gray, blurKernel);
+    if (firstGray.empty() || secondGray.empty()) {
+        dd.message = label + " failed to prepare grayscale images";
+        gd.message = dd.message;
+        return false;
+    }
+    return true;
+}
+
 bool finalizeFlowAlignment(RegistrationContext& ctx,
                            const cv::Mat& firstGray,
                            const cv::Mat& backwardFlow,
@@ -210,9 +145,19 @@ bool finalizeFlowAlignment(RegistrationContext& ctx,
     const int step = std::max(1, options.sample_step);
     const double minMagnitude = std::max(-1.0, options.min_flow_magnitude);
     const double maxMagnitude = std::max(-1.0, options.max_flow_magnitude);
+    const double minMagnitude2 = minMagnitude >= 0.0 ? minMagnitude * minMagnitude : -1.0;
+    const double maxMagnitude2 = maxMagnitude >= 0.0 ? maxMagnitude * maxMagnitude : -1.0;
     const double fbThreshold = std::max(0.0, options.fb_threshold);
     const cv::Mat gradientMagnitude =
         options.gradient_threshold > 0.0 ? computeGradientMagnitude(firstGray) : cv::Mat();
+    const int estimatedRows = std::max(0, (dd.flow.rows - step / 2 + step - 1) / step);
+    const int estimatedCols = std::max(0, (dd.flow.cols - step / 2 + step - 1) / step);
+    const size_t estimatedSamples =
+        static_cast<size_t>(std::max(0, estimatedRows) * std::max(0, estimatedCols));
+    srcPts.reserve(estimatedSamples);
+    dstPts.reserve(estimatedSamples);
+    dd.matches.clear();
+    dd.matches.reserve(estimatedSamples);
     int candidateCount = 0;
     int rejectedByGradient = 0;
     int rejectedByMagnitude = 0;
@@ -224,7 +169,8 @@ bool finalizeFlowAlignment(RegistrationContext& ctx,
         for (int x = step / 2; x < dd.flow.cols; x += step) {
             ++candidateCount;
             const cv::Point2f src(static_cast<float>(x), static_cast<float>(y));
-            if (!isPointInsideWithMargin(src, dd.flow.size(), options.border_margin)) {
+            if (!direct_geometry_common::isPointInsideWithMargin(
+                    src, dd.flow.size(), options.border_margin)) {
                 ++rejectedByBorder;
                 continue;
             }
@@ -239,17 +185,20 @@ bool finalizeFlowAlignment(RegistrationContext& ctx,
             if (!std::isfinite(flow.x) || !std::isfinite(flow.y)) {
                 continue;
             }
-            const double magnitude = cv::norm(flow);
-            if ((minMagnitude >= 0.0 && magnitude < minMagnitude) ||
-                (maxMagnitude >= 0.0 && magnitude > maxMagnitude)) {
+            const double magnitude2 = static_cast<double>(flow.x) * flow.x +
+                                      static_cast<double>(flow.y) * flow.y;
+            if ((minMagnitude2 >= 0.0 && magnitude2 < minMagnitude2) ||
+                (maxMagnitude2 >= 0.0 && magnitude2 > maxMagnitude2)) {
                 // 光流幅值过小或过大都可能是无效样本或异常估计，先在采样阶段剔除。
                 ++rejectedByMagnitude;
                 continue;
             }
+            const float magnitude = static_cast<float>(std::sqrt(std::max(0.0, magnitude2)));
 
             // 将光流位移加到源点坐标上，得到目标图中的对应位置。
             const cv::Point2f dst(src.x + flow.x, src.y + flow.y);
-            if (!isPointInsideWithMargin(dst, dd.flow.size(), options.border_margin)) {
+            if (!direct_geometry_common::isPointInsideWithMargin(
+                    dst, dd.flow.size(), options.border_margin)) {
                 ++rejectedByBorder;
                 continue;
             }
@@ -292,7 +241,15 @@ bool finalizeFlowAlignment(RegistrationContext& ctx,
     std::vector<unsigned char> mask;
     GeometryType type = GeometryType::UNKNOWN;
     // 从光流采样点对估计全局变换，RIGID 配置会在 RANSAC 内点上强制回归无缩放矩阵。
-    if (!fitGlobalTransform(srcPts, dstPts, options.fit_model, options.robust, A, H, mask, type)) {
+    if (!direct_geometry_common::fitGlobalTransform(srcPts,
+                                                    dstPts,
+                                                    options.fit_model,
+                                                    options.robust,
+                                                    A,
+                                                    H,
+                                                    mask,
+                                                    type,
+                                                    "Dense flow direct")) {
         dd.message = label + " failed to fit global transform from flow";
         gd.message = dd.message;
         return false;
@@ -324,6 +281,9 @@ bool finalizeFlowAlignment(RegistrationContext& ctx,
     gd.valid = true;
     gd.num_inliers = inliers;
     gd.inlier_ratio = dd.score;
+    gd.inlier_mask = mask;
+    gd.correspondence_source = "DIRECT";
+    gd.num_correspondences = static_cast<int>(srcPts.size());
     if (type == GeometryType::HOMOGRAPHY) {
         H.convertTo(gd.H, CV_64F);
         dd.H = gd.H.clone();
