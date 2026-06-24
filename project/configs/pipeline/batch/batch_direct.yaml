@@ -16,7 +16,7 @@ name: batch_direct
 # frequency 当前保留 fourier_mellin.yaml
 # sparse 可切换 klt_sparse.yaml
 # dense 可切换 dis_flow.yaml / farneback.yaml
-pipeline: ../direct/sparse_direct_pipeline.yaml
+pipeline: ../direct/frequency_direct_pipeline.yaml
 
 dataset:
   # 数据集根目录；默认值：空，批处理必须显式指定。

@@ -43,7 +43,7 @@ loadImages()
 | 方法族 | 执行内容 | 写入数据 |
 |---|---|---|
 | 点特征法 | 调用 `IKeypointExtractor::extract(ctx)`，检测关键点并计算描述子。 | `ctx.keypoint_data` |
-| 结构法 | 调用 `IStructureExtractor::extract(ctx)`，提取边缘、直线或轮廓。 | `ctx.structure_data` |
+| 结构法 | 调用 `IStructureExtractor::extract(ctx)`，提取直线或轮廓。 | `ctx.structure_data` |
 | 直接法 | 当前无独立提取阶段，主要清空和初始化统计值。 | `ctx.result` |
 | 学习法 | 当前无独立 C++ 提取阶段，匹配点由 Python matcher 在下一阶段产生。 | `ctx.result` |
 
@@ -60,7 +60,6 @@ norm_type     NormType
 
 | 结构类型 | 输出内容 |
 |---|---|
-| Edge | 边缘响应图 `response` |
 | Line | 线段数组 `lines` 和线响应图 |
 | Contour | 轮廓数组 `contours` 和轮廓响应图 |
 
@@ -119,8 +118,8 @@ associator->associate(ctx)
 
 | 关联器 | 原理 | 适用场景 |
 |---|---|---|
-| `PhaseCorrelateAssociator` | 频域相位相关 | 平移为主的边缘/轮廓响应图。 |
-| `ChamferAssociator` | 距离变换 + 平均距离 | 边缘或轮廓响应图。 |
+| `PhaseCorrelateAssociator` | 频域相位相关 | 平移为主的轮廓响应图。 |
+| `ChamferAssociator` | 距离变换 + 平均距离 | 轮廓响应图。 |
 | `HausdorffAssociator` | 分位数 Hausdorff 距离 | 含噪声结构点集。 |
 | `IcpAssociator` | 迭代最近点 | 结构点集。 |
 | `LineSegmentAssociator` | 角度、长度、中心位移几何投票 | 线段几何 baseline。 |
@@ -208,7 +207,7 @@ StructurePipeline::runEstimation()
 |---|---|
 | Line | 线段两个端点，必要时处理方向一致性。 |
 | Contour | 轮廓质心或描述子匹配对应点。 |
-| Edge/response | 结构响应图关联得到的点或平移结果。 |
+| Response | 结构响应图关联得到的点或平移结果。 |
 
 几何估计后，`promoteStructureInliersFromGeometryMask()` 会把点级内点提升回结构级内点。例如线段匹配要求两个端点都成为 RANSAC 内点，才认为这条线是内点线匹配。
 
@@ -369,6 +368,49 @@ validation:
 | `run_summary.json` | 当前样本输出目录 | 单次运行 JSON 摘要。 |
 | `summary.csv` | 单次输出目录或批量 pipeline 汇总目录 | 单次/批量统计表。 |
 | `comparison.csv` | compare 输出目录 | 多方法横向对比统计表。 |
+
+### 8.1 直接法 summary.csv 字段说明
+
+直接法的 `summary.csv` 由 `apps/summary_csv_writer.cpp` 写出。当前表头这一行改为中文，
+并且不再输出 `feature_initializer_attempted`、`feature_initializer_used`、
+`feature_initializer_method`、`num_correspondences` 和
+`feature_initializer_warp_edge_alignment_iou`；这些字段要么偏流程诊断，要么不再属于当前
+直接法汇总表的核心判读信息。
+
+| 字段 | 作用 |
+|---|---|
+| `sample_name` / `样本名` | 样本名称，通常来自数据集子目录名或单次运行的 source/target 文件名组合。 |
+| `success` / `是否成功` | 本样本最终是否通过配准与验证；`1` 表示成功，`0` 表示失败。 |
+| `message` / `结果说明` | 成功或失败原因说明，便于定位是哪一阶段或哪条质量门槛影响结果。 |
+| `direct_confidence` / `直接法置信度` | 直接法算法自身的置信度、响应值或 score；不同直接法的具体含义由 aligner 定义。 |
+| `final_validation_source` / `最终采用来源` | 最终验证采用的结果来源，常见为 `DIRECT` 或 `INITIALIZER`；为空表示没有可接受的最终结果。 |
+| `feature_initializer_inliers` / `初始值内点数` | 已接受点特征初始值的内点数；没有可用初始值时通常为 `0`。 |
+| `feature_initializer_inlier_ratio` / `初始值内点率` | 已接受点特征初始值的内点率；不可用时为 `-1`。 |
+| `feature_initializer_spatial_coverage` / `初始值空间覆盖率` | 已接受点特征初始值的内点空间覆盖率，用于判断初值点分布是否足够分散；不可用时为 `-1`。 |
+| `feature_initializer_warp_photometric_error` / `初始值光度误差` | 已接受点特征初始值临时 warp 后的 NMAD 灰度误差；越小越好，不可用时为 `-1`。 |
+| `warp_overlap_containment` / `重叠包含率` | 最终 warped source 与 target 的局部包含率，用于局部图场景下判断较小前景是否被覆盖。 |
+| `warp_source_coverage` / `源图覆盖率` | source 前景经最终变换后仍落在 target 画布内的比例。 |
+| `warp_target_coverage` / `目标图覆盖率` | target 前景经逆变换后仍落在 source 画布内的比例。 |
+| `warp_bidirectional_coverage` / `双向覆盖率` | `warp_source_coverage` 与 `warp_target_coverage` 的较大值，用于双向覆盖质量判断。 |
+| `warp_edge_alignment_iou` / `边缘对齐IoU` | 最终 warped source 与 target 在重叠区域内的边缘对齐 IoU；越大表示边缘越一致。 |
+| `warp_photometric_error` / `光度误差` | 最终 warped source 与 target 重叠区域的 NMAD 灰度误差；越小表示光度越一致。 |
+| `t_load_ms` / `加载耗时_ms` | 图像读取和预处理耗时，单位毫秒。 |
+| `t_geometry_ms` / `几何阶段耗时_ms` | 直接法估计、几何同步和相关估计阶段耗时，单位毫秒。 |
+| `t_warp_ms` / `变换耗时_ms` | 最终图像 warp 阶段耗时，单位毫秒。 |
+| `t_total_ms` / `总耗时_ms` | 本样本完整流水线总耗时，单位毫秒。 |
+| `metric_*` / `指标_*` | Evaluator 动态追加的评估指标列，例如 `metric_REPEATABILITY` 或 `指标_REPEATABILITY`；只有当前批次中至少出现过一次有效值的指标才会写入。 |
+
+历史批次的旧 `summary.csv` 在删除三列后仍可能保留下面这些列；它们不属于当前新生成的直接法核心 schema，但含义如下：
+
+| 旧字段 | 作用 |
+|---|---|
+| `feature_initializer_candidates` | 旧版记录的点特征初始化候选数量，用来观察初始化器尝试了多少候选。 |
+| `feature_initializer_accepted` | 旧版记录是否存在通过初始值阶段自检的点特征初始化结果；`1` 表示通过，`0` 表示未通过。 |
+| `num_correspondences` | 旧版记录的直接法对应点数量；稀疏/稠密直接法中更有意义，当前新表已删除。 |
+| `mean_reproj_error` | 旧版沿用通用几何重投影误差；对多数直接法没有稳定通用语义，当前直接法新表不再输出。 |
+| `inlier_spatial_coverage` | 旧版沿用通用内点空间覆盖率；当前直接法主判定以 warp 质量为主，新表不再输出该列。 |
+| `feature_initializer_warp_edge_alignment_iou` | 旧版记录初始值临时 warp 的边缘对齐 IoU；当前新表已删除。 |
+| `t_align_ms` | 旧版直接法对齐耗时列；历史实现中实际写入的是 `t_match_ms`，含义不够准确，当前新表不再输出。 |
 
 批量输出路径形式：
 

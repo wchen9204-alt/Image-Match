@@ -4,7 +4,7 @@
 # ---------------------------------------------------------------------------
 name: batch_pipeline
 
-pipeline: ../keypoint/surf_pipeline.yaml
+pipeline: ../keypoint/orb_pipeline.yaml
 
 dataset:
   root: ../../../datasets

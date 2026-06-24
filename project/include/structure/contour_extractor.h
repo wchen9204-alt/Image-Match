@@ -17,6 +17,8 @@ public:
     bool extract(RegistrationContext& ctx) override;
 
 private:
+    int _blurKernel = 0;
+    bool _autoCanny = false;
     double _cannyThreshold1 = 50.0;
     double _cannyThreshold2 = 150.0;
     int _apertureSize = 3;
@@ -25,6 +27,10 @@ private:
     double _minArea = 20.0;
     double _minPerimeter = 0.0;
     int _minPoints = 3;
+    int _minBboxWidth = 0;
+    int _minBboxHeight = 0;
+    double _minExtent = 0.0;
+    double _maxAspectRatio = 0.0;
     int _maxContours = 1000;
     int _contourThickness = 1;
 };

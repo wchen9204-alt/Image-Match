@@ -1,106 +1,101 @@
-# 结构类型，可选：EDGE / LINE / CONTOUR
+﻿# 结构类型，可选：LINE / CONTOUR。
 type: CONTOUR
 
 extractor:
-  # 当前实现：Canny 边缘 + findContours
+  # 当前实现：Canny 边缘 + findContours。
   method: CANNY_FIND_CONTOURS
   params:
-    # 默认值：50.0
+    # Canny 前的高斯模糊核；0 表示关闭，>1 时自动归一化为奇数。
+    blur_kernel: 3
+    # 是否根据图像灰度中位数自动估计 Canny 双阈值。
+    auto_canny: true
+
+    # Canny 低阈值，默认值：50.0。
     cannyThreshold1: 50.0
-    # 默认值：150.0
+    # Canny 高阈值，默认值：150.0。
     cannyThreshold2: 150.0
-    # 默认值：3
+    # Canny 内部 Sobel 算子的孔径大小，可选：3 / 5 / 7。
     apertureSize: 3
 
-    # 轮廓检索模式：EXTERNAL / LIST / CCOMP / TREE
-    # 默认值：EXTERNAL
+    # 轮廓检索模式，可选：EXTERNAL / LIST / CCOMP / TREE。
     retrievalMode: TREE
-    # 轮廓近似模式：SIMPLE / NONE
-    # 默认值：SIMPLE
+    # 轮廓近似模式，可选：SIMPLE / NONE。
     chainApprox: SIMPLE
 
-    # 默认值：20.0
-    minArea: 20.0
-    # 默认值：0.0
+    # 最小轮廓面积，默认值：20.0。
+    minArea: 24.0
+    # 最小轮廓周长，默认值：0.0。
     minPerimeter: 0.0
-    # 默认值：3
+    # 最少轮廓点数，默认值：3。
     minPoints: 3
-    # 默认值：1000
+    # 最小包围盒宽高；0 表示不限制。
+    min_bbox_width: 6
+    min_bbox_height: 6
+    # 面积与包围盒面积的比值下限；0 表示不限制。
+    min_extent: 0.10
+    # 包围盒长宽比上限；0 表示不限制。
+    max_aspect_ratio: 15.0
+    # 最多保留轮廓数量，默认值：1000。
     maxContours: 1000
-    # 默认值：1
+    # 绘制轮廓响应图时的线宽，默认值：1。
     contourThickness: 1
 
 association:
-  # 可选：
-  #   CHAMFER / HAUSDORFF / ICP
-  #       �ṹ��Ӧͼ����������
-  #       轮廓描述子匹配方法�?  method: CONTOUR_DESCRIPTOR
+  # 可选：CONTOUR_DESCRIPTOR / CHAMFER / HAUSDORFF / ICP。
+  # CONTOUR_DESCRIPTOR 使用轮廓描述子匹配；后三者使用结构响应图做平移关联。
+  method: CONTOUR_DESCRIPTOR
   params:
     contour_descriptor:
-      # 描述子类型，可选：
-      #   HU             HuMoments，全局 7 维形状描述子
-      #   MATCH_SHAPES   cv::matchShapes 直接比较
-      #   SHAPE_CONTEXT  简化版 Shape Context 轮廓直方图描述子
-      #   FD             Fourier Descriptor，固定重采样 + DFT 低频幅�?      #   EFD            Elliptic Fourier Descriptor，闭合轮廓谐波系数描述子
-      # 说明�?      #   FD / EFD 属于轮廓级形状描述子，可以放在这里�?      #   EFD / Fourier-Mellin / FFT 相位相关暂不在本文件中实现，
-      #   它们留给后续频域或直接法模块�?      # 默认值：HU
-      descriptor: HU
-
-      # 匹配器类型：
-      #   BF
-      # 当前轮廓描述子匹配统一使用 BFMatcher�?      # 默认值：BF
+      # 描述子类型，可选：HU / MATCH_SHAPES / SHAPE_CONTEXT / FD / EFD。
+      descriptor: FD
       matcher: BF
 
-      # 匹配模式，可选：
-      #   KNN     为每个源轮廓保留�?k 个最近邻，配�?knn_k 使用
-      #   MATCH   只保留每个源轮廓的最佳匹�?      #   RADIUS  保留距离阈值内的所有匹配，配合 match_radius 使用
-      # 默认值：KNN
+      # 匹配模式，可选：MATCH / KNN / RADIUS。
       match_mode: MATCH
-      # KNN 模式参数：保留前 k 个近�?      # 默认值：2
+      # KNN 模式保留的近邻数。
       knn_k: 2
-      # RADIUS 模式参数：距离阈�?      # 默认值：50.0
+      # RADIUS 模式的距离阈值。
       match_radius: 50.0
-      # 默认值：2
-      min_matches: 2
+      # 进入后续阶段所需的最少匹配数。
+      min_matches: 1
 
-      # 几何一致性预筛选：
-      #   先做面积比预筛和一对一去重，再�?geometric_model 做几何一致性筛选�?      #   TRANSLATION 使用旧的质心平移一致性；
-      #   RIGID 使用基于质心点对的刚�?RANSAC，更适合旋转 + 平移场景�?      # 默认值：true
+      # 几何一致性预筛：先做面积比预筛和一对一去重，再做平移或刚体一致性筛选。
       geometric_filter: true
-      # 默认值：RIGID
+      # 几何一致性模型，可选：TRANSLATION / RIGID。
       geometric_model: RIGID
-      # 默认值：0.30
+      # 轮廓面积比例下限。
       area_ratio_min: 0.30
-      # TRANSLATION 模式参数：质心平移一致性阈�?      # 默认值：30.0
+      # TRANSLATION 模式的质心平移一致性阈值。
       shift_consistency_threshold: 30.0
-      # RIGID 模式参数：质心点对刚�?RANSAC 阈�?迭代次数/最小内点数
-      # 默认值：8.0 / 200 / 2
+      # RIGID 模式的质心点对 RANSAC 阈值、迭代次数和最少内点数。
       rigid_ransac_threshold: 8.0
       rigid_ransac_iterations: 200
       rigid_min_inliers: 2
 
-      # Fourier Descriptor 参数（仅 descriptor: FD 时使用）
-      # 默认值：128 / 16
+      # Fourier Descriptor 参数，仅 descriptor: FD 使用。
       fourier_sample_points: 128
       fourier_coefficients: 16
 
-      # Elliptic Fourier Descriptor 参数（仅 descriptor: EFD 时使用）
-      # 默认值：12 / true / true
+      # Elliptic Fourier Descriptor 参数，仅 descriptor: EFD 使用。
       efd_harmonics: 12
       efd_normalize_rotation: true
       efd_normalize_scale: true
 
-      # Shape Context 参数（仅 descriptor: SHAPE_CONTEXT 时使用）
-      # 默认值：64 / 5 / 12 / 0.125 / 2.0
+      # Shape Context 参数，仅 descriptor: SHAPE_CONTEXT 使用。
       shape_context_sample_points: 64
       shape_context_radial_bins: 5
       shape_context_angular_bins: 12
       shape_context_inner_radius: 0.125
       shape_context_outer_radius: 2.0
 
+    chamfer:
+      searchRadius: 20
+      step: 1
+      maxPoints: 2000
+      scoreThreshold: 0.25
+      bidirectional: true
 
     hausdorff:
-      # 默认值：20 / 1 / 2000 / 0.95 / 3.0 / true
       searchRadius: 30
       step: 2
       maxPoints: 2000
@@ -109,15 +104,14 @@ association:
       bidirectional: true
 
     icp:
-      # 默认值：30 / 0.01 / 2000 / 20 / 10.0 / 2.0 / CENTROID
       maxIterations: 30
       tolerance: 0.01
       maxPoints: 2000
       minCorrespondences: 20
       maxCorrespondenceDistance: 15.0
-      scoreThreshold: 2.0
+      scoreThreshold: 7.0
       initialization: CENTROID
 
 estimation:
-  # 默认值：0.01
+  # 结构匹配结果有效性阈值，当前主要保留用于兼容。
   responseThreshold: 0.01

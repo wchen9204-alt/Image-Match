@@ -406,6 +406,18 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
             cfg.min_inlier_spatial_coverage =
                 yaml_utils::getDouble(matchQuality, "min_inlier_spatial_coverage", -1.0);
         }
+        if (validation["method_quality"] && validation["method_quality"].IsMap()) {
+            const auto& methodQuality = validation["method_quality"];
+            cfg.validate_method_quality = yaml_utils::getBool(methodQuality, "enabled", false);
+            cfg.fail_on_method_quality =
+                yaml_utils::getBool(methodQuality, "fail_on_violation", true);
+            cfg.min_method_keypoints =
+                yaml_utils::getInt(methodQuality, "min_keypoints", 0);
+            cfg.min_method_structures =
+                yaml_utils::getInt(methodQuality, "min_structures", 0);
+            cfg.min_method_structure_matches =
+                yaml_utils::getInt(methodQuality, "min_structure_matches", 0);
+        }
         if (validation["direct_quality"] && validation["direct_quality"].IsMap()) {
             const auto& directQuality = validation["direct_quality"];
             cfg.validate_direct_quality = yaml_utils::getBool(directQuality, "enabled", false);

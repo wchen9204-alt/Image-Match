@@ -43,7 +43,7 @@
 | 方法族 | 已支持内容 |
 |---|---|
 | 点特征法 | SIFT、SURF、ORB、BRISK、KAZE、AKAZE。 |
-| 结构特征法 | 边缘、直线、轮廓三类结构；支持 Chamfer、Hausdorff、ICP、相位相关、线段几何匹配、线描述子匹配和轮廓描述子匹配。 |
+| 结构特征法 | 直线、轮廓两类结构；支持 Chamfer、Hausdorff、ICP、相位相关、线段几何匹配、线描述子匹配和轮廓描述子匹配。 |
 | 直接法 | ECC、ESM Rigid、Phase Correlation、Fourier-Mellin、KLT Sparse、Farneback、DIS、TV-L1。 |
 | 深度学习匹配法 | LoFTR、SuperPoint + LightGlue、SuperPoint + SuperGlue。 |
 
@@ -74,7 +74,7 @@ geometry: ../../geometry/rigid.yaml
 | `ImagePairData` | 源图、目标图、灰度图和输入路径。 |
 | `KeypointData` | 两幅图的关键点、描述子和提取器信息。 |
 | `KeypointMatchData` | 原始匹配、过滤后匹配、内点匹配和索引关系。 |
-| `StructureData` | 边缘、线段、轮廓响应图与结构基元。 |
+| `StructureData` | 线段、轮廓响应图与结构基元。 |
 | `StructureMatchData` | 结构点对、线段匹配、平移或仿射初值。 |
 | `DirectData` | 直接法矩阵、光流、点对、得分和诊断指标。 |
 | `GeometryData` | 几何模型类型、矩阵、内点掩码、重投影误差。 |
@@ -89,7 +89,7 @@ geometry: ../../geometry/rigid.yaml
 | 输出内容 | 说明 |
 |---|---|
 | 原始图像 | 保存本次实验使用的 source 和 target。 |
-| 特征或结构图 | 点特征关键点图、边缘图、线段图或轮廓图。 |
+| 特征或结构图 | 点特征关键点图、线段图或轮廓图。 |
 | 匹配图 | all match 和 inlier match 可视化。 |
 | warped 图像 | 将 source 按估计变换配准到 target 坐标系。 |
 | blend 图像 | warped source 与 target 的叠加图。 |
@@ -312,7 +312,7 @@ outputs/compare/.../comparison.csv
 | `configs/matcher/` | 设置 BFMatcher 或 FlannMatcher。 |
 | `configs/filter/` | 设置 Ratio Test、Cross Check、GMS 等过滤器。 |
 | `configs/geometry/` | 设置 Homography、Affine、Rigid、Similarity 估计参数。 |
-| `configs/structure/` | 设置边缘、直线、轮廓检测与关联参数。 |
+| `configs/structure/` | 设置直线、轮廓检测与关联参数。 |
 | `configs/direct/` | 设置直接法算法参数。 |
 | `configs/learning/` | 设置 Python 深度学习模型调用参数。 |
 
@@ -372,7 +372,7 @@ outputs/compare/<method_or_group>/
 |---|---|
 | `originals/` | 原始输入图像。 |
 | `keypoints/` | 点特征关键点可视化。 |
-| `structures/` | 边缘、直线或轮廓可视化。 |
+| `structures/` | 直线或轮廓可视化。 |
 | `matches/`、`all_match/`、`inlier_match/` | 匹配可视化。 |
 | `direct/` | 直接法相关输出。 |
 | `learning/` | 深度学习匹配输出。 |

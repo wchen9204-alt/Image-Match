@@ -20,6 +20,43 @@ namespace ir {
 
 namespace {
 
+bool restoreContourAssociatorGeometry(RegistrationContext& ctx,
+                                       const cv::Point2d& assocTranslation,
+                                       const cv::Mat& assocAffine,
+                                       const std::vector<cv::DMatch>& assocInliers,
+                                       double assocScore) {
+    if (ctx.structure_data.type != StructureType::CONTOUR || assocInliers.empty()) {
+        return false;
+    }
+
+    auto& gd = ctx.geometry_data;
+    auto& md = ctx.structure_match_data;
+    gd.type = GeometryType::AFFINE;
+    if (!assocAffine.empty() && assocAffine.rows == 2 && assocAffine.cols == 3) {
+        assocAffine.convertTo(gd.A, CV_64F);
+    } else {
+        gd.A = (cv::Mat_<double>(2, 3) << 1.0,
+                0.0,
+                assocTranslation.x,
+                0.0,
+                1.0,
+                assocTranslation.y);
+    }
+    gd.valid = true;
+    gd.num_inliers = static_cast<int>(assocInliers.size());
+    gd.inlier_ratio =
+        md.line_matches.empty()
+            ? 0.0
+            : static_cast<double>(assocInliers.size()) / static_cast<double>(md.line_matches.size());
+    gd.message = "using contour associator geometry";
+
+    md.affine = gd.A.clone();
+    md.translation = {gd.A.at<double>(0, 2), gd.A.at<double>(1, 2)};
+    md.inlier_line_matches = assocInliers;
+    md.score = assocScore;
+    return true;
+}
+
 void promoteStructureInliersFromGeometryMask(RegistrationContext& ctx) {
     auto& md = ctx.structure_match_data;
     const auto& gd = ctx.geometry_data;
@@ -210,24 +247,56 @@ bool StructurePipeline::runEstimation(RegistrationContext& ctx) {
 
         const cv::Point2d assocTranslation = ctx.structure_match_data.translation;
         const cv::Mat assocAffine = ctx.structure_match_data.affine.clone();
+        const std::vector<cv::DMatch> assocInliers =
+            ctx.structure_match_data.inlier_line_matches;
+        const double assocScore = ctx.structure_match_data.score;
 
         const bool ok = _geometry->estimate(ctx);
-        promoteStructureInliersFromGeometryMask(ctx);
 
         if (ok) {
-            ctx.structure_match_data.affine =
-                (ctx.geometry_data.A.empty() ? cv::Mat{} : ctx.geometry_data.A.clone());
-            if (!ctx.geometry_data.A.empty()) {
-                ctx.structure_match_data.translation =
-                    {ctx.geometry_data.A.at<double>(0, 2), ctx.geometry_data.A.at<double>(1, 2)};
-            } else if (!ctx.geometry_data.H.empty()) {
-                ctx.structure_match_data.translation =
-                    {ctx.geometry_data.H.at<double>(0, 2) / ctx.geometry_data.H.at<double>(2, 2),
-                     ctx.geometry_data.H.at<double>(1, 2) / ctx.geometry_data.H.at<double>(2, 2)};
+            promoteStructureInliersFromGeometryMask(ctx);
+
+            const bool geometryDowngradesContourInliers =
+                ctx.structure_data.type == StructureType::CONTOUR && !assocInliers.empty() &&
+                ctx.structure_match_data.inlier_line_matches.size() < assocInliers.size();
+            if (geometryDowngradesContourInliers) {
+                IR_LOG_WARN("StructurePipeline contour geometry downgraded inliers from ",
+                            assocInliers.size(),
+                            " to ",
+                            ctx.structure_match_data.inlier_line_matches.size(),
+                            "; keeping contour associator inliers");
+                ctx.structure_match_data.inlier_line_matches = assocInliers;
+                ctx.structure_match_data.score = assocScore;
+                ctx.structure_match_data.affine = assocAffine;
+                ctx.structure_match_data.translation = assocTranslation;
+            } else {
+                ctx.structure_match_data.affine =
+                    (ctx.geometry_data.A.empty() ? cv::Mat{} : ctx.geometry_data.A.clone());
+                if (!ctx.geometry_data.A.empty()) {
+                    ctx.structure_match_data.translation = {ctx.geometry_data.A.at<double>(0, 2),
+                                                            ctx.geometry_data.A.at<double>(1, 2)};
+                } else if (!ctx.geometry_data.H.empty()) {
+                    ctx.structure_match_data.translation =
+                        {ctx.geometry_data.H.at<double>(0, 2) /
+                             ctx.geometry_data.H.at<double>(2, 2),
+                         ctx.geometry_data.H.at<double>(1, 2) /
+                             ctx.geometry_data.H.at<double>(2, 2)};
+                }
             }
         } else {
             ctx.structure_match_data.affine = assocAffine;
             ctx.structure_match_data.translation = assocTranslation;
+            ctx.structure_match_data.inlier_line_matches = assocInliers;
+            ctx.structure_match_data.score = assocScore;
+            if (restoreContourAssociatorGeometry(
+                    ctx, assocTranslation, assocAffine, assocInliers, assocScore)) {
+                IR_LOG_WARN("StructurePipeline contour geometry estimator failed; using "
+                            "contour associator affine instead");
+                ctx.result.num_inliers =
+                    static_cast<int>(ctx.structure_match_data.inlier_line_matches.size());
+                ctx.result.inlier_ratio = ctx.structure_match_data.score;
+                return true;
+            }
         }
 
         // 保留关联器/预筛后的匹配数量，不在几何阶段用内点数覆盖，
@@ -321,10 +390,11 @@ bool StructurePipeline::saveOutputs(RegistrationContext& ctx) {
     // 3. 按配置保存结构匹配连线图，便于和点特征 matches 输出对照。
     if (_config.draw_matches) {
         cv::Mat vis;
+        const bool preferInliers =
+            _config.draw_inliers_only && !ctx.structure_match_data.inlier_line_matches.empty();
         const std::vector<cv::DMatch>& preferredMatches =
-            !ctx.structure_match_data.inlier_line_matches.empty()
-                ? ctx.structure_match_data.inlier_line_matches
-                : ctx.structure_match_data.line_matches;
+            preferInliers ? ctx.structure_match_data.inlier_line_matches
+                          : ctx.structure_match_data.line_matches;
 
         if (ctx.structure_data.type == StructureType::LINE && !preferredMatches.empty()) {
             vis = renderLineSegmentMatches(ctx, preferredMatches, _config.max_matches_drawn);

@@ -39,6 +39,12 @@ visualization:
   wait_key: 0
 
 validation:
+  method_quality:
+    # 方法特征判定：只检查轮廓法自身产物是否充足；最终仍必须通过下面的通用判定。
+    enabled: true
+    fail_on_violation: true
+    min_structures: 1
+    min_structure_matches: 1
   warp_overlap:
     # 是否启用 warp 后的前景局部包含率验证；默认值：false。
     enabled: true

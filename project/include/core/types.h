@@ -17,7 +17,7 @@ std::string toString(KeypointType t);
 KeypointType keypointTypeFromString(const std::string& s);
 
 /// 结构特征类型，对应 `structure/*.yaml` 中的 `type` 配置。
-enum class StructureType { UNKNOWN = 0, EDGE, LINE, CONTOUR };
+enum class StructureType { UNKNOWN = 0, LINE, CONTOUR };
 
 /// 将结构特征类型转换为字符串。
 std::string toString(StructureType t);

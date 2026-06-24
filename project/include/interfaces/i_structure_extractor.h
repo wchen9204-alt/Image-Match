@@ -9,7 +9,7 @@ namespace ir {
 
 /// 结构特征提取器接口。
 ///
-/// 负责从两张输入图像中提取边缘、直线、轮廓等结构信息，并写入
+/// 负责从两张输入图像中提取直线、轮廓等结构信息，并写入
 /// `RegistrationContext::structure_data`。
 class IStructureExtractor {
 public:

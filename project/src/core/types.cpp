@@ -52,8 +52,6 @@ KeypointType keypointTypeFromString(const std::string& s) {
 
 std::string toString(StructureType t) {
     switch (t) {
-    case StructureType::EDGE:
-        return "EDGE";
     case StructureType::LINE:
         return "LINE";
     case StructureType::CONTOUR:
@@ -66,9 +64,6 @@ std::string toString(StructureType t) {
 
 StructureType structureTypeFromString(const std::string& s) {
     const std::string u = string_utils::toUpperAscii(s);
-    if (u == "EDGE" || u == "CANNY") {
-        return StructureType::EDGE;
-    }
     if (u == "LINE" || u == "HOUGH_LINE" || u == "HOUGH") {
         return StructureType::LINE;
     }

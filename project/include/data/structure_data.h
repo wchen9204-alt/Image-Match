@@ -36,8 +36,6 @@ struct StructureImageData {
             return static_cast<int>(lines.size());
         case StructureType::CONTOUR:
             return static_cast<int>(contours.size());
-        case StructureType::EDGE:
-            return response.empty() ? 0 : cv::countNonZero(response);
         case StructureType::UNKNOWN:
         default:
             return 0;

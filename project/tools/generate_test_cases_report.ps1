@@ -12,6 +12,32 @@ if ([string]::IsNullOrWhiteSpace($OutputFile)) {
 $BatchRoot = Join-Path $ProjectRoot 'outputs\batch'
 $DatasetRoot = Join-Path $ProjectRoot 'datasets'
 
+$SampleNameColumn = [string]([char]0x6837)+[char]0x672C+[char]0x540D
+$SuccessColumn = [string]([char]0x662F)+[char]0x5426+[char]0x6210+[char]0x529F
+$MessageColumn = [string]([char]0x7ED3)+[char]0x679C+[char]0x8BF4+[char]0x660E
+$KeypointFirstColumn = [string]([char]0x5173)+[char]0x952E+[char]0x70B9+[char]0x6570+[char]0x005F+[char]0x7B2C+[char]0x4E00+[char]0x5F20
+$KeypointSecondColumn = [string]([char]0x5173)+[char]0x952E+[char]0x70B9+[char]0x6570+[char]0x005F+[char]0x7B2C+[char]0x4E8C+[char]0x5F20
+$StructureFirstColumn = [string]([char]0x7ED3)+[char]0x6784+[char]0x6570+[char]0x005F+[char]0x7B2C+[char]0x4E00+[char]0x5F20
+$StructureSecondColumn = [string]([char]0x7ED3)+[char]0x6784+[char]0x6570+[char]0x005F+[char]0x7B2C+[char]0x4E8C+[char]0x5F20
+$LearningFirstColumn = [string]([char]0x5B66)+[char]0x4E60+[char]0x70B9+[char]0x6570+[char]0x005F+[char]0x7B2C+[char]0x4E00+[char]0x5F20
+$LearningSecondColumn = [string]([char]0x5B66)+[char]0x4E60+[char]0x70B9+[char]0x6570+[char]0x005F+[char]0x7B2C+[char]0x4E8C+[char]0x5F20
+$DirectConfidenceColumn = [string]([char]0x76F4)+[char]0x63A5+[char]0x6CD5+[char]0x7F6E+[char]0x4FE1+[char]0x5EA6
+$FinalSourceColumn = [string]([char]0x6700)+[char]0x7EC8+[char]0x91C7+[char]0x7528+[char]0x6765+[char]0x6E90
+$InitializerInliersColumn = [string]([char]0x521D)+[char]0x59CB+[char]0x503C+[char]0x5185+[char]0x70B9+[char]0x6570
+$InitializerInlierRatioColumn = [string]([char]0x521D)+[char]0x59CB+[char]0x503C+[char]0x5185+[char]0x70B9+[char]0x7387
+$InitializerCoverageColumn = [string]([char]0x521D)+[char]0x59CB+[char]0x503C+[char]0x7A7A+[char]0x95F4+[char]0x8986+[char]0x76D6+[char]0x7387
+$InitializerPhotometricColumn = [string]([char]0x521D)+[char]0x59CB+[char]0x503C+[char]0x5149+[char]0x5EA6+[char]0x8BEF+[char]0x5DEE
+$ContainmentColumn = [string]([char]0x91CD)+[char]0x53E0+[char]0x5305+[char]0x542B+[char]0x7387
+$SourceCoverageColumn = [string]([char]0x6E90)+[char]0x56FE+[char]0x8986+[char]0x76D6+[char]0x7387
+$TargetCoverageColumn = [string]([char]0x76EE)+[char]0x6807+[char]0x56FE+[char]0x8986+[char]0x76D6+[char]0x7387
+$BidirectionalCoverageColumn = [string]([char]0x53CC)+[char]0x5411+[char]0x8986+[char]0x76D6+[char]0x7387
+$EdgeAlignmentColumn = [string]([char]0x8FB9)+[char]0x7F18+[char]0x5BF9+[char]0x9F50+[char]0x0049+[char]0x006F+[char]0x0055
+$PhotometricColumn = [string]([char]0x5149)+[char]0x5EA6+[char]0x8BEF+[char]0x5DEE
+$LoadMsColumn = [string]([char]0x52A0)+[char]0x8F7D+[char]0x8017+[char]0x65F6+[char]0x005F+[char]0x006D+[char]0x0073
+$GeometryMsColumn = [string]([char]0x51E0)+[char]0x4F55+[char]0x9636+[char]0x6BB5+[char]0x8017+[char]0x65F6+[char]0x005F+[char]0x006D+[char]0x0073
+$WarpMsColumn = [string]([char]0x53D8)+[char]0x6362+[char]0x8017+[char]0x65F6+[char]0x005F+[char]0x006D+[char]0x0073
+$TotalMsColumn = [string]([char]0x603B)+[char]0x8017+[char]0x65F6+[char]0x005F+[char]0x006D+[char]0x0073
+
 function HtmlEscape {
     param([object]$Value)
     if ($null -eq $Value) { return '' }
@@ -76,7 +102,11 @@ function New-UniqueCsvHeader {
         $name = if ([string]::IsNullOrWhiteSpace($header)) { 'column' } else { $header }
         $key = $name.ToLowerInvariant()
         if ($seen.ContainsKey($key)) {
-            $candidate = if ($name -notlike 'metric_*') { 'metric_' + $name } else { $name + '_2' }
+            $candidate = if ($name -notlike 'metric_*' -and $name -notlike '指标_*') {
+                'metric_' + $name
+            } else {
+                $name + '_2'
+            }
             $candidateKey = $candidate.ToLowerInvariant()
             $suffix = 2
             while ($seen.ContainsKey($candidateKey)) {
@@ -146,9 +176,9 @@ function CsvSuccessToStatus {
 
 function DetectCsvSchema {
     param([object]$Row, [string]$Family)
-    if (HasColumn $Row 'num_structures_first') { return 'structure' }
-    if (HasColumn $Row 'num_correspondences') { return 'direct' }
-    if (HasColumn $Row 'num_learning_points_first') { return 'learning' }
+    if (HasColumn $Row 'num_structures_first' -or HasColumn $Row $StructureFirstColumn) { return 'structure' }
+    if (HasColumn $Row 'num_correspondences' -or HasColumn $Row $DirectConfidenceColumn) { return 'direct' }
+    if (HasColumn $Row 'num_learning_points_first' -or HasColumn $Row $LearningFirstColumn) { return 'learning' }
     if (-not [string]::IsNullOrWhiteSpace($Family)) { return $Family }
     return 'keypoint'
 }
@@ -157,7 +187,7 @@ function SchemaPrimaryLabelHtml {
     param([string]$Schema)
     switch ($Schema) {
         'structure' { return '&#32467;&#26500;&#25968;' }
-        'direct' { return '&#23545;&#24212;&#28857;&#25968;' }
+        'direct' { return '&#30452;&#25509;&#27861;&#32622;&#20449;&#24230;' }
         'learning' { return '&#23398;&#20064;&#28857;&#25968;' }
         default { return '&#20851;&#38190;&#28857;&#25968;' }
     }
@@ -183,12 +213,20 @@ function New-ReportRecordFromCsvRow {
     $family = $pathParts.Family
     $pipeline = $pathParts.Pipeline
     $schema = DetectCsvSchema $Row $family
-    $sample = PickFirst $Row @('sample_name', 'sample')
+    $sample = PickFirst $Row @('sample_name', $SampleNameColumn, 'sample')
 
-    $countFirst = PickFirst $Row @('num_keypoints_first', 'num_structures_first', 'num_learning_points_first')
-    $countSecond = PickFirst $Row @('num_keypoints_second', 'num_structures_second', 'num_learning_points_second')
+    $countFirst = PickFirst $Row @(
+        'num_keypoints_first', $KeypointFirstColumn,
+        'num_structures_first', $StructureFirstColumn,
+        'num_learning_points_first', $LearningFirstColumn
+    )
+    $countSecond = PickFirst $Row @(
+        'num_keypoints_second', $KeypointSecondColumn,
+        'num_structures_second', $StructureSecondColumn,
+        'num_learning_points_second', $LearningSecondColumn
+    )
     $primaryCount = if ($schema -eq 'direct') {
-        PickFirst $Row @('num_correspondences', 'num_raw_matches')
+        PickFirst $Row @($DirectConfidenceColumn, 'direct_confidence', 'num_correspondences', 'num_raw_matches')
     } elseif ($null -ne $countFirst -or $null -ne $countSecond) {
         '{0} / {1}' -f (FormatNumber $countFirst 0), (FormatNumber $countSecond 0)
     } else {
@@ -199,19 +237,42 @@ function New-ReportRecordFromCsvRow {
         Family = $family
         Pipeline = $pipeline
         Sample = $sample
-        Status = CsvSuccessToStatus (PickProperty $Row 'success')
-        Message = PickProperty $Row 'message'
+        Status = CsvSuccessToStatus (PickFirst $Row @('success', $SuccessColumn))
+        Message = PickFirst $Row @('message', $MessageColumn)
         SummaryPath = $relativeCsv
         Schema = $schema
         PrimaryLabelHtml = SchemaPrimaryLabelHtml $schema
         PrimaryCount = $primaryCount
-        RawMatches = PickFirst $Row @('num_candidate_structure_matches', 'num_raw_learning_matches', 'num_correspondences', 'num_raw_matches')
-        FilteredMatches = PickFirst $Row @('num_filtered_structure_matches', 'num_filtered_learning_matches', 'num_filtered_matches', 'num_correspondences')
-        Inliers = PickFirst $Row @('num_inlier_structure_matches', 'num_inlier_learning_matches', 'num_inlier_correspondences', 'num_inliers')
-        InlierRatio = PickFirst $Row @('structure_inlier_ratio', 'learning_inlier_ratio', 'direct_confidence', 'inlier_ratio')
+        RawMatches = if ($schema -eq 'direct') { $null } else { PickFirst $Row @(
+            'num_candidate_structure_matches',
+            'num_raw_learning_matches',
+            'num_correspondences',
+            'num_raw_matches'
+        ) }
+        FilteredMatches = if ($schema -eq 'direct') { $null } else { PickFirst $Row @(
+            'num_filtered_structure_matches',
+            'num_filtered_learning_matches',
+            'num_filtered_matches',
+            'num_correspondences'
+        ) }
+        Inliers = PickFirst $Row @(
+            'num_inlier_structure_matches',
+            'num_inlier_learning_matches',
+            'num_inlier_correspondences',
+            'num_inliers',
+            $InitializerInliersColumn
+        )
+        InlierRatio = PickFirst $Row @(
+            'structure_inlier_ratio',
+            'learning_inlier_ratio',
+            'direct_confidence',
+            'inlier_ratio',
+            $DirectConfidenceColumn,
+            $InitializerInlierRatioColumn
+        )
         ReprojError = PickFirst $Row @('mean_structure_reproj_error', 'mean_reproj_error')
-        IoU = PickProperty $Row 'warp_overlap_iou'
-        TotalMs = PickProperty $Row 't_total_ms'
+        IoU = PickFirst $Row @('warp_overlap_iou', $EdgeAlignmentColumn)
+        TotalMs = PickFirst $Row @('t_total_ms', $TotalMsColumn)
     }
 }
 
@@ -240,7 +301,7 @@ function New-ReportRecordFromJson {
     $countFirst = PickFirst $counts @('num_keypoints_first', 'num_structures_first')
     $countSecond = PickFirst $counts @('num_keypoints_second', 'num_structures_second')
     $primaryCount = if ($schema -eq 'direct') {
-        PickFirst $counts @('num_correspondences', 'num_raw_matches')
+        PickFirst $counts @('direct_confidence', 'num_correspondences', 'num_raw_matches')
     } else {
         '{0} / {1}' -f (FormatNumber $countFirst 0), (FormatNumber $countSecond 0)
     }
@@ -255,12 +316,12 @@ function New-ReportRecordFromJson {
         Schema = $schema
         PrimaryLabelHtml = SchemaPrimaryLabelHtml $schema
         PrimaryCount = $primaryCount
-        RawMatches = PickFirst $counts @('num_raw_matches', 'num_correspondences')
-        FilteredMatches = PickFirst $counts @('num_filtered_matches', 'num_correspondences')
-        Inliers = PickFirst $counts @('num_inliers')
-        InlierRatio = PickFirst $quality @('inlier_ratio', 'direct_confidence')
+        RawMatches = if ($schema -eq 'direct') { $null } else { PickFirst $counts @('num_raw_matches', 'num_correspondences') }
+        FilteredMatches = if ($schema -eq 'direct') { $null } else { PickFirst $counts @('num_filtered_matches', 'num_correspondences') }
+        Inliers = PickFirst $counts @('num_inliers', 'feature_initializer_inliers')
+        InlierRatio = PickFirst $quality @('inlier_ratio', 'direct_confidence', 'feature_initializer_inlier_ratio')
         ReprojError = PickProperty $quality 'mean_reproj_error'
-        IoU = PickProperty $quality 'warp_overlap_iou'
+        IoU = PickFirst $quality @('warp_overlap_iou', 'warp_edge_alignment_iou')
         TotalMs = PickProperty $timings 'total'
     }
 }

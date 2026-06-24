@@ -120,7 +120,7 @@ association:
       match_mode: MATCH
       knn_k: 2
       match_radius: 50.0
-      min_matches: 2
+      min_matches: 1
       geometric_filter: true
       geometric_model: RIGID
       area_ratio_min: 0.30

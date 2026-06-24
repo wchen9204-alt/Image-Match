@@ -185,6 +185,17 @@ struct PipelineConfig {
     /// 最终配准结果的 warp 质量验证配置。
     WarpQualityValidationConfig warp_quality;
 
+    /// 是否启用方法特征质量验证，例如点特征数量、结构数量和结构候选匹配数量。
+    bool validate_method_quality = false;
+    /// 方法特征质量不满足阈值时，是否直接判定样例失败。
+    bool fail_on_method_quality = true;
+    /// 点特征法/学习法要求两幅图至少检测到的特征点数量；小于等于 0 表示禁用。
+    int min_method_keypoints = 0;
+    /// 结构法要求两幅图至少提取到的结构元素数量；小于等于 0 表示禁用。
+    int min_method_structures = 0;
+    /// 结构法要求至少产生的候选结构匹配数量；小于等于 0 表示禁用。
+    int min_method_structure_matches = 0;
+
     /// 是否启用匹配质量验证。
     bool validate_match_quality = false;
     /// 匹配质量不满足阈值时，是否直接判定样例失败；否则仅输出告警。

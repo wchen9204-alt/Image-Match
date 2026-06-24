@@ -1,5 +1,6 @@
 ﻿#include "pipeline/base_pipeline.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <string>
 
@@ -78,6 +79,20 @@ bool preferInitializerResult(const warp_quality::WarpQualityResult& directQualit
     }
 
     return false;
+}
+
+/// 将 evaluator 中和通用结果字段同义的指标同步回 RegistrationResult。
+void syncEvaluationMetricsToResult(RegistrationContext& ctx) {
+    for (const auto& metric : ctx.evaluation.metrics) {
+        if (!metric.valid) {
+            continue;
+        }
+        if (metric.name == "REPROJECTION_ERROR") {
+            ctx.result.mean_reproj_error = metric.value;
+        } else if (metric.name == "INLIER_RATIO") {
+            ctx.result.inlier_ratio = metric.value;
+        }
+    }
 }
 
 /// 在 DIRECT_ONLY 模式下，只认 direct 最终结果；
@@ -269,7 +284,12 @@ bool BasePipeline::validateRegistrationQuality(RegistrationContext& ctx) {
 }
 
 bool BasePipeline::validateMethodSpecificQuality(RegistrationContext& ctx) {
-    // 点特征法、学习法，以及确实输出离散点对的直接法，共用 match quality。
+    // 方法特征判定：检查当前方法族自身产物是否足够进入后续配准。
+    if (!validateMethodFeatureQuality(ctx)) {
+        return false;
+    }
+
+    // 匹配/几何质量判定：检查内点、内点率、重投影误差等匹配质量信号。
     if (!validateMatchQuality(ctx)) {
         return false;
     }
@@ -287,6 +307,69 @@ bool BasePipeline::validateMethodSpecificQuality(RegistrationContext& ctx) {
     return true;
 }
 
+bool BasePipeline::validateMethodFeatureQuality(RegistrationContext& ctx) {
+    if (!_config.validate_method_quality) {
+        return true;
+    }
+
+    auto handleViolation = [&](const std::string& message) {
+        if (_config.fail_on_method_quality) {
+            ctx.result.message = "method quality validation failed: " + message;
+            IR_LOG_WARN(ctx.result.message);
+            return false;
+        }
+        IR_LOG_WARN("Method quality warning: ", message);
+        return true;
+    };
+
+    const MethodFamily family = _config.methodFamily();
+    if (family == MethodFamily::KEYPOINT || family == MethodFamily::LEARNING) {
+        const int minKeypoints =
+            std::min(ctx.result.num_keypoints_first, ctx.result.num_keypoints_second);
+        IR_LOG_INFO("Method quality [keypoints]: first=",
+                    ctx.result.num_keypoints_first,
+                    ", second=",
+                    ctx.result.num_keypoints_second,
+                    ", min_required=",
+                    _config.min_method_keypoints);
+        if (_config.min_method_keypoints > 0 &&
+            minKeypoints < _config.min_method_keypoints) {
+            return handleViolation("keypoints " + std::to_string(minKeypoints) + " < " +
+                                   std::to_string(_config.min_method_keypoints));
+        }
+        return true;
+    }
+
+    if (family == MethodFamily::STRUCTURE) {
+        const int minStructures =
+            std::min(ctx.result.num_structures_first, ctx.result.num_structures_second);
+        const int structureMatches = ctx.result.num_filtered_matches;
+        IR_LOG_INFO("Method quality [structures]: first=",
+                    ctx.result.num_structures_first,
+                    ", second=",
+                    ctx.result.num_structures_second,
+                    ", matches=",
+                    structureMatches,
+                    ", min_structures=",
+                    _config.min_method_structures,
+                    ", min_matches=",
+                    _config.min_method_structure_matches);
+        if (_config.min_method_structures > 0 &&
+            minStructures < _config.min_method_structures) {
+            return handleViolation("structures " + std::to_string(minStructures) + " < " +
+                                   std::to_string(_config.min_method_structures));
+        }
+        if (_config.min_method_structure_matches > 0 &&
+            structureMatches < _config.min_method_structure_matches) {
+            return handleViolation("structure matches " + std::to_string(structureMatches) +
+                                   " < " +
+                                   std::to_string(_config.min_method_structure_matches));
+        }
+    }
+
+    return true;
+}
+
 bool BasePipeline::validateSharedFinalQuality(RegistrationContext& ctx) {
     // 当前共享最终判定统一落在 warp 质量上，覆盖几何重叠、光度一致性和边缘对齐。
     return validateWarpQuality(ctx);
@@ -298,7 +381,7 @@ bool BasePipeline::validateMatchQuality(RegistrationContext& ctx) {
         return true;
     }
 
-    // 非点特征/学习/直接法不进入该逻辑，避免结构法误配了配置后跑进无关分支。
+    // 只有拥有显式匹配/对应点质量判定的方法族进入该逻辑。
     if (_config.methodFamily() != MethodFamily::KEYPOINT &&
         _config.methodFamily() != MethodFamily::LEARNING &&
         _config.methodFamily() != MethodFamily::DIRECT) {
@@ -590,6 +673,7 @@ bool BasePipeline::validateWarpQuality(RegistrationContext& ctx) {
                                                       matrix,
                                                       ctx.warped_image,
                                                       quality);
+    syncWarpQualityToResult(ctx.result, quality);
     const bool finalOk = resolveDirectFinalValidationReference(_config, ctx, ok, quality);
     if (!finalOk) {
         IR_LOG_WARN(ctx.result.message);
@@ -775,6 +859,7 @@ bool BasePipeline::run(RegistrationContext& ctx) {
     if (!_evaluator.metrics().empty()) {
         Sample dummySample;
         _evaluator.evaluate(ctx, dummySample);
+        syncEvaluationMetricsToResult(ctx);
     }
     if (!validateRegistrationQuality(ctx)) {
         return fail(ctx.result.message.empty() ? "registration validation failed"

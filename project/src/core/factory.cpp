@@ -21,7 +21,6 @@
 #include "matcher/structure/line_segment_associator.h"
 
 #include "structure/contour_extractor.h"
-#include "structure/edge_extractor.h"
 #include "structure/line_extractor.h"
 
 #include "filter/cross_check.h"
@@ -90,8 +89,6 @@ std::shared_ptr<IStructureExtractor> Factory::createStructureExtractor(const YAM
     const StructureType st = structureTypeFromString(t);
 
     switch (st) {
-    case StructureType::EDGE:
-        return std::make_shared<EdgeExtractor>(cfg);
     case StructureType::LINE:
         return std::make_shared<LineExtractor>(cfg);
     case StructureType::CONTOUR:

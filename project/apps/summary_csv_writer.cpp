@@ -12,6 +12,10 @@ std::vector<std::string> collectMetricColumns(const std::vector<EvaluationData>&
     std::vector<std::string> columns;
     for (const auto& evaluation : evaluations) {
         for (const auto& metric : evaluation.metrics) {
+            // 只有当前批次里至少出现过一次有效值的指标，才在 summary.csv 中保留整列。
+            if (!metric.valid) {
+                continue;
+            }
             if (std::find(columns.begin(), columns.end(), metric.name) == columns.end()) {
                 columns.push_back(metric.name);
             }
@@ -20,13 +24,18 @@ std::vector<std::string> collectMetricColumns(const std::vector<EvaluationData>&
     return columns;
 }
 
-std::string metricCsvColumnName(const std::string& metric_name) {
+std::string metricCsvColumnName(const std::string& metric_name, MethodFamily family) {
+    if (family == MethodFamily::DIRECT) {
+        return "指标_" + metric_name;
+    }
     return "metric_" + metric_name;
 }
 
-void appendMetricHeader(std::ostringstream& oss, const std::vector<std::string>& metric_columns) {
+void appendMetricHeader(std::ostringstream& oss,
+                        MethodFamily family,
+                        const std::vector<std::string>& metric_columns) {
     for (const auto& metric_name : metric_columns) {
-        oss << "," << metricCsvColumnName(metric_name);
+        oss << "," << metricCsvColumnName(metric_name, family);
     }
     oss << "\n";
 }
@@ -57,7 +66,7 @@ void appendKeypointCsvHeader(std::ostringstream& oss) {
     oss << "sample_name,success,message,"
         << "num_keypoints_first,num_keypoints_second,"
         << "num_raw_matches,num_filtered_matches,num_inliers,"
-        << "inlier_ratio,mean_reproj_error,inlier_spatial_coverage,warp_overlap_containment,"
+        << "inlier_ratio,mean_reproj_error,warp_overlap_containment,"
         << "warp_source_coverage,warp_target_coverage,warp_bidirectional_coverage,"
         << "warp_edge_alignment_iou,warp_photometric_error,"
         << "t_load_ms,t_extract_ms,t_match_ms,t_filter_ms,t_geometry_ms,t_warp_ms,t_total_ms";
@@ -70,7 +79,6 @@ void appendKeypointCsvRow(std::ostringstream& oss,
     oss << r.num_keypoints_first << "," << r.num_keypoints_second << ","
         << r.num_raw_matches << "," << r.num_filtered_matches << "," << r.num_inliers << ","
         << r.inlier_ratio << "," << r.mean_reproj_error << ","
-        << r.inlier_spatial_coverage << ","
         << r.warp_overlap_containment << "," << r.warp_source_coverage << ","
         << r.warp_target_coverage << "," << r.warp_bidirectional_coverage << ","
         << r.warp_edge_alignment_iou << "," << r.warp_photometric_error << ","
@@ -84,7 +92,7 @@ void appendStructureCsvHeader(std::ostringstream& oss) {
         << "num_structures_first,num_structures_second,"
         << "num_candidate_structure_matches,num_filtered_structure_matches,"
         << "num_inlier_structure_matches,structure_inlier_ratio,"
-        << "mean_structure_reproj_error,inlier_spatial_coverage,warp_overlap_containment,"
+        << "mean_structure_reproj_error,warp_overlap_containment,"
         << "warp_source_coverage,warp_target_coverage,warp_bidirectional_coverage,"
         << "warp_edge_alignment_iou,warp_photometric_error,"
         << "structure_overlap_iou,"
@@ -98,7 +106,6 @@ void appendStructureCsvRow(std::ostringstream& oss,
     oss << r.num_structures_first << "," << r.num_structures_second << ","
         << r.num_raw_matches << "," << r.num_filtered_matches << "," << r.num_inliers << ","
         << r.inlier_ratio << "," << r.mean_reproj_error << ","
-        << r.inlier_spatial_coverage << ","
         << r.warp_overlap_containment << "," << r.warp_source_coverage << ","
         << r.warp_target_coverage << "," << r.warp_bidirectional_coverage << ","
         << r.warp_edge_alignment_iou << "," << r.warp_photometric_error << ","
@@ -109,47 +116,40 @@ void appendStructureCsvRow(std::ostringstream& oss,
 }
 
 void appendDirectCsvHeader(std::ostringstream& oss) {
-    oss << "sample_name,success,message,"
-        << "num_correspondences,direct_confidence,final_validation_source,"
-        << "feature_initializer_attempted,feature_initializer_used,"
-        << "feature_initializer_method,feature_initializer_inliers,"
-        << "feature_initializer_inlier_ratio,feature_initializer_spatial_coverage,"
-        << "feature_initializer_warp_photometric_error,"
-        << "feature_initializer_warp_edge_alignment_iou,"
-        << "mean_reproj_error,inlier_spatial_coverage,warp_overlap_containment,"
-        << "warp_source_coverage,warp_target_coverage,warp_bidirectional_coverage,"
-        << "warp_edge_alignment_iou,warp_photometric_error,"
-        << "t_load_ms,t_align_ms,t_geometry_ms,t_warp_ms,t_total_ms";
+    // 直接法 summary.csv 只保留真正有判读价值的列：
+    oss << "样本名,是否成功,结果说明,"
+        << "直接法置信度,最终采用来源,"
+        << "初始值内点数,"
+        << "初始值内点率,初始值空间覆盖率,"
+        << "初始值光度误差,"
+        << "重叠包含率,"
+        << "源图覆盖率,目标图覆盖率,双向覆盖率,"
+        << "边缘对齐IoU,光度误差,"
+        << "加载耗时_ms,几何阶段耗时_ms,变换耗时_ms,总耗时_ms";
 }
 
 void appendDirectCsvRow(std::ostringstream& oss,
                         const std::string& sample_name,
                         const RegistrationResult& r) {
     appendCommonCsvPrefix(oss, sample_name, r);
-    oss << r.num_raw_matches << "," << r.direct_confidence << ","
-        << file_utils::csvEscape(r.final_validation_source) << ","
-        << (r.feature_initializer_attempted ? "1" : "0") << ","
-        << (r.feature_initializer_used ? "1" : "0") << ","
-        << file_utils::csvEscape(r.feature_initializer_method) << ","
+    oss << r.direct_confidence << "," << file_utils::csvEscape(r.final_validation_source) << ","
         << r.feature_initializer_inliers << ","
         << r.feature_initializer_inlier_ratio << ","
         << r.feature_initializer_spatial_coverage << ","
         << r.feature_initializer_warp_photometric_error << ","
-        << r.feature_initializer_warp_edge_alignment_iou << ","
-        << r.mean_reproj_error << "," << r.inlier_spatial_coverage << ","
         << r.warp_overlap_containment << ","
         << r.warp_source_coverage << "," << r.warp_target_coverage << ","
         << r.warp_bidirectional_coverage << ","
         << r.warp_edge_alignment_iou << "," << r.warp_photometric_error << ","
-        << r.t_load_ms << "," << r.t_match_ms << "," << r.t_geometry_ms << ","
-        << r.t_warp_ms << "," << r.t_total_ms;
+        << r.t_load_ms << "," << r.t_geometry_ms << "," << r.t_warp_ms << ","
+        << r.t_total_ms;
 }
 
 void appendLearningCsvHeader(std::ostringstream& oss) {
     oss << "sample_name,success,message,"
         << "num_learning_points_first,num_learning_points_second,"
         << "num_raw_learning_matches,num_filtered_learning_matches,num_inlier_learning_matches,"
-        << "learning_inlier_ratio,mean_reproj_error,inlier_spatial_coverage,warp_overlap_containment,"
+        << "learning_inlier_ratio,mean_reproj_error,warp_overlap_containment,"
         << "warp_source_coverage,warp_target_coverage,warp_bidirectional_coverage,"
         << "warp_edge_alignment_iou,warp_photometric_error,"
         << "t_load_ms,t_extract_ms,t_match_ms,t_filter_ms,t_geometry_ms,t_warp_ms,t_total_ms";
@@ -162,7 +162,6 @@ void appendLearningCsvRow(std::ostringstream& oss,
     oss << r.num_keypoints_first << "," << r.num_keypoints_second << ","
         << r.num_raw_matches << "," << r.num_filtered_matches << "," << r.num_inliers << ","
         << r.inlier_ratio << "," << r.mean_reproj_error << ","
-        << r.inlier_spatial_coverage << ","
         << r.warp_overlap_containment << "," << r.warp_source_coverage << ","
         << r.warp_target_coverage << "," << r.warp_bidirectional_coverage << ","
         << r.warp_edge_alignment_iou << "," << r.warp_photometric_error << ","
@@ -189,7 +188,7 @@ void appendSummaryCsvHeader(std::ostringstream& oss,
         appendKeypointCsvHeader(oss);
         break;
     }
-    appendMetricHeader(oss, metric_columns);
+    appendMetricHeader(oss, family, metric_columns);
 }
 
 void appendSummaryCsvRow(std::ostringstream& oss,
@@ -235,4 +234,3 @@ void write(const std::filesystem::path& csv_path,
 }
 
 } // namespace ir::summary_csv
-

@@ -9,7 +9,7 @@ name: global_direct_pipeline
 method_family: direct
 
 # 直接法算法配置路径；GLOBAL 族可切换 ecc.yaml / esm_rigid.yaml
-direct: ../../direct/ecc.yaml
+direct: ../../direct/esm_rigid.yaml
 
 # 评估指标配置路径；为空时不加载额外 evaluator
 evaluator: ../../evaluator/metrics.yaml
@@ -39,7 +39,7 @@ feature_initializer:
   # 单个点特征候选；不配置时表示不使用点特征初始估计。
   candidate:
     # 可选值示例：SIFT / SURF / ORB / BRISK / KAZE / AKAZE。
-    name: SIFT
+    name: KAZE
     keypoint: ../../keypoint/sift.yaml
   # 初始化阶段复用点特征 pipeline 的 matcher/filter/geometry 链路。
   matcher: ../../matcher/bf.yaml

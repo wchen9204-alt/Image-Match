@@ -51,6 +51,9 @@ protected:
     /// 7.1 执行方法特有的质量验证，只进入当前方法族真正需要的验证分支。
     virtual bool validateMethodSpecificQuality(RegistrationContext& ctx);
 
+    /// 验证方法自身产物是否充足，例如点特征数量、结构数量和结构候选匹配数量。
+    virtual bool validateMethodFeatureQuality(RegistrationContext& ctx);
+
     /// 7.2 执行各方法族共享的最终图像级验证，例如 overlap / photometric / edge。
     virtual bool validateSharedFinalQuality(RegistrationContext& ctx);
 

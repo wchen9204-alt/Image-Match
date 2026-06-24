@@ -1,120 +1,95 @@
+﻿# ---------------------------------------------------------------------------
+# 直线结构提取与关联配置
 # ---------------------------------------------------------------------------
-# 直线结构提取与关联配�?
-# ---------------------------------------------------------------------------
-# 结构类型，可选：EDGE / LINE / CONTOUR�?
+# 结构类型，可选：LINE / CONTOUR。
 type: LINE
 
 extractor:
-  # 直线检测方法�?
-  # 默认值：HOUGH_LINES_P�?
-  # 当前支持�?
-  #   HOUGH_LINES_P  概率霍夫线段检测，输出有限线段，适合作为 baseline�?
-  #   HOUGH_LINES    标准霍夫直线检测，会把无限直线裁剪到图像边界�?
-  #   LSD            OpenCV Line Segment Detector，直接输出线段�?
-  #   FLD            Fast Line Detector，需�?OpenCV ximgproc�?
+  # 直线检测方法。
+  # 当前支持：HOUGH_LINES_P / HOUGH_LINES / LSD / FLD。
   method: HOUGH_LINES
 
   params:
-    # 默认值：50.0。Canny 低阈值，HOUGH_LINES / HOUGH_LINES_P 会先�?Canny 提取边缘�?
+    # HOUGH_LINES / HOUGH_LINES_P 会先用 Canny 提取边缘。
     cannyThreshold1: 50.0
-    # 默认值：150.0。Canny 高阈值�?
     cannyThreshold2: 150.0
-    # 默认值：3。Canny Sobel 核大小，仅允�?3 / 5 / 7�?
+    # Canny 内部 Sobel 算子的孔径大小，可选：3 / 5 / 7。
     apertureSize: 3
 
-    # 默认值：1.0。霍夫累加器中的距离分辨率，单位像素�?
+    # Hough 累加器的距离分辨率，单位为像素。
     rho: 1.0
-    # 默认值：1.0。霍夫累加器中的角度分辨率，单位为度�?
+    # Hough 累加器的角度分辨率，单位为度。
     thetaDegrees: 1.0
-    # 默认值：50。霍夫投票阈值；数值越大，检测出的线越少�?
+    # Hough 投票阈值；数值越大，检测出的线越少。
     threshold: 50
 
-    # 默认值：300。最多保留的线段数量；会优先保留较长线段�?
+    # 最多保留的线段数量；会优先保留较长线段。
     maxLines: 300
-    # 默认值：30.0。最短线段长度，HOUGH_LINES / HOUGH_LINES_P / LSD 均会使用�?
+    # 最短线段长度，HOUGH_LINES / HOUGH_LINES_P / LSD 均会使用。
     minLineLength: 30.0
-    # 默认值：10.0。HOUGH_LINES_P 中允许连接为同一线段的最大间隔�?
+    # HOUGH_LINES_P 中允许连接为同一线段的最大间隔。
     maxLineGap: 10.0
-    # 默认值：2。将线段绘制回结构响应图时的线宽�?
+    # 绘制线段响应图时的线宽。
     lineThickness: 1
     deduplicateLines: false
     duplicateAngleDeg: 3.0
     duplicateDistance: 8.0
 
-    # LSD 参数；仅�?extractor.method: LSD 时使用�?
-    # 专用 LSD 路径：使�?line_descriptor::LSDDetector，和 KeyLine / LBD 保持一致�?
-    # 只有 detectorScale / detectorNumOctaves 会作用于这条主路径�?
-    # 下方经典 LSD 参数仅在回退�?cv::createLineSegmentDetector 时生效�?
+    # LSD 参数，仅 extractor.method: LSD 使用。
     lsd:
-      # 默认值：1。OpenCV LSD 细化模式�?(None) / 1(Standard) / 2(Advanced)�?
+      # OpenCV LSD 细化模式：0(None) / 1(Standard) / 2(Advanced)。
       refine: 1
-      # 默认值：0.8。图像尺度缩放�?
       scale: 0.8
-      # 默认值：0.6。高斯平�?sigma 缩放因子�?
       sigmaScale: 0.6
-      # 默认值：2.0。梯度量化误差�?
       quant: 2.0
-      # 默认值：22.5。角度容差，单位为度�?
       angTh: 22.5
-      # 默认值：0.0。高级细化模式下的检测阈值�?
       logEps: 0.0
-      # 默认值：0.7。线段区域密度阈值�?
       densityTh: 0.7
-      # 默认值：1024。方向直方图 bin 数�?
       nBins: 1024
-      # 专用 line_descriptor LSD 参数�?
+      # 专用 line_descriptor LSD 参数。
       detectorScale: 2
       detectorNumOctaves: 2
 
-    # FLD 参数；仅�?extractor.method: FLD 时使用�?
+    # FLD 参数，仅 extractor.method: FLD 使用。
     fld:
-      # 默认值：10。最短候选线段长度，OpenCV FLD 构造参数�?
       lengthThreshold: 10
-      # 默认值：1.414213562。点到线的最大距离阈值，OpenCV FLD 构造参数�?
       distanceThreshold: 1.414213562
-      # 默认值：50.0。FLD 内部 Canny 低阈值�?
       cannyThreshold1: 50.0
-      # 默认值：50.0。FLD 内部 Canny 高阈值�?
       cannyThreshold2: 50.0
-      # 默认值：3。FLD 内部 Canny aperture size，仅允许 3 / 5 / 7�?
       cannyApertureSize: 3
-      # 默认值：false。是否合并相邻线段�?
       doMerge: false
 
 association:
-  # 默认值：LINE_SEGMENT�?
-  # 可选：
-  #   LINE_SEGMENT     基于角度/长度/中心位移的几�?baseline 匹配�?
-  #   LINE_DESCRIPTOR  基于线描述子的匹配入口，当前优先支持 LBD�?
-  #   CHAMFER / HAUSDORFF / ICP  结构响应图平移关联�?
+  # 可选：LINE_SEGMENT / LINE_DESCRIPTOR / CHAMFER / HAUSDORFF / ICP。
   method: Line_SEGMENT
   params:
     line_descriptor:
-      # 线描述子类型，可�?LBD / MSLD / LINE_SIFT�?
+      # 线描述子类型，可选：LBD / MSLD / LINE_SIFT。
       descriptor: LBD
-      # 匹配器类型，可�?BF / FLANN（仅 float 描述子支�?FLANN）�?
+      # 匹配器类型，可选：BF / FLANN。FLANN 仅支持 float 描述子。
       matcher: BF
-      # 匹配模式，可�?MATCH / KNN / RADIUS（与点特征法一致）�?
+      # 匹配模式，可选：MATCH / KNN / RADIUS。
       match_mode: MATCH
-      # KNN �?K（仅 match_mode: KNN 时使用）�?
+      # KNN 模式保留的近邻数。
       knn_k: 2
-      # 半径匹配阈值（�?match_mode: RADIUS 时使用）�?
+      # RADIUS 模式的距离阈值。
       match_radius: 50.0
-      # 进入后续阶段前要求的最少匹配数�?
+      # 进入后续阶段所需的最少匹配数。
       min_matches: 2
-      # 几何一致性筛选（线匹配特有，在线段空间做方向/长度/位移投票）�?
+      # 线匹配几何一致性筛选。
       geometric_filter: true
       angle_threshold_deg: 30.0
       min_length_ratio: 0.30
       shift_consistency_threshold: 30.0
-      # MSLD 参数（仅 descriptor: MSLD 时使用）�?
+      # MSLD 参数，仅 descriptor: MSLD 使用。
       msld_band_width: 12
       msld_strips: 9
-      # line-SIFT 参数（仅 descriptor: LINE_SIFT 时使用）�?
+      # line-SIFT 参数，仅 descriptor: LINE_SIFT 使用。
       linesift_band_width: 20
       linesift_strips: 4
       linesift_bands: 4
       linesift_bins: 8
+
     line_segment:
       angleThresholdDeg: 10.0
       minLengthRatio: 0.60
@@ -122,46 +97,31 @@ association:
       shiftConsistencyThreshold: 20.0
       minMatches: 2
       maxCandidatesPerLine: 5
+
     chamfer:
-      # 默认值：20。平移搜索半径�?
       searchRadius: 20
-      # 默认值：1。平移搜索步长�?
       step: 1
-      # 默认值：2000。最多采样的结构点数量�?
       maxPoints: 2000
-      # 默认值：0.25。平均距离阈值，低于该值时认为关联有效�?
       scoreThreshold: 0.25
-      # 默认值：true。是否同时计算正向和反向平均距离�?
       bidirectional: true
+
     hausdorff:
-      # 默认值：30。平移搜索半径�?
       searchRadius: 30
-      # 默认值：2。平移搜索步长�?
       step: 2
-      # 默认值：2000。最多采样的结构点数量�?
       maxPoints: 2000
-      # 默认值：0.95。使用有�?Hausdorff 距离的分位数，降低离群点影响�?
       percentile: 0.95
-      # 默认值：3.0。距离阈值，低于该值时认为关联有效�?
       scoreThreshold: 3.0
-      # 默认值：true。是否同时计算正向和反向距离�?
       bidirectional: true
+
     icp:
-      # 默认值：30。ICP 最大迭代次数�?
       maxIterations: 30
-      # 默认值：0.01。平移增量低于该值时提前收敛�?
       tolerance: 0.01
-      # 默认值：2000。最多采样的结构点数量�?
       maxPoints: 2000
-      # 默认值：20。最少对应点数量�?
       minCorrespondences: 20
-      # 默认值：15.0。最大对应点距离，超过该距离的最近邻会被丢弃�?
       maxCorrespondenceDistance: 15.0
-      # 默认值：2.0。平均对应距离阈值，低于该值时认为关联有效�?
       scoreThreshold: 2.0
-      # 默认值：CENTROID。初始平移策略，可�?ZERO / CENTROID�?
       initialization: CENTROID
 
 estimation:
-  # 默认值：0.01。结构匹配结果有效性阈值；当前平移模型直接复用关联结果�?
+  # 结构匹配结果有效性阈值，当前平移模型直接复用关联结果。
   responseThreshold: 0.01

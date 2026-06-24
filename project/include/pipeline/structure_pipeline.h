@@ -14,7 +14,7 @@ namespace ir {
 
 /// 结构特征配准流水线。
 ///
-/// 负责组织边缘、直线、轮廓等结构方法的完整流程，包括结构提取、
+/// 负责组织直线、轮廓等结构方法的完整流程，包括结构提取、
 /// 结构关联、过滤链、几何估计以及结构响应图可视化输出。
 class StructurePipeline : public BasePipeline {
 public:
@@ -30,7 +30,7 @@ protected:
     /// 根据 pipeline 配置创建结构特征提取器、关联器和过滤器链。
     bool configureStages(const PipelineConfig& cfg) override;
 
-    /// 执行边缘、直线或轮廓提取，并回填结构数量统计。
+    /// 执行直线或轮廓提取，并回填结构数量统计。
     bool runExtraction(RegistrationContext& ctx) override;
 
     /// 执行结构关联/匹配 + 过滤链，将结果写入 `structure_match_data`。

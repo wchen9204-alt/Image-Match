@@ -1,80 +1,22 @@
 ﻿#include "structure/contour_extractor.h"
 
-#include <algorithm>
 #include <string>
 
-#include <opencv2/imgproc.hpp>
-
+#include "structure/contour_extractor_helpers.h"
 #include "utils/image_utils.h"
 #include "utils/logger.h"
-#include "utils/string_utils.h"
 #include "utils/yaml_utils.h"
 
 namespace ir {
 
-namespace {
-
-int contourRetrievalModeFromString(const std::string& raw) {
-    const std::string mode = string_utils::toUpperAscii(raw);
-    if (mode == "LIST") return cv::RETR_LIST;
-    if (mode == "CCOMP") return cv::RETR_CCOMP;
-    if (mode == "TREE") return cv::RETR_TREE;
-    return cv::RETR_EXTERNAL;
-}
-
-int contourApproxModeFromString(const std::string& raw) {
-    const std::string mode = string_utils::toUpperAscii(raw);
-    if (mode == "NONE" || mode == "CHAIN_APPROX_NONE") return cv::CHAIN_APPROX_NONE;
-    return cv::CHAIN_APPROX_SIMPLE;
-}
-
-bool extractContoursForImage(const cv::Mat& gray,
-                             cv::Mat& response,
-                             std::vector<std::vector<cv::Point>>& contours,
-                             double cannyThreshold1,
-                             double cannyThreshold2,
-                             int apertureSize,
-                             int retrievalMode,
-                             int approxMode,
-                             double minArea,
-                             double minPerimeter,
-                             int minPoints,
-                             int maxContours,
-                             int contourThickness) {
-    cv::Mat edges;
-    cv::Canny(gray, edges, cannyThreshold1, cannyThreshold2, apertureSize);
-
-    std::vector<std::vector<cv::Point>> rawContours;
-    cv::findContours(edges, rawContours, retrievalMode, approxMode);
-
-    std::sort(rawContours.begin(), rawContours.end(), [](const auto& a, const auto& b) {
-        return cv::contourArea(a) > cv::contourArea(b);
-    });
-
-    contours.clear();
-    contours.reserve(rawContours.size());
-    for (const auto& c : rawContours) {
-        if (static_cast<int>(c.size()) < std::max(3, minPoints)) {
-            continue;
-        }
-        if (cv::contourArea(c) < minArea) continue;
-        if (cv::arcLength(c, true) < minPerimeter) continue;
-        contours.push_back(c);
-        if (maxContours > 0 && static_cast<int>(contours.size()) >= maxContours) {
-            break;
-        }
-    }
-
-    response = cv::Mat::zeros(gray.size(), CV_8U);
-    cv::drawContours(response, contours, -1, cv::Scalar(255), contourThickness);
-    return !contours.empty();
-}
-
-} // namespace
-
 ContourExtractor::ContourExtractor(const YAML::Node& cfg) {
     const YAML::Node extractor = cfg["extractor"];
     const YAML::Node params = extractor && extractor["params"] ? extractor["params"] : cfg["params"];
+
+    // 同时兼容 structure.yaml 的 extractor.params 和旧版直接平铺参数写法。
+    _blurKernel = contour_extractor_helpers::normalizedBlurKernel(
+        yaml_utils::getInt(params, "blur_kernel", 0));
+    _autoCanny = yaml_utils::getBool(params, "auto_canny", false);
     _cannyThreshold1 = yaml_utils::getDouble(params, "cannyThreshold1", 50.0);
     _cannyThreshold2 = yaml_utils::getDouble(params, "cannyThreshold2", 150.0);
     _apertureSize =
@@ -84,15 +26,31 @@ ContourExtractor::ContourExtractor(const YAML::Node& cfg) {
     _minArea = yaml_utils::getDouble(params, "minArea", 20.0);
     _minPerimeter = yaml_utils::getDouble(params, "minPerimeter", 0.0);
     _minPoints = yaml_utils::getInt(params, "minPoints", 3);
+    _minBboxWidth = yaml_utils::getInt(params, "min_bbox_width", 0);
+    _minBboxHeight = yaml_utils::getInt(params, "min_bbox_height", 0);
+    _minExtent = yaml_utils::getDouble(params, "min_extent", 0.0);
+    _maxAspectRatio = yaml_utils::getDouble(params, "max_aspect_ratio", 0.0);
     _maxContours = yaml_utils::getInt(params, "maxContours", 1000);
     _contourThickness = yaml_utils::getInt(params, "contourThickness", 1);
 
-    IR_LOG_INFO("ContourExtractor: minArea=",
+    IR_LOG_INFO("ContourExtractor: blurKernel=",
+                _blurKernel,
+                ", autoCanny=",
+                _autoCanny,
+                ", minArea=",
                 _minArea,
                 ", minPerimeter=",
                 _minPerimeter,
                 ", minPoints=",
                 _minPoints,
+                ", minBboxWidth=",
+                _minBboxWidth,
+                ", minBboxHeight=",
+                _minBboxHeight,
+                ", minExtent=",
+                _minExtent,
+                ", maxAspectRatio=",
+                _maxAspectRatio,
                 ", maxContours=",
                 _maxContours,
                 ", retrievalMode=",
@@ -114,34 +72,50 @@ bool ContourExtractor::extract(RegistrationContext& ctx) {
 
     sd.clear();
     sd.type = StructureType::CONTOUR;
-    const int retrievalMode = contourRetrievalModeFromString(_retrievalMode);
-    const int approxMode = contourApproxModeFromString(_chainApprox);
-    const bool ok1 = extractContoursForImage(images.first_gray,
-                                             sd.first.response,
-                                             sd.first.contours,
-                                             _cannyThreshold1,
-                                             _cannyThreshold2,
-                                             _apertureSize,
-                                             retrievalMode,
-                                             approxMode,
-                                             _minArea,
-                                             _minPerimeter,
-                                             _minPoints,
-                                             _maxContours,
-                                             _contourThickness);
-    const bool ok2 = extractContoursForImage(images.second_gray,
-                                             sd.second.response,
-                                             sd.second.contours,
-                                             _cannyThreshold1,
-                                             _cannyThreshold2,
-                                             _apertureSize,
-                                             retrievalMode,
-                                             approxMode,
-                                             _minArea,
-                                             _minPerimeter,
-                                             _minPoints,
-                                             _maxContours,
-                                             _contourThickness);
+
+    // 两张图共享同一套轮廓提取参数，保证结构统计和匹配前提一致。
+    const int retrievalMode =
+        contour_extractor_helpers::contourRetrievalModeFromString(_retrievalMode);
+    const int approxMode =
+        contour_extractor_helpers::contourApproxModeFromString(_chainApprox);
+    const bool ok1 = contour_extractor_helpers::extractContoursForImage(images.first_gray,
+                                                                        sd.first.response,
+                                                                        sd.first.contours,
+                                                                        _blurKernel,
+                                                                        _autoCanny,
+                                                                        _cannyThreshold1,
+                                                                        _cannyThreshold2,
+                                                                        _apertureSize,
+                                                                        retrievalMode,
+                                                                        approxMode,
+                                                                        _minArea,
+                                                                        _minPerimeter,
+                                                                        _minPoints,
+                                                                        _minBboxWidth,
+                                                                        _minBboxHeight,
+                                                                        _minExtent,
+                                                                        _maxAspectRatio,
+                                                                        _maxContours,
+                                                                        _contourThickness);
+    const bool ok2 = contour_extractor_helpers::extractContoursForImage(images.second_gray,
+                                                                        sd.second.response,
+                                                                        sd.second.contours,
+                                                                        _blurKernel,
+                                                                        _autoCanny,
+                                                                        _cannyThreshold1,
+                                                                        _cannyThreshold2,
+                                                                        _apertureSize,
+                                                                        retrievalMode,
+                                                                        approxMode,
+                                                                        _minArea,
+                                                                        _minPerimeter,
+                                                                        _minPoints,
+                                                                        _minBboxWidth,
+                                                                        _minBboxHeight,
+                                                                        _minExtent,
+                                                                        _maxAspectRatio,
+                                                                        _maxContours,
+                                                                        _contourThickness);
 
     IR_LOG_INFO("ContourExtractor extracted contours: ",
                 sd.first.contours.size(),
