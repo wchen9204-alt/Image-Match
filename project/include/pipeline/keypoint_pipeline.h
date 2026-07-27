@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <memory>
 #include <string>
@@ -46,7 +46,7 @@ protected:
 
 private:
     /// 调用匹配器生成原始匹配结果，并统计原始候选规模。
-    /// 结果写入 KeypointMatchData::raw_matches_by_query，必要时也可直接写 filtered。
+    /// 结果写入 KeypointMatchData::raw_matches，并按需保留邻居列表。
     bool runMatch(RegistrationContext& ctx);
 
     /// 按配置顺序执行匹配过滤器链，并统计过滤后规模。

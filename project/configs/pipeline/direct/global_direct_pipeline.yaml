@@ -40,7 +40,7 @@ feature_initializer:
   candidate:
     # 可选值示例：SIFT / SURF / ORB / BRISK / KAZE / AKAZE。
     name: KAZE
-    keypoint: ../../keypoint/sift.yaml
+    keypoint: ../../keypoint/kaze.yaml
   # 初始化阶段复用点特征 pipeline 的 matcher/filter/geometry 链路。
   matcher: ../../matcher/bf.yaml
   filters:

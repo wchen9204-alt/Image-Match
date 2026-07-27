@@ -1,4 +1,4 @@
-﻿#include "pipeline/keypoint_pipeline.h"
+#include "pipeline/keypoint_pipeline.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -180,7 +180,7 @@ bool KeypointPipeline::runExtraction(RegistrationContext& ctx) {
 }
 
 bool KeypointPipeline::runAssociation(RegistrationContext& ctx) {
-    // 1. 先执行描述子匹配，生成 raw_matches_by_query 或初始 filtered 匹配。
+    // 1. 先执行描述子匹配，生成 neighbour_matches_by_query 或初始 filtered 匹配。
     if (!runMatch(ctx)) {
         return false;
     }
@@ -205,32 +205,16 @@ bool KeypointPipeline::runMatch(RegistrationContext& ctx) {
     // 2. 调用匹配器生成原始匹配结果。
     const bool ok = _matcher->match(ctx);
 
-    // 3. 统计 raw_matches_by_query 中的候选匹配数量，兼容 match / knn / radius 三类输出。
-    int raw_match_count = 0;
-    for (const auto& neighbours : ctx.keypoint_match_data.raw_matches_by_query) {
-        raw_match_count += static_cast<int>(neighbours.size());
-    }
-    ctx.result.num_raw_matches = raw_match_count;
-    return ok;
+    // 3. 原始统计使用每个 query 的最佳候选，三种匹配方法语义一致。
+    ctx.result.num_raw_matches = static_cast<int>(ctx.keypoint_match_data.raw_matches.size());    return ok;
 }
 
 bool KeypointPipeline::runFilters(RegistrationContext& ctx) {
     ScopedTimer st(ctx.result.t_filter_ms);
     auto& md = ctx.keypoint_match_data;
 
-    // 1. 若匹配器只写了 raw_matches_by_query，则先用每行 top-1 初始化 filtered。
-    if (!md.raw_matches_by_query.empty() && md.filtered_matches.empty()) {
-        md.filtered_matches.reserve(md.raw_matches_by_query.size());
-        for (const auto& nb : md.raw_matches_by_query) {
-            if (!nb.empty()) {
-                md.filtered_matches.push_back(nb.front());
-            }
-        }
-        IR_LOG_INFO("Seeded filtered matches from raw_matches_by_query top-1: ",
-                    md.filtered_matches.size(),
-                    " / ",
-                    md.raw_matches_by_query.size());
-    }
+    // 1. 过滤链从匹配器给出的原始一对一候选开始。
+    md.seedFilteredMatchesFromRaw();
 
     // 2. 按 YAML 顺序执行过滤器，每个过滤器都基于当前 filtered 继续筛选。
     bool ok = true;
@@ -244,7 +228,13 @@ bool KeypointPipeline::runFilters(RegistrationContext& ctx) {
         }
     }
 
-    // 3. 记录最终进入几何估计的匹配数量。
+    // 3. 所有过滤器都未保留候选时，回退到 raw，避免空集合直接进入几何阶段。
+    if (md.filtered_matches.empty() && !md.raw_matches.empty()) {
+        const size_t restored_count = md.raw_matches.size();
+        md.restoreFilteredMatchesFromRaw();
+        IR_LOG_WARN("All filters rejected candidates; restored ", restored_count, " raw matches.");
+    }
+    // 4. 记录最终进入几何估计的匹配数量。
     ctx.result.num_filtered_matches = static_cast<int>(md.filtered_matches.size());
     return ok;
 }

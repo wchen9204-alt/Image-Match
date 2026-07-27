@@ -27,27 +27,6 @@ struct ContextSnapshot {
     std::string correspondence_source;
 };
 
-int rawMatchCount(const KeypointMatchData& data) {
-    int count = 0;
-    for (const auto& neighbours : data.raw_matches_by_query) {
-        count += static_cast<int>(neighbours.size());
-    }
-    return count;
-}
-
-void seedFilteredMatchesFromRaw(KeypointMatchData& data) {
-    if (data.raw_matches_by_query.empty() || !data.filtered_matches.empty()) {
-        return;
-    }
-
-    data.filtered_matches.reserve(data.raw_matches_by_query.size());
-    for (const auto& neighbours : data.raw_matches_by_query) {
-        if (!neighbours.empty()) {
-            data.filtered_matches.push_back(neighbours.front());
-        }
-    }
-}
-
 void restoreContext(RegistrationContext& ctx, const ContextSnapshot& snapshot) {
     ctx.keypoint_data = snapshot.keypoint_data;
     ctx.keypoint_match_data = snapshot.keypoint_match_data;
@@ -143,7 +122,7 @@ bool validateCandidate(const PipelineConfig& cfg,
     data.method = candidateName;
     data.num_keypoints_first = static_cast<int>(ctx.keypoint_data.first.keypoints.size());
     data.num_keypoints_second = static_cast<int>(ctx.keypoint_data.second.keypoints.size());
-    data.num_raw_matches = rawMatchCount(ctx.keypoint_match_data);
+    data.num_raw_matches = static_cast<int>(ctx.keypoint_match_data.raw_matches.size());
     data.num_filtered_matches = static_cast<int>(ctx.keypoint_match_data.filtered_matches.size());
 
     if (!validateGeometryGate(cfg, ctx.geometry_data, data, reason)) {
@@ -293,7 +272,7 @@ bool DirectFeatureInitializer::run(RegistrationContext& ctx) {
         stageOk = _matcher->match(ctx);
     }
     if (stageOk) {
-        seedFilteredMatchesFromRaw(ctx.keypoint_match_data);
+        ctx.keypoint_match_data.seedFilteredMatchesFromRaw();
         for (const auto& filter : _filters) {
             if (filter && !filter->apply(ctx)) {
                 IR_LOG_WARN("DirectFeatureInitializer filter '",
@@ -301,6 +280,11 @@ bool DirectFeatureInitializer::run(RegistrationContext& ctx) {
                             "' returned false for candidate ",
                             _candidate.name);
             }
+        }
+        if (ctx.keypoint_match_data.filtered_matches.empty() &&
+            !ctx.keypoint_match_data.raw_matches.empty()) {
+            ctx.keypoint_match_data.restoreFilteredMatchesFromRaw();
+            IR_LOG_WARN("DirectFeatureInitializer restored raw matches for candidate ", _candidate.name);
         }
     }
     if (stageOk && _geometry) {

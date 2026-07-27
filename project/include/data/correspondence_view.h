@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <opencv2/core.hpp>
 #include <opencv2/features2d.hpp>
@@ -44,7 +44,7 @@ struct CorrespondenceView {
     std::vector<cv::KeyPoint> second_keypoints;
 
     /// 匹配器原始输出的候选对应关系，未经过过滤链筛选。
-    /// 点特征法中由 KeypointMatchData::raw_matches_by_query 展平得到。
+    /// 点特征法中对应 KeypointMatchData::raw_matches。
     std::vector<cv::DMatch> raw;
 
     /// 过滤后的候选对应关系。

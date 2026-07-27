@@ -1,4 +1,4 @@
-﻿#include "matcher/keypoint/flann_matcher.h"
+#include "matcher/keypoint/flann_matcher.h"
 
 #include <opencv2/features2d.hpp>
 #include <opencv2/flann/miniflann.hpp>
@@ -126,43 +126,19 @@ bool FlannMatcher::match(RegistrationContext& ctx) {
                 " x ",
                 d2.cols);
 
+    md.match_method = _method;
     switch (_method) {
-    case MatchMethod::MATCH: {
-        // 将 MATCH 结果包装成单元素 KNN 行，便于后续过滤器复用。
-        std::vector<cv::DMatch> matches;
-        matcher.match(d1, d2, matches);
-
-        md.raw_matches_by_query.reserve(matches.size());
-        for (const auto& match : matches) {
-            md.raw_matches_by_query.push_back({match});
-        }
-        md.filtered_matches = matches;
-
-        IR_LOG_INFO("FlannMatcher produced ", md.filtered_matches.size(), " matches (method=MATCH)");
-        return !md.filtered_matches.empty();
-    }
+    case MatchMethod::MATCH:
+        matcher.match(d1, d2, md.raw_matches);
+        return !md.raw_matches.empty();
     case MatchMethod::KNN:
-        // KNN 是 FLANN 常见用法，通常配合 ratio test 使用。
-        matcher.knnMatch(d1, d2, md.raw_matches_by_query, _knnK);
-        IR_LOG_INFO("FlannMatcher produced ",
-                    md.raw_matches_by_query.size(),
-                    " query rows (method=KNN, k=",
-                    _knnK,
-                    ", norm=",
-                    toString(effective),
-                    ")");
-        return !md.raw_matches_by_query.empty();
+        matcher.knnMatch(d1, d2, md.neighbour_matches_by_query, _knnK);
+        md.buildRawMatchesFromNeighbours();
+        return !md.raw_matches.empty();
     case MatchMethod::RADIUS:
-        // 半径匹配保留局部邻域候选，后续阶段再决定如何筛选。
-        matcher.radiusMatch(d1, d2, md.raw_matches_by_query, _radius);
-        IR_LOG_INFO("FlannMatcher produced ",
-                    md.raw_matches_by_query.size(),
-                    " query rows (method=RADIUS, radius=",
-                    _radius,
-                    ", norm=",
-                    toString(effective),
-                    ")");
-        return !md.raw_matches_by_query.empty();
+        matcher.radiusMatch(d1, d2, md.neighbour_matches_by_query, _radius);
+        md.buildRawMatchesFromNeighbours();
+        return !md.raw_matches.empty();
     case MatchMethod::UNKNOWN:
     default:
         IR_LOG_ERROR("FlannMatcher::match - unsupported method: ", toString(_method));

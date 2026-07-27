@@ -1,4 +1,4 @@
-﻿#include "data/correspondence_view.h"
+#include "data/correspondence_view.h"
 
 #include <algorithm>
 #include <cmath>
@@ -11,14 +11,6 @@
 namespace ir {
 
 namespace {
-
-std::vector<cv::DMatch> collectRawMatches(const std::vector<std::vector<cv::DMatch>>& raw_matches_by_query) {
-    std::vector<cv::DMatch> out;
-    for (const auto& neighbours : raw_matches_by_query) {
-        out.insert(out.end(), neighbours.begin(), neighbours.end());
-    }
-    return out;
-}
 
 /// 根据掩码（inlier_mask），从 filtered 中重建内点列表。
 /// 该逻辑仅保留给直接法等仍只写 mask、不单独写 inliers 的来源使用。
@@ -148,7 +140,7 @@ CorrespondenceSource correspondenceSourceFromContext(const RegistrationContext& 
 CorrespondenceView buildKeypointCorrespondenceView(const RegistrationContext& ctx) {
     const auto& kd = ctx.keypoint_data;
     const auto& md = ctx.keypoint_match_data;
-    if ((md.raw_matches_by_query.empty() && md.filtered_matches.empty()) ||
+    if ((md.raw_matches.empty() && md.filtered_matches.empty()) ||
         kd.first.keypoints.empty() ||
         kd.second.keypoints.empty()) {
         return emptyView();
@@ -159,7 +151,7 @@ CorrespondenceView buildKeypointCorrespondenceView(const RegistrationContext& ct
     view.source_name = toString(view.source);
     view.first_keypoints = kd.first.keypoints;
     view.second_keypoints = kd.second.keypoints;
-    view.raw = collectRawMatches(md.raw_matches_by_query);
+    view.raw = md.raw_matches;
     view.filtered = md.filtered_matches;
     view.inlier_mask = md.inlier_mask;
     view.inliers = md.inlier_matches;

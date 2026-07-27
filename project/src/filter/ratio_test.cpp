@@ -1,4 +1,4 @@
-﻿#include "filter/ratio_test.h"
+#include "filter/ratio_test.h"
 
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
@@ -42,22 +42,21 @@ bool RatioTestFilter::apply(RegistrationContext& ctx) {
         return true;
     }
 
-    // 点特征法路径：将原始近邻候选过滤为当前筛选结果。
+    // 点特征法路径：比值检验只适用于 KNN 的多邻居候选。
     auto& md = ctx.keypoint_match_data;
-    if (md.raw_matches_by_query.empty()) {
-        IR_LOG_WARN("RatioTestFilter: no raw_matches_by_query matches to filter.");
+    if (md.match_method != MatchMethod::KNN) {
+        IR_LOG_INFO("RatioTestFilter skipped: matcher method is not KNN.");
+        return true;
+    }
+    if (md.neighbour_matches_by_query.empty()) {
+        IR_LOG_WARN("RatioTestFilter: no KNN neighbour matches to filter.");
         md.filtered_matches.clear();
         return false;
     }
-
     std::vector<cv::DMatch> kept;
-    kept.reserve(md.raw_matches_by_query.size());
-    // 步骤一：逐行对点特征近邻候选执行比值检验。
-    for (const auto& neighbours : md.raw_matches_by_query) {
+    kept.reserve(md.neighbour_matches_by_query.size());
+    for (const auto& neighbours : md.neighbour_matches_by_query) {
         if (neighbours.size() < 2) {
-            if (!neighbours.empty()) {
-                kept.push_back(neighbours.front());
-            }
             continue;
         }
         const cv::DMatch& m1 = neighbours[0];
@@ -66,15 +65,10 @@ bool RatioTestFilter::apply(RegistrationContext& ctx) {
             kept.push_back(m1);
         }
     }
-
-    // 步骤二：用通过检验的结果覆盖当前筛选结果。
     md.filtered_matches = std::move(kept);
-    IR_LOG_INFO("RatioTestFilter [keypoint] kept ",
-                md.filtered_matches.size(),
-                " / ",
-                md.raw_matches_by_query.size(),
-                " matches");
-    return true;
+    IR_LOG_INFO("RatioTestFilter [keypoint] kept ", md.filtered_matches.size(), " / ",
+                md.neighbour_matches_by_query.size(), " matches");
+    return !md.filtered_matches.empty();
 }
 
 }

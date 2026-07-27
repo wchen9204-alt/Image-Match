@@ -9,7 +9,7 @@ name: dense_direct_pipeline
 method_family: direct
 
 # 直接法算法配置路径；DENSE 族可切换 dis_flow.yaml / farneback.yaml
-direct: ../../direct/farneback.yaml
+direct: ../../direct/dis_flow.yaml
 
 # 评估指标配置路径；为空时不加载额外 evaluator
 evaluator: ../../evaluator/metrics.yaml

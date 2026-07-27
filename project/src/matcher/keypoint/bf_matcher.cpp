@@ -1,4 +1,4 @@
-﻿#include "matcher/keypoint/bf_matcher.h"
+#include "matcher/keypoint/bf_matcher.h"
 
 #include <opencv2/features2d.hpp>
 
@@ -84,41 +84,21 @@ bool BfMatcher::match(RegistrationContext& ctx) {
                 fd.second.descriptors.cols);
 
     cv::Ptr<cv::BFMatcher> matcher = cv::BFMatcher::create(cv_norm, _crossCheck);
+    md.match_method = _method;
 
     switch (_method) {
-    case MatchMethod::MATCH: {
-        // 将 MATCH 结果包装成单元素 KNN 行，便于后续过滤器复用。
-        std::vector<cv::DMatch> matches;
-        matcher->match(fd.first.descriptors, fd.second.descriptors, matches);
-
-        md.raw_matches_by_query.reserve(matches.size());
-        for (const auto& match : matches) {
-            md.raw_matches_by_query.push_back({match});
-        }
-        md.filtered_matches = matches;
-
-        IR_LOG_INFO("BFMatcher produced ",
-                    md.filtered_matches.size(),
-                    " matches (method=MATCH, crossCheck=",
-                    _crossCheck,
-                    ")");
-        return !md.filtered_matches.empty();
-    }
+    case MatchMethod::MATCH:
+        // MATCH 本身就是一对一结果，不伪装成 KNN 的二维邻居列表。
+        matcher->match(fd.first.descriptors, fd.second.descriptors, md.raw_matches);
+        return !md.raw_matches.empty();
     case MatchMethod::KNN:
-        // KNN 保留邻居排序信息，供 ratio test 等过滤器使用。
-        matcher->knnMatch(fd.first.descriptors, fd.second.descriptors, md.raw_matches_by_query, _knnK);
-        IR_LOG_INFO(
-            "BFMatcher produced ", md.raw_matches_by_query.size(), " query rows (method=KNN, k=", _knnK, ")");
-        return !md.raw_matches_by_query.empty();
+        matcher->knnMatch(fd.first.descriptors, fd.second.descriptors, md.neighbour_matches_by_query, _knnK);
+        md.buildRawMatchesFromNeighbours();
+        return !md.raw_matches.empty();
     case MatchMethod::RADIUS:
-        // 半径匹配保留局部邻域候选，后续阶段再决定如何筛选。
-        matcher->radiusMatch(fd.first.descriptors, fd.second.descriptors, md.raw_matches_by_query, _radius);
-        IR_LOG_INFO("BFMatcher produced ",
-                    md.raw_matches_by_query.size(),
-                    " query rows (method=RADIUS, radius=",
-                    _radius,
-                    ")");
-        return !md.raw_matches_by_query.empty();
+        matcher->radiusMatch(fd.first.descriptors, fd.second.descriptors, md.neighbour_matches_by_query, _radius);
+        md.buildRawMatchesFromNeighbours();
+        return !md.raw_matches.empty();
     case MatchMethod::UNKNOWN:
     default:
         IR_LOG_ERROR("BFMatcher::match - unsupported method: ", toString(_method));

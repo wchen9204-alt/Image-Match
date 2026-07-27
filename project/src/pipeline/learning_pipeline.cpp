@@ -1,4 +1,4 @@
-﻿#include "pipeline/learning_pipeline.h"
+#include "pipeline/learning_pipeline.h"
 
 #include <filesystem>
 #include <string>
@@ -72,11 +72,7 @@ bool LearningPipeline::runAssociation(RegistrationContext& ctx) {
     }
 
     // 3. 将学习点对数量同步到通用结果字段，便于 summary/CSV 复用已有列。
-    int rawCount = 0;
-    for (const auto& row : ctx.keypoint_match_data.raw_matches_by_query) {
-        rawCount += static_cast<int>(row.size());
-    }
-    ctx.result.num_keypoints_first = static_cast<int>(ctx.keypoint_data.first.keypoints.size());
+    const int rawCount = static_cast<int>(ctx.keypoint_match_data.raw_matches.size());    ctx.result.num_keypoints_first = static_cast<int>(ctx.keypoint_data.first.keypoints.size());
     ctx.result.num_keypoints_second = static_cast<int>(ctx.keypoint_data.second.keypoints.size());
     ctx.result.num_raw_matches = rawCount;
     ctx.result.num_filtered_matches = static_cast<int>(ctx.keypoint_match_data.filtered_matches.size());
