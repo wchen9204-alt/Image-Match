@@ -51,8 +51,12 @@ private:
     /// 允许的最大尺度；用于过滤 log-polar 估计得到的异常候选。
     double _maxScale = 4.0;
 
+    /// 是否强制将候选尺度固定为 1.0，仅保留旋转和平移估计。
+    bool _forceUnitScale = false;
+
     /// 旋转/尺度相位相关响应阈值；低于该值时拒绝对应候选层。
     double _rotationScaleResponseThreshold = 0.0;
+    /// 旋转/尺度相位相关响应阈值；低于该值时拒绝对应候选层。
 
     /// 平移相位相关响应阈值；低于该值时认为最终相似变换不可靠。
     double _translationResponseThreshold = 0.01;
@@ -62,4 +66,3 @@ private:
 };
 
 } // namespace ir
-

@@ -45,6 +45,9 @@ Build/
 build-*/
 outputs/
 
+# Local datasets (not versioned)
+/project/tools/
+
 # CMake generated files
 CMakeFiles/
 **/CMakeFiles/

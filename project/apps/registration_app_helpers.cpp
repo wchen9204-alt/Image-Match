@@ -543,7 +543,7 @@ void loadDatasetNamingOptions(const YAML::Node& ds, DatasetLoader::Options& opti
 }
 
 void printSummary(const RegistrationContext& ctx, MethodFamily family) {
-    std::cout << buildSummaryText(ctx, family);
+    IR_LOG_INFO(buildSummaryText(ctx, family));
 }
 
 std::string sampleStemFromPaths(const fs::path& image1, const fs::path& image2) {
@@ -606,4 +606,5 @@ void writeRunSummaryFiles(const RegistrationContext& ctx,
 }
 
 } // namespace ir::registration_app_helpers
+
 

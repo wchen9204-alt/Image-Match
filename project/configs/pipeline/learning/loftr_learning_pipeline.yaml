@@ -15,10 +15,10 @@ geometry: ../../geometry/rigid.yaml
 evaluator: ../../evaluator/metrics.yaml
 
 io:
-  # 源图路径；默认：../../../datasets/Test01/source.png；可替换为任意待配准图像。
-  image1: ../../../datasets/Test01/source.png
-  # 目标图路径；默认：../../../datasets/Test01/target.png；可替换为任意待配准图像。
-  image2: ../../../datasets/Test01/target.png
+  # 源图路径；默认：../../../datasets/test01/source.png；可替换为任意待配准图像。
+  image1: ../../../datasets/test01/source.png
+  # 目标图路径；默认：../../../datasets/test01/target.png；可替换为任意待配准图像。
+  image2: ../../../datasets/test01/target.png
   # 输出根目录；默认：../../../outputs；流水线会在其下创建 learning 子目录。
   output_dir: ../../../outputs
 

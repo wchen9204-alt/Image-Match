@@ -284,7 +284,7 @@ inline bool estimateRigidRansacNoScale2D(const std::vector<cv::Point2f>& src,
             reprojectionErrorSum(src, dst, candidateMask, candidateA);
 
         if (logIterations) {
-            IR_LOG_INFO("Rigid custom RANSAC iter=",
+            IR_LOG_TRACE("Rigid custom RANSAC iter=",
                         iter,
                         ", pair=(",
                         i,
@@ -375,7 +375,7 @@ inline bool refineRigidFromMask(const std::vector<cv::Point2f>& src,
             reprojectionErrorSum(src, dst, candidateMask, candidateA);
 
         if (logIterations) {
-            IR_LOG_INFO("Rigid SVD refine iter=",
+            IR_LOG_TRACE("Rigid SVD refine iter=",
                         iter,
                         ", input_inliers=",
                         inlierSrc.size(),
@@ -420,3 +420,4 @@ inline std::string rejectMessage(const std::string& kind, int inliers, int minIn
 }
 
 } // namespace ir::partial_affine_utils
+

@@ -23,7 +23,7 @@ cv::Mat DrawInliers::render(const RegistrationContext& ctx, const Options& opt) 
                                              : buildCorrespondenceView(ctx, source);
     // draw_inliers 直接使用几何阶段已经确认并写回的内点，不在可视化阶段重新推导。
     if (view.inliers.empty()) {
-        IR_LOG_WARN("DrawInliers: no inlier matches available.");
+        IR_LOG_DEBUG("DrawInliers: no inlier matches available.");
         return {};
     }
 

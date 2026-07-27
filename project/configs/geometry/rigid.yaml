@@ -32,7 +32,7 @@ params:
   method: RANSAC
 
   # RANSAC 内点重投影误差阈值，单位像素；OpenCV 默认 3.0。
-  ransacReprojThreshold: 3.0
+  ransacReprojThreshold: 3
 
   # RANSAC 最大迭代次数；OpenCV 默认 2000。
   maxIters: 2000

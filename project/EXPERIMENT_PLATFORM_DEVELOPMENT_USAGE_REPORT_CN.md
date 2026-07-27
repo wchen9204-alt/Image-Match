@@ -351,7 +351,7 @@ reference.png
 单次实验输出结构：
 
 ```text
-outputs/single/<method_family>/<pipeline>/<sample>/
+outputs/single/<method_family>/<pipeline>/
 ```
 
 批量实验输出结构：

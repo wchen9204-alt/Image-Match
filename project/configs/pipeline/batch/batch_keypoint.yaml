@@ -4,10 +4,10 @@
 # ---------------------------------------------------------------------------
 name: batch_pipeline
 
-pipeline: ../keypoint/orb_pipeline.yaml
+pipeline: ../keypoint/akaze_pipeline.yaml
 
 dataset:
-  root: ../../../datasets
+  root: ../../../datasets/
   # source 图像文件名关键词候选；DatasetLoader 按顺序寻找源图。
   pattern_sources: [source, moving]
   # target 图像文件名关键词候选；DatasetLoader 按顺序寻找目标图。
@@ -15,6 +15,8 @@ dataset:
   include: []
 
 output:
-  root: ../../../outputs
+  root: ../../../outputs/
   save_visuals: true
   summary_csv: true
+  # 两个用例之间等待时间，单位毫秒；0 表示不等待。
+  delay_ms: 0

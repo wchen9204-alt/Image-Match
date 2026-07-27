@@ -1,10 +1,15 @@
-﻿#include "registration_app.h"
+#include "registration_app.h"
 
+#include <algorithm>
 #include <filesystem>
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <thread>
 #include <vector>
+
+#include <opencv2/core/utility.hpp>
 
 #include "core/config.h"
 #include "core/context.h"
@@ -13,6 +18,7 @@
 #include "registration_app_helpers.h"
 #include "summary_csv_writer.h"
 #include "utils/file_utils.h"
+#include "utils/logger.h"
 #include "utils/yaml_utils.h"
 
 namespace fs = std::filesystem;
@@ -20,6 +26,54 @@ namespace fs = std::filesystem;
 namespace ir {
 
 namespace app_helpers = registration_app_helpers;
+
+namespace {
+
+fs::path findGlobalConfig(const fs::path& pipeline_yaml, const fs::path& filename) {
+    fs::path current = pipeline_yaml.parent_path();
+    while (!current.empty()) {
+        if (current.filename() == "configs") {
+            return current / filename;
+        }
+        const fs::path parent = current.parent_path();
+        if (parent == current) {
+            break;
+        }
+        current = parent;
+    }
+    return fs::path{"project/configs"} / filename;
+}
+
+void configureOpenCvThreads(const fs::path& config_path) {
+    if (!fs::exists(config_path)) {
+        IR_LOG_WARN("Performance config not found: ", config_path.string(),
+                    "; using OpenCV default thread count.");
+        return;
+    }
+
+    try {
+        const YAML::Node root = Config::load(config_path);
+        const YAML::Node performance = root["performance"] ? root["performance"] : root;
+        const int requested = yaml_utils::getInt(performance, "opencv_threads", 6);
+        if (requested <= 0) {
+            IR_LOG_WARN("Invalid performance.opencv_threads=", requested,
+                        "; using OpenCV default thread count.");
+            return;
+        }
+
+        const int available = std::max(1, cv::getNumberOfCPUs());
+        const int configured = std::min(requested, available);
+        cv::setNumThreads(configured);
+        IR_LOG_INFO("OpenCV threads configured: requested=", requested,
+                    ", active=", cv::getNumThreads(),
+                    ", logical_processors=", available);
+    } catch (const std::exception& e) {
+        IR_LOG_WARN("Failed to load performance config ", config_path.string(),
+                    "; using OpenCV default thread count: ", e.what());
+    }
+}
+
+} // namespace
 
 void RegistrationApp::printUsage(const std::string& exe) {
     std::cout << "Usage:\n"
@@ -36,11 +90,11 @@ void RegistrationApp::printUsage(const std::string& exe) {
 int RegistrationApp::runSingle(const Args& args) {
     // 1. 先校验 pipeline YAML 路径，避免后续阶段在缺少配置时继续下沉。
     if (args.pipeline_yaml.empty()) {
-        std::cerr << "Pipeline YAML path is empty.\n";
+        IR_LOG_ERROR("Pipeline YAML path is empty.");
         return 2;
     }
     if (!fs::exists(args.pipeline_yaml)) {
-        std::cerr << "Pipeline YAML not found: " << args.pipeline_yaml.string() << "\n";
+        IR_LOG_ERROR("Pipeline YAML not found: ", args.pipeline_yaml.string());
         return 2;
     }
 
@@ -49,7 +103,7 @@ int RegistrationApp::runSingle(const Args& args) {
     try {
         cfg = Config::loadPipeline(args.pipeline_yaml);
     } catch (const std::exception& e) {
-        std::cerr << "Failed to load pipeline YAML: " << e.what() << "\n";
+        IR_LOG_ERROR("Failed to load pipeline YAML: ", e.what());
         return 3;
     }
 
@@ -61,16 +115,16 @@ int RegistrationApp::runSingle(const Args& args) {
 
     // 4. 单次运行必须具备一对输入图像。
     if (cfg.image1_path.empty() || cfg.image2_path.empty()) {
-        std::cerr << "Missing image1 / image2. Provide them either in the YAML "
-                     "(io.image1 / io.image2) or as positional arguments.\n";
+        IR_LOG_ERROR("Missing image1 / image2. Provide them either in the YAML "
+                     "(io.image1 / io.image2) or as positional arguments.");
         return 4;
     }
     if (!fs::exists(cfg.image1_path)) {
-        std::cerr << "image1 not found: " << cfg.image1_path.string() << "\n";
+        IR_LOG_ERROR("image1 not found: ", cfg.image1_path.string());
         return 5;
     }
     if (!fs::exists(cfg.image2_path)) {
-        std::cerr << "image2 not found: " << cfg.image2_path.string() << "\n";
+        IR_LOG_ERROR("image2 not found: ", cfg.image2_path.string());
         return 5;
     }
 
@@ -91,7 +145,7 @@ int RegistrationApp::runSingle(const Args& args) {
     // 6. 根据配置选择 keypoint 流水线或结构流水线。
     Registration pipeline;
     if (!pipeline.configure(cfg)) {
-        std::cerr << "Pipeline configure failed.\n";
+        IR_LOG_ERROR("Pipeline configure failed.");
         return 6;
     }
 
@@ -168,7 +222,7 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
         DatasetLoader loader(datasetOpts);
         const auto samples = loader.load();
         if (samples.empty()) {
-            std::cerr << "Compare: no samples for " << label << "\n";
+            IR_LOG_ERROR("Compare: no samples for ", label);
             return;
         }
 
@@ -235,8 +289,7 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
                             evaluations);
         }
 
-        std::cout << "  " << label << ": " << okCount << " / " << samples.size()
-                  << " succeeded\n";
+        IR_LOG_INFO(label, ": ", okCount, " / ", samples.size(), " succeeded");
     };
 
     bool compareDirect = static_cast<bool>(cfg["base_direct"]);
@@ -271,8 +324,7 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
                 pipelineCfg.direct_path = directYaml;
             }
             if (pipelineCfg.methodFamily() != MethodFamily::DIRECT) {
-                std::cerr << "Compare: skip non-direct pipeline "
-                          << comboPipelineYaml.string() << "\n";
+                IR_LOG_WARN("Compare: skip non-direct pipeline ", comboPipelineYaml.string());
                 continue;
             }
 
@@ -327,8 +379,7 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
 
             PipelineConfig pipelineCfg = Config::loadPipeline(comboPipelineYaml);
             if (pipelineCfg.methodFamily() != MethodFamily::KEYPOINT) {
-                std::cerr << "Compare: skip non-keypoint pipeline "
-                          << comboPipelineYaml.string() << "\n";
+                IR_LOG_WARN("Compare: skip non-keypoint pipeline ", comboPipelineYaml.string());
                 continue;
             }
 
@@ -358,7 +409,7 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
             << file_utils::csvEscape(failedCases[i]) << "\n";
     }
     file_utils::writeWholeFile(csvPath, oss.str());
-    std::cout << "\nWrote comparison table: " << csvPath.string() << "\n";
+    IR_LOG_INFO("Wrote comparison table: ", csvPath.string());
     return 0;
 }
 
@@ -381,6 +432,7 @@ RegistrationApp::BatchConfig RegistrationApp::loadBatchConfig(const std::filesys
         batch_dir, yaml_utils::getString(output, "root", "../../outputs"));
     cfg.save_visuals = yaml_utils::getBool(output, "save_visuals", true);
     cfg.summary_csv = yaml_utils::getBool(output, "summary_csv", true);
+    cfg.delay_ms = std::max(0, yaml_utils::getInt(output, "delay_ms", 0));
     return cfg;
 }
 
@@ -402,7 +454,10 @@ std::filesystem::path RegistrationApp::buildOutputDir(OutputMode mode,
     }
 
     const std::string mode_dir = mode == OutputMode::BATCH ? "batch" : "single";
-    return base_root / mode_dir / methodFamilyDir(cfg.methodFamily()) / cfg.name / sample_name;
+    const auto pipeline_root = base_root / mode_dir / methodFamilyDir(cfg.methodFamily()) / cfg.name;
+    // 单次运行只有一个当前样本，样本名层级只会制造冗余并掩盖本次运行结果；
+    // 批处理仍按样本分目录，避免不同样本互相覆盖。
+    return mode == OutputMode::BATCH ? pipeline_root / sample_name : pipeline_root;
 }
 
 void RegistrationApp::writeSummaryCsv(const std::filesystem::path& csv_path,
@@ -425,7 +480,7 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
     DatasetLoader loader(batch.dataset);
     const std::vector<Sample> samples = loader.load();
     if (samples.empty()) {
-        std::cerr << "No dataset samples found for batch config: " << batch_yaml.string() << "\n";
+        IR_LOG_ERROR("No dataset samples found for batch config: ", batch_yaml.string());
         return 7;
     }
 
@@ -442,7 +497,12 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
     evaluations.reserve(samples.size());
 
     int ok_count = 0;
-    for (const auto& sample : samples) {
+    for (size_t sample_index = 0; sample_index < samples.size(); ++sample_index) {
+        // 在下一个样本开始前等待，确保上一个样本的管线对象已经释放。
+        if (sample_index > 0 && batch.delay_ms > 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(batch.delay_ms));
+        }
+        const auto& sample = samples[sample_index];
         // 3. 每个样本复用同一算法配置，只替换输入图像与输出目录。
         PipelineConfig cfg = base_cfg;
         cfg.image1_path = sample.source_path;
@@ -484,20 +544,19 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
     if (batch.summary_csv) {
         const auto csv_path = pipeline_root / "summary.csv";
         writeSummaryCsv(csv_path, base_cfg.methodFamily(), sample_names, results, evaluations);
-        std::cout << "Wrote summary CSV: " << csv_path.string() << "\n";
+        IR_LOG_INFO("Wrote summary CSV: ", csv_path.string());
     }
 
-    std::cout << "\nBatch summary: " << ok_count << " / " << samples.size()
-              << " samples succeeded.\n";
+    IR_LOG_INFO("Batch summary: ", ok_count, " / ", samples.size(), " samples succeeded.");
     if (!succeeded_names.empty()) {
-        std::cout << "Successful samples: ";
+        std::ostringstream successful;
         for (size_t i = 0; i < succeeded_names.size(); ++i) {
             if (i > 0) {
-                std::cout << ", ";
+                successful << ", ";
             }
-            std::cout << succeeded_names[i];
+            successful << succeeded_names[i];
         }
-        std::cout << "\n";
+        IR_LOG_INFO("Successful samples: ", successful.str());
     }
     return ok_count == static_cast<int>(samples.size()) ? 0 : 1;
 }
@@ -505,15 +564,22 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
 int RegistrationApp::run(const Args& args) {
     // 入口先识别运行模式，再统一分发到单样本、批处理或方法对比分支。
     if (args.pipeline_yaml.empty()) {
-        std::cerr << "Pipeline YAML path is empty.\n";
+        IR_LOG_ERROR("Pipeline YAML path is empty.");
         return 2;
     }
     if (!fs::exists(args.pipeline_yaml)) {
-        std::cerr << "YAML not found: " << args.pipeline_yaml.string() << "\n";
+        IR_LOG_ERROR("YAML not found: ", args.pipeline_yaml.string());
         return 2;
     }
 
     try {
+        std::string logging_error;
+        const fs::path logging_config = findGlobalConfig(args.pipeline_yaml, "logging.yaml");
+        if (!Logger::instance().loadConfig(logging_config, &logging_error)) {
+            IR_LOG_WARN("Failed to load logging config ", logging_config.string(),
+                        "; using built-in defaults: ", logging_error);
+        }
+        configureOpenCvThreads(findGlobalConfig(args.pipeline_yaml, "performance.yaml"));
         const YAML::Node node = Config::load(args.pipeline_yaml);
         switch (detectRunMode(node)) {
         case RunMode::COMPARE:
@@ -525,7 +591,7 @@ int RegistrationApp::run(const Args& args) {
             return runSingle(args);
         }
     } catch (const std::exception& e) {
-        std::cerr << "Failed to read YAML: " << e.what() << "\n";
+        IR_LOG_ERROR("Failed to read YAML: ", e.what());
         return 3;
     }
 }
@@ -550,4 +616,3 @@ int RegistrationApp::run(int argc, char** argv) {
 }
 
 } // namespace ir
-

@@ -59,6 +59,7 @@ private:
         std::filesystem::path output_root;
         bool save_visuals = true;
         bool summary_csv = true;
+        int delay_ms = 0;
     };
 
     /// 执行单个样本的配准流程。
@@ -80,7 +81,7 @@ private:
     static std::filesystem::path resolveBatchOutputRoot(const BatchConfig& batch,
                                                         const PipelineConfig& pipeline_cfg);
 
-    /// 生成统一的输出目录层级：single|batch / keypoint|structure / pipeline / sample。
+    /// 生成输出目录层级：单次为 single / keypoint|structure / pipeline，批处理追加 sample。
     static std::filesystem::path buildOutputDir(OutputMode mode,
                                                 const std::filesystem::path& base_root,
                                                 const PipelineConfig& cfg,

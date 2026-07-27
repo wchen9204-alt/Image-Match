@@ -138,9 +138,9 @@ std::vector<int> selectSpatiallyDiverseIndices(const std::vector<int>& sortedPoo
 }
 
 // 为单个 rigid 候选补算 containment 与双向 coverage 等前景几何评分。
-bool evaluateRigidCandidateMaskScore(const RegistrationContext& ctx,
+bool evaluateRigidCandidateMaskScore(const cv::Mat& sourceMask,
+                                     const cv::Mat& targetMask,
                                      const cv::Mat& candidateA,
-                                     int foregroundThreshold,
                                      RigidCandidateScore& score) {
     // 对单个 rigid 候选补算前景 mask 几何指标，
     // 让候选比较不只看内点数，还能看 warp 后是否更像真实对齐。
@@ -149,16 +149,7 @@ bool evaluateRigidCandidateMaskScore(const RegistrationContext& ctx,
     score.targetCoverage = -1.0;
     score.bidirectionalCoverage = -1.0;
 
-    if (candidateA.empty() || ctx.images.first.empty() || ctx.images.second.empty()) {
-        return false;
-    }
-
-    cv::Mat sourceMask;
-    cv::Mat targetMask;
-    if (!base_pipeline_helpers::buildForegroundMask(
-            ctx.images.first, foregroundThreshold, sourceMask) ||
-        !base_pipeline_helpers::buildForegroundMask(
-            ctx.images.second, foregroundThreshold, targetMask)) {
+    if (candidateA.empty() || sourceMask.empty() || targetMask.empty()) {
         return false;
     }
 
@@ -438,6 +429,16 @@ bool selectBestRigidCandidate(const std::vector<cv::Mat>& candidateTransforms,
     }
 
     // 第 2 步：遍历去重后的候选，统一补齐内点、重投影误差和前景 mask 几何评分。
+    // Source/target masks are invariant across candidate transforms; build them once per case.
+    cv::Mat sourceScoringMask;
+    cv::Mat targetScoringMask;
+    if (enableCandidateMaskScoring && !dedupedTransforms.empty()) {
+        base_pipeline_helpers::buildForegroundMask(
+            ctx.images.first, candidateMaskForegroundThreshold, sourceScoringMask);
+        base_pipeline_helpers::buildForegroundMask(
+            ctx.images.second, candidateMaskForegroundThreshold, targetScoringMask);
+    }
+
     for (size_t i = 0; i < dedupedTransforms.size() && i < dedupedMasks.size(); ++i) {
         const cv::Mat& candidateA = dedupedTransforms[i];
         const std::vector<unsigned char>& candidateMask = dedupedMasks[i];
@@ -459,7 +460,7 @@ bool selectBestRigidCandidate(const std::vector<cv::Mat>& candidateTransforms,
         if (enableCandidateMaskScoring) {
             // 启用前景几何评分时，额外标记 containment / coverage 是否达标。
             evaluateRigidCandidateMaskScore(
-                ctx, candidateA, candidateMaskForegroundThreshold, score);
+                sourceScoringMask, targetScoringMask, candidateA, score);
             if (candidateMinContainment >= 0.0) {
                 score.passedContainment =
                     score.containment >= 0.0 && score.containment >= candidateMinContainment;

@@ -130,7 +130,7 @@ bool IcpAssociator::associate(RegistrationContext& ctx) {
         IR_LOG_WARN("IcpAssociator rejected match: ", md.message);
     }
 
-    IR_LOG_INFO("IcpAssociator estimated translation dx=",
+    IR_LOG_DEBUG("IcpAssociator estimated translation dx=",
                 translation.x,
                 ", dy=",
                 translation.y,
@@ -142,4 +142,5 @@ bool IcpAssociator::associate(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+
 

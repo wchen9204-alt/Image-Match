@@ -1,4 +1,4 @@
-﻿# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # 稀疏直接法通用 pipeline
 # 当前文件承载稀疏直接法共享的 IO、可视化与验证配置；
 # 具体算法通过 direct 指向对应配置。
@@ -15,8 +15,8 @@ direct: ../../direct/klt_sparse.yaml
 evaluator: ../../evaluator/metrics.yaml
 
 io:
-  image1: ../../../datasets/Test01/source.png
-  image2: ../../../datasets/Test01/target.png
+  image1: ../../../datasets/test01/source.png
+  image2: ../../../datasets/test01/target.png
   output_dir: ../../../outputs
 
 visualization:

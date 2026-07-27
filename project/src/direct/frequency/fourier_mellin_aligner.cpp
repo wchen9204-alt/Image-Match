@@ -226,6 +226,7 @@ void expandShiftToCandidates(const cv::Point2d& shift,
                              double response,
                              int level,
                              bool tryHalfTurnAmbiguity,
+                             bool forceUnitScale,
                              double minScale,
                              double maxScale,
                              std::vector<RotScaleCandidate>& candidates) {
@@ -237,6 +238,24 @@ void expandShiftToCandidates(const cv::Point2d& shift,
     const double rawLogScale = shift.x / logScaleFactor;
     const double angleSigns[] = {1.0, -1.0};
     const double scaleSigns[] = {1.0, -1.0};
+
+    if (forceUnitScale) {
+        // 仅保留角度候选，尺度固定为 1.0，符合“场景不缩放”的约束。
+        for (const double angleSign : angleSigns) {
+            const double angle = angleSign * rawAngle;
+            addCandidate(candidates, angle, 1.0, response, level, 1.0, 1.0);
+            if (tryHalfTurnAmbiguity) {
+                addCandidate(candidates,
+                             angle + 180.0,
+                             1.0,
+                             response,
+                             level,
+                             1.0,
+                             1.0);
+            }
+        }
+        return;
+    }
 
     // 对同一个 log-polar 位移同时尝试角度符号和 log-scale 符号两种解释。
     for (const double angleSign : angleSigns) {
@@ -257,7 +276,6 @@ void expandShiftToCandidates(const cv::Point2d& shift,
         }
     }
 }
-
 /// 构建从原图到目标图的相似变换候选，并用平移 phase correlation 评估该候选。
 bool evaluateCandidate(const cv::Mat& src,
                        const cv::Mat& dst,
@@ -343,6 +361,7 @@ DirectFourierMellinAligner::DirectFourierMellinAligner(const YAML::Node& cfg) {
     _dcSuppressRadius = yaml_utils::getInt(params, "dc_suppress_radius", 3);
     _minScale = std::max(1e-3, yaml_utils::getDouble(params, "min_scale", 0.25));
     _maxScale = std::max(_minScale, yaml_utils::getDouble(params, "max_scale", 4.0));
+    _forceUnitScale = yaml_utils::getBool(params, "force_unit_scale", false);
     _rotationScaleResponseThreshold =
         yaml_utils::getDouble(params, "rotation_scale_response_threshold", 0.0);
     _translationResponseThreshold =
@@ -451,6 +470,7 @@ bool DirectFourierMellinAligner::align(RegistrationContext& ctx) {
                                 response,
                                 level,
                                 _tryHalfTurnAmbiguity,
+                                _forceUnitScale,
                                 _minScale,
                                 _maxScale,
                                 candidates);
@@ -553,6 +573,7 @@ bool DirectFourierMellinAligner::align(RegistrationContext& ctx) {
     dd.score = best.translationResponse;
     dd.addDiagnostic("rotation_deg", "rotation deg", best.candidate.angleDeg);
     dd.addDiagnostic("scale", "scale", best.candidate.scale);
+    dd.addDiagnostic("force_unit_scale", "force unit scale", _forceUnitScale ? 1.0 : 0.0);
     dd.addDiagnostic("rotation_scale_response",
                      "rot-scale response",
                      best.candidate.response);
@@ -564,6 +585,7 @@ bool DirectFourierMellinAligner::align(RegistrationContext& ctx) {
                 best.candidate.angleDeg,
                 " deg, scale=",
                 best.candidate.scale,
+                _forceUnitScale ? " (forced)" : "",
                 ", tx=",
                 best.translation.x,
                 ", ty=",
@@ -578,4 +600,3 @@ bool DirectFourierMellinAligner::align(RegistrationContext& ctx) {
 }
 
 } // namespace ir
-

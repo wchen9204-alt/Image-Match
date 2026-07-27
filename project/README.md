@@ -212,7 +212,7 @@ Python 脚本会自动把这些目录加入 `sys.path`。
 单次运行输出位于：
 
 ```text
-project/outputs/single/<method_family>/<pipeline>/<sample>/
+project/outputs/single/<method_family>/<pipeline>/
 ```
 
 批量输出位于：

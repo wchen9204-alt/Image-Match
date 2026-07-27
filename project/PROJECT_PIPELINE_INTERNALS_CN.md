@@ -421,7 +421,7 @@ outputs/batch/<method_family>/<pipeline>/<sample>/
 单次输出路径形式：
 
 ```text
-outputs/single/<method_family>/<pipeline>/<sample>/
+outputs/single/<method_family>/<pipeline>/
 ```
 
 ## 9. RegistrationContext 数据流

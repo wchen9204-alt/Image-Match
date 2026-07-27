@@ -258,7 +258,7 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
     // 这正是为了处理 RANSAC 初始模型陷入局部最优、但 filtered 中仍有可用点的情况。
     if (!refined) {
         gd.message = "failed to refine rigid transform from RANSAC inliers";
-        IR_LOG_WARN("RigidEstimator: baseline refine failed, mode=",
+        IR_LOG_DEBUG("RigidEstimator: baseline refine failed, mode=",
                     _estimatorBackend,
                     "/",
                     _rigidRefineMode,

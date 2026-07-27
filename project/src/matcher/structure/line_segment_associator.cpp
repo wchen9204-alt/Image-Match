@@ -145,7 +145,7 @@ LineSegmentAssociator::LineSegmentAssociator(const YAML::Node& cfg) {
     _minMatches = yaml_utils::getInt(params, "minMatches", 4);
     _maxCandidatesPerLine = yaml_utils::getInt(params, "maxCandidatesPerLine", 5);
 
-    IR_LOG_INFO("LineSegmentAssociator: angleThresholdDeg=",
+    IR_LOG_DEBUG("LineSegmentAssociator: angleThresholdDeg=",
                 _angleThresholdDeg,
                 ", minLengthRatio=",
                 _minLengthRatio,
@@ -255,7 +255,7 @@ bool LineSegmentAssociator::associate(RegistrationContext& ctx) {
                    ? 0.0
                    : static_cast<double>(md.line_matches.size()) /
                          static_cast<double>(candidates.size());
-    IR_LOG_INFO("LineSegmentAssociator produced baseline matches: ",
+    IR_LOG_DEBUG("LineSegmentAssociator produced baseline matches: ",
                 md.line_matches.size(),
                 " / ",
                 candidates.size(),
@@ -267,4 +267,5 @@ bool LineSegmentAssociator::associate(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+
 

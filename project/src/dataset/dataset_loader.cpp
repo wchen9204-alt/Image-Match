@@ -160,9 +160,16 @@ std::vector<Sample> DatasetLoader::load() const {
                 IR_LOG_WARN("DatasetLoader: include entry not a directory: ", d.string());
         }
     } else {
-        dirs = file_utils::listSubdirectories(_opt.root);
+        // Only direct child directories are samples: root/sample.
+        for (const auto& entry : file_utils::listSubdirectories(_opt.root)) {
+            fs::path source;
+            fs::path target;
+            if (resolveImage(entry, sourcePatterns(), source) &&
+                resolveImage(entry, targetPatterns(), target)) {
+                dirs.push_back(entry);
+            }
+        }
     }
-
     // 3. 每个子目录解析为一个样本，缺少任一输入图像时跳过该样本。
     const std::vector<std::string> sourceStems = sourcePatterns();
     const std::vector<std::string> targetStems = targetPatterns();

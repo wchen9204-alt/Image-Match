@@ -11,6 +11,7 @@ namespace ir {
 /// 数据集扫描器和样本加载器。
 ///
 /// 根据目录结构和命名规则自动发现样本，并尝试读取对应的真值矩阵。
+/// 约定数据集采用 root/sample 目录布局。
 class DatasetLoader {
 public:
     /// 加载参数。

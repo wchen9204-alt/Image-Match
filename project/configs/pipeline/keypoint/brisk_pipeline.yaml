@@ -1,4 +1,4 @@
-﻿# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # BRISK 配准流水线配置
 # 当前文件用于组织一条完整的点特征配准流程，可按需调整
 # keypoint / matcher / filters / geometry 等子配置。
@@ -19,11 +19,7 @@ matcher: ../../matcher/bf.yaml
 filters:
   - ../../filter/ratio_test.yaml
   - ../../filter/cross_check.yaml
-#  - ../../filter/keypoint_distance_prefilter.yaml
   - ../../filter/pairwise_rigid_consistency.yaml
-#  - ../../filter/gms.yaml
-# - ../../filter/distance_distribution.yaml
-# - ../../filter/distance_threshold.yaml
 
 # 支持的几何模型：
 # rigid / similarity / affine / homography
@@ -31,8 +27,8 @@ geometry: ../../geometry/rigid.yaml
 evaluator: ../../evaluator/metrics.yaml
 
 io:
-  image1: ../../../datasets/Test01/source.png
-  image2: ../../../datasets/Test01/target.png
+  image1: ../../../datasets/test01/source.png
+  image2: ../../../datasets/test01/target.png
   output_dir: ../../../outputs
 
 visualization:
@@ -75,7 +71,7 @@ validation:
     # true 表示这些阈值由 YAML 直接控制样例成功/失败；false 表示仅输出日志告警。
     fail_on_violation: true
     # 最少内点数；当前改为“只要有内点即可通过”，因此这里设为 1。
-    min_inliers: 1
+    min_inliers: 2
     # 最低内点率；当前不再作为成功/失败判断条件，因此设为 -1 禁用。
     min_inlier_ratio: -1
     # 最大重投影误差；-1 表示不启用该项阈值。

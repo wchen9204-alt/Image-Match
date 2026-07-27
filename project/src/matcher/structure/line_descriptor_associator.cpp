@@ -487,7 +487,7 @@ bool computeMsld(const cv::Mat& gray,
         }
     }
     if (validCount == 0) { message = "MSLD failed to compute any descriptors"; return false; }
-    IR_LOG_INFO("MSLD computed ", validCount, " / ", lines.size(),
+    IR_LOG_DEBUG("MSLD computed ", validCount, " / ", lines.size(),
                 " descriptors, dim=", descDim);
     return true;
 }
@@ -512,7 +512,7 @@ bool computeLineSift(const cv::Mat& gray,
         }
     }
     if (validCount == 0) { message = "line-SIFT failed to compute any descriptors"; return false; }
-    IR_LOG_INFO("line-SIFT computed ", validCount, " / ", lines.size(),
+    IR_LOG_DEBUG("line-SIFT computed ", validCount, " / ", lines.size(),
                 " descriptors, dim=", descDim);
     return true;
 }
@@ -538,7 +538,7 @@ LineDescriptorAssociator::LineDescriptorAssociator(const YAML::Node& cfg) {
     _lineSiftBands = yaml_utils::getInt(params, "linesift_bands", 4);
     _lineSiftBins = yaml_utils::getInt(params, "linesift_bins", 8);
 
-    IR_LOG_INFO("LineDescriptorAssociator: descriptor=",
+    IR_LOG_DEBUG("LineDescriptorAssociator: descriptor=",
                 _descriptor,
                 ", matcher=", _matcher,
                 ", mode=", _matchMode,
@@ -549,11 +549,11 @@ LineDescriptorAssociator::LineDescriptorAssociator(const YAML::Node& cfg) {
                 ", minLenRatio=", _minLengthRatio,
                 ", shiftThr=", _shiftConsistencyThreshold);
     if (_descriptor == "MSLD") {
-        IR_LOG_INFO("LineDescriptorAssociator MSLD: bandWidth=",
+        IR_LOG_DEBUG("LineDescriptorAssociator MSLD: bandWidth=",
                     _msldBandWidth, ", strips=", _msldStrips);
     }
     if (_descriptor == "LINE_SIFT") {
-        IR_LOG_INFO("LineDescriptorAssociator line-SIFT: bandWidth=",
+        IR_LOG_DEBUG("LineDescriptorAssociator line-SIFT: bandWidth=",
                     _lineSiftBandWidth, ", strips=", _lineSiftStrips,
                     ", bands=", _lineSiftBands, ", bins=", _lineSiftBins);
     }
@@ -582,7 +582,7 @@ bool LineDescriptorAssociator::associate(RegistrationContext& ctx) {
 
     const std::vector<cv::Vec4i>& srcLines = ctx.structure_data.first.lines;
     const std::vector<cv::Vec4i>& dstLines = ctx.structure_data.second.lines;
-    IR_LOG_INFO("LineDescriptorAssociator input: srcLines=", srcLines.size(),
+    IR_LOG_DEBUG("LineDescriptorAssociator input: srcLines=", srcLines.size(),
                 ", dstLines=", dstLines.size(), ", descriptor=", descriptor);
 
     // 2. 构建 KeyLine 索引（LBD 需要完整 KeyLine 做描述子计算，MSLD 仅需 class_id 映射）
@@ -622,7 +622,7 @@ bool LineDescriptorAssociator::associate(RegistrationContext& ctx) {
             IR_LOG_WARN("LineDescriptorAssociator LBD failed: ", md.message);
             return false;
         }
-        IR_LOG_INFO("LineDescriptorAssociator LBD: srcDesc=", srcDescriptors.rows,
+        IR_LOG_DEBUG("LineDescriptorAssociator LBD: srcDesc=", srcDescriptors.rows,
                     "x", srcDescriptors.cols, " (keys=", srcKeys.size(), ")",
                     ", dstDesc=", dstDescriptors.rows,
                     "x", dstDescriptors.cols, " (keys=", dstKeys.size(), ")");
@@ -635,7 +635,7 @@ bool LineDescriptorAssociator::associate(RegistrationContext& ctx) {
             IR_LOG_WARN("LineDescriptorAssociator MSLD failed: ", md.message);
             return false;
         }
-        IR_LOG_INFO("LineDescriptorAssociator MSLD: srcDesc=", srcDescriptors.rows,
+        IR_LOG_DEBUG("LineDescriptorAssociator MSLD: srcDesc=", srcDescriptors.rows,
                     "x", srcDescriptors.cols,
                     ", dstDesc=", dstDescriptors.rows, "x", dstDescriptors.cols);
     } else if (descriptor == "LINE_SIFT") {
@@ -648,7 +648,7 @@ bool LineDescriptorAssociator::associate(RegistrationContext& ctx) {
             IR_LOG_WARN("LineDescriptorAssociator line-SIFT failed: ", md.message);
             return false;
         }
-        IR_LOG_INFO("LineDescriptorAssociator line-SIFT: srcDesc=", srcDescriptors.rows,
+        IR_LOG_DEBUG("LineDescriptorAssociator line-SIFT: srcDesc=", srcDescriptors.rows,
                     "x", srcDescriptors.cols,
                     ", dstDesc=", dstDescriptors.rows, "x", dstDescriptors.cols);
     }
@@ -660,7 +660,7 @@ bool LineDescriptorAssociator::associate(RegistrationContext& ctx) {
     md.raw_matches_knn =
         matchDescriptors(srcDescriptors, dstDescriptors, srcKeys, dstKeys,
                          modeKey, _knnK, _matchRadius, isLbd, useFlann);
-    IR_LOG_INFO("LineDescriptorAssociator KNN: raw_matches_knn groups=",
+    IR_LOG_DEBUG("LineDescriptorAssociator KNN: raw_matches_knn groups=",
                 md.raw_matches_knn.size());
     if (md.raw_matches_knn.empty()) {
         md.message = "KNN matching produced no matches";
@@ -722,7 +722,7 @@ bool LineDescriptorAssociator::associate(RegistrationContext& ctx) {
         return false;
     }
 
-    IR_LOG_INFO("LineDescriptorAssociator produced ", descriptor, " matches: ",
+    IR_LOG_DEBUG("LineDescriptorAssociator produced ", descriptor, " matches: ",
                 md.line_matches.size(), " / ", rawFlat.size(), " raw",
                 ", dx=", md.translation.x,
                 ", dy=", md.translation.y,
@@ -733,4 +733,5 @@ bool LineDescriptorAssociator::associate(RegistrationContext& ctx) {
 }
 
 } // namespace ir
+
 

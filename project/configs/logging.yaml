@@ -1,0 +1,7 @@
+# 各日志级别为独立输出开关，不按最低级别阈值统一控制。
+logging:
+  error: true
+  warn: true
+  info: true
+  debug: false
+  trace: false

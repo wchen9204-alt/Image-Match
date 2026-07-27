@@ -19,11 +19,7 @@ matcher: ../../matcher/bf.yaml
 filters:
   - ../../filter/ratio_test.yaml
   - ../../filter/cross_check.yaml
-#  - ../../filter/keypoint_distance_prefilter.yaml
   - ../../filter/pairwise_rigid_consistency.yaml
-#  - ../../filter/gms.yaml
-# - ../../filter/distance_distribution.yaml
-# - ../../filter/distance_threshold.yaml
 
 # 支持的几何模型：
 # rigid / similarity / affine / homography
@@ -31,8 +27,8 @@ geometry: ../../geometry/rigid.yaml
 evaluator: ../../evaluator/metrics.yaml
 
 io:
-  image1: ../../../datasets/Test01/source.png
-  image2: ../../../datasets/Test01/target.png
+  image1: ../../../datasets/test76/source.png
+  image2: ../../../datasets/test76/target.png
   output_dir: ../../../outputs
 
 visualization:
@@ -41,9 +37,9 @@ visualization:
   draw_inliers_only: true
   max_matches_drawn: 100
   warp: true
-  show_source_window: true
-  show_target_window: true
-  show_warped_window: true
+  show_source_window: false
+  show_target_window: false
+  show_warped_window: false
   wait_key: 0
 
 validation:
@@ -75,7 +71,7 @@ validation:
     # true 表示这些阈值由 YAML 直接控制样例成功/失败；false 表示仅输出日志告警。
     fail_on_violation: true
     # 最少内点数；当前改为“只要有内点即可通过”，因此这里设为 1。
-    min_inliers: 1
+    min_inliers: 2
     # 最低内点率；当前不再作为成功/失败判断条件，因此设为 -1 禁用。
     min_inlier_ratio: -1
     # 最大重投影误差；-1 表示不启用该项阈值。

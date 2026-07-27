@@ -1,5 +1,7 @@
 #include "keypoint/kaze_extractor.h"
 
+#include <mutex>
+
 #include "utils/descriptor_norm_utils.h"
 #include "utils/image_utils.h"
 #include "utils/logger.h"
@@ -66,8 +68,11 @@ bool KazeExtractor::extract(RegistrationContext& ctx) {
 
     // KAZE 描述子依赖 detector 内部尺度空间状态，外部补点不能安全参与 compute。
     if (_augmentation_config.enabled) {
-        IR_LOG_WARN("KAZE boundary corner augmentation is disabled at runtime: "
-                    "OpenCV KAZE descriptors require detector-owned class_id.");
+        static std::once_flag warning_once;
+        std::call_once(warning_once, [] {
+            IR_LOG_WARN("KAZE boundary corner augmentation is disabled at runtime: "
+                        "OpenCV KAZE descriptors require detector-owned class_id.");
+        });
     }
 
     _impl->detectAndCompute(

@@ -15,8 +15,8 @@ direct: ../../direct/fourier_mellin.yaml
 evaluator: ../../evaluator/metrics.yaml
 
 io:
-  image1: ../../../datasets/Test01/source.png
-  image2: ../../../datasets/Test01/target.png
+  image1: ../../../datasets/test76/source.png
+  image2: ../../../datasets/test76/target.png
   output_dir: ../../../outputs
 
 visualization:
@@ -39,8 +39,8 @@ feature_initializer:
   # 单个点特征候选；不配置时表示不使用点特征初始估计。
   candidate:
     # 可选值示例：SIFT / SURF / ORB / BRISK / KAZE / AKAZE。
-    name: 
-    keypoint: 
+    name: AKAZE
+    keypoint: ../../keypoint/akaze.yaml
   # 初始化阶段复用点特征 pipeline 的 matcher/filter/geometry 链路。
   matcher: ../../matcher/bf.yaml
   filters:

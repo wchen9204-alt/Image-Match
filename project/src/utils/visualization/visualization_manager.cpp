@@ -51,7 +51,7 @@ bool VisualizationManager::saveAll(const RegistrationContext& ctx,
         const cv::Mat img = DrawMatches::render(ctx, match_opt);
         const fs::path path = output_root / "all_match" / (stem + "_all_match.png");
         if (writeImage(path, img)) {
-            IR_LOG_INFO("Saved ", path.string());
+            IR_LOG_DEBUG("Saved ", path.string());
         }
     }
 
@@ -67,7 +67,7 @@ bool VisualizationManager::saveAll(const RegistrationContext& ctx,
         const cv::Mat img = DrawInliers::render(ctx, inlier_opt);
         const fs::path path = output_root / "inlier_match" / (stem + "_inlier_match.png");
         if (writeImage(path, img)) {
-            IR_LOG_INFO("Saved ", path.string());
+            IR_LOG_DEBUG("Saved ", path.string());
         }
     }
 
@@ -75,7 +75,7 @@ bool VisualizationManager::saveAll(const RegistrationContext& ctx,
         // 变换后图像是后续叠加图、差异图和图像指标计算的直接输入。
         const fs::path path = output_root / "warped" / (stem + "_warped.png");
         if (writeImage(path, ctx.warped_image)) {
-            IR_LOG_INFO("Saved ", path.string());
+            IR_LOG_DEBUG("Saved ", path.string());
         }
     }
 
@@ -86,7 +86,7 @@ bool VisualizationManager::saveAll(const RegistrationContext& ctx,
         const cv::Mat img = DrawOverlay::render(ctx, overlay_opt);
         const fs::path path = output_root / "overlay" / (stem + "_overlay.png");
         if (writeImage(path, img)) {
-            IR_LOG_INFO("Saved ", path.string());
+            IR_LOG_DEBUG("Saved ", path.string());
         }
     }
 
@@ -97,7 +97,7 @@ bool VisualizationManager::saveAll(const RegistrationContext& ctx,
         const cv::Mat img = DrawDiff::render(ctx, diff_opt);
         const fs::path path = output_root / "diff" / (stem + "_diff.png");
         if (writeImage(path, img)) {
-            IR_LOG_INFO("Saved ", path.string());
+            IR_LOG_DEBUG("Saved ", path.string());
         }
     }
 
@@ -105,4 +105,5 @@ bool VisualizationManager::saveAll(const RegistrationContext& ctx,
 }
 
 } // namespace ir
+
 

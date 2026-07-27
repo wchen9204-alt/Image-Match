@@ -35,3 +35,5 @@ output:
 
   # 是否保存批处理汇总 CSV；默认值：true；文件写到 batch/learning/<pipeline>/summary.csv。
   summary_csv: true
+  # 两个用例之间的等待时间，单位毫秒；0 表示不等待。
+  delay_ms: 0
