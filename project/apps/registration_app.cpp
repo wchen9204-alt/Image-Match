@@ -1,15 +1,12 @@
 #include "registration_app.h"
 
-#include <algorithm>
 #include <filesystem>
-#include <chrono>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
-#include <thread>
 #include <vector>
 
-#include <opencv2/core/utility.hpp>
 
 #include "core/config.h"
 #include "core/context.h"
@@ -44,34 +41,6 @@ fs::path findGlobalConfig(const fs::path& pipeline_yaml, const fs::path& filenam
     return fs::path{"project/configs"} / filename;
 }
 
-void configureOpenCvThreads(const fs::path& config_path) {
-    if (!fs::exists(config_path)) {
-        IR_LOG_WARN("Performance config not found: ", config_path.string(),
-                    "; using OpenCV default thread count.");
-        return;
-    }
-
-    try {
-        const YAML::Node root = Config::load(config_path);
-        const YAML::Node performance = root["performance"] ? root["performance"] : root;
-        const int requested = yaml_utils::getInt(performance, "opencv_threads", 6);
-        if (requested <= 0) {
-            IR_LOG_WARN("Invalid performance.opencv_threads=", requested,
-                        "; using OpenCV default thread count.");
-            return;
-        }
-
-        const int available = std::max(1, cv::getNumberOfCPUs());
-        const int configured = std::min(requested, available);
-        cv::setNumThreads(configured);
-        IR_LOG_INFO("OpenCV threads configured: requested=", requested,
-                    ", active=", cv::getNumThreads(),
-                    ", logical_processors=", available);
-    } catch (const std::exception& e) {
-        IR_LOG_WARN("Failed to load performance config ", config_path.string(),
-                    "; using OpenCV default thread count: ", e.what());
-    }
-}
 
 } // namespace
 
@@ -205,6 +174,7 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
     std::vector<int> successCounts;
     std::vector<int> totalCounts;
     std::vector<double> avgContainments;
+    std::vector<double> avgTotalTimes;
     std::vector<std::string> failedCases;
 
     auto joinFailedCases = [](const std::vector<std::string>& names) {
@@ -229,6 +199,8 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
         int okCount = 0;
         double containmentSum = 0.0;
         int containmentValid = 0;
+        // 所有实际运行样本的总耗时累计，口径与 summary.csv 的 AVERAGE 行一致。
+        double totalTimeSumMs = 0.0;
         std::vector<std::string> failedSampleNames;
         std::vector<std::string> sampleNames;
         std::vector<RegistrationResult> results;
@@ -240,14 +212,15 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
         std::error_code ec;
         fs::create_directories(pipelineCfg.output_dir, ec);
 
-        for (const auto& sample : samples) {
-            auto pCfg = pipelineCfg;
-            pCfg.image1_path = sample.source_path;
-            pCfg.image2_path = sample.target_path;
-            pCfg.output_dir = pCfg.output_dir / sample.name;
+        // 1. 对比组合的算法配置在样本循环外只构建一次。
+        Registration pipeline;
+        const bool pipelineConfigured = pipeline.configure(pipelineCfg);
+        if (!pipelineConfigured) {
+            IR_LOG_ERROR("Compare: pipeline configure failed for ", label);
+        }
 
-            Registration pipeline;
-            if (!pipeline.configure(pCfg)) {
+        for (const auto& sample : samples) {
+            if (!pipelineConfigured) {
                 RegistrationResult failed;
                 failed.success = false;
                 failed.message = "pipeline configure failed";
@@ -258,16 +231,22 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
                 continue;
             }
 
+            // 2. 每次运行只传入当前样本的输入路径和独立输出目录。
+            const PipelineRunOptions runOptions{
+                sample.source_path,
+                sample.target_path,
+                pipelineCfg.output_dir / sample.name};
             RegistrationContext ctx;
-            if (pipeline.run(ctx)) {
+            if (pipeline.run(ctx, runOptions)) {
                 ++okCount;
             } else {
                 failedSampleNames.push_back(sample.name);
             }
-            app_helpers::writeRunSummaryFiles(ctx, pCfg, sample.name);
+            app_helpers::writeRunSummaryFiles(ctx, pipelineCfg, sample.name);
             sampleNames.push_back(sample.name);
             results.push_back(ctx.result);
             evaluations.push_back(ctx.evaluation);
+            totalTimeSumMs += ctx.result.t_total_ms;
 
             if (ctx.result.warp_overlap_containment >= 0.0) {
                 containmentSum += ctx.result.warp_overlap_containment;
@@ -279,6 +258,8 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
         successCounts.push_back(okCount);
         totalCounts.push_back(static_cast<int>(samples.size()));
         avgContainments.push_back(containmentValid > 0 ? containmentSum / containmentValid : -1.0);
+        avgTotalTimes.push_back(results.empty() ? 0.0
+                                                : totalTimeSumMs / static_cast<double>(results.size()));
         failedCases.push_back(joinFailedCases(failedSampleNames));
 
         if (yaml_utils::getBool(output, "summary_csv", true)) {
@@ -397,7 +378,7 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
     // 5. 写对比总表
     const auto csvPath = outputRoot / "comparison.csv";
     std::ostringstream oss;
-    oss << "方法,成功数,总数,成功率,平均局部包含率,失败用例\n";
+    oss << "方法,成功数,总数,成功率,平均局部包含率,平均总耗时(ms),失败用例\n";
     for (size_t i = 0; i < labels.size(); ++i) {
         oss << file_utils::csvEscape(labels[i]) << ","
             << successCounts[i] << ","
@@ -406,6 +387,7 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
                     ? static_cast<double>(successCounts[i]) / totalCounts[i]
                     : 0.0) << ","
             << avgContainments[i] << ","
+            << std::fixed << std::setprecision(3) << avgTotalTimes[i] << std::defaultfloat << ","
             << file_utils::csvEscape(failedCases[i]) << "\n";
     }
     file_utils::writeWholeFile(csvPath, oss.str());
@@ -431,8 +413,8 @@ RegistrationApp::BatchConfig RegistrationApp::loadBatchConfig(const std::filesys
     cfg.output_root = Config::resolvePath(
         batch_dir, yaml_utils::getString(output, "root", "../../outputs"));
     cfg.save_visuals = yaml_utils::getBool(output, "save_visuals", true);
+    cfg.visualization = node["visualization"];
     cfg.summary_csv = yaml_utils::getBool(output, "summary_csv", true);
-    cfg.delay_ms = std::max(0, yaml_utils::getInt(output, "delay_ms", 0));
     return cfg;
 }
 
@@ -496,28 +478,26 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
     results.reserve(samples.size());
     evaluations.reserve(samples.size());
 
+    // 3. 批处理只使用自身 YAML 的可视化设置，不继承单算法 pipeline 的输出偏好。
+    PipelineConfig configured_cfg = base_cfg;
+    Config::resetVisualization(configured_cfg);
+    Config::applyVisualizationOverrides(configured_cfg, batch.visualization);
+    configured_cfg.save_visuals = batch.save_visuals;
+    configured_cfg.show_source_window = false;
+    configured_cfg.show_target_window = false;
+    configured_cfg.show_warped_window = false;
+
+    Registration pipeline;
+    const bool pipelineConfigured = pipeline.configure(configured_cfg);
+    if (!pipelineConfigured) {
+        IR_LOG_ERROR("Batch: pipeline configure failed for ", configured_cfg.name);
+    }
+
     int ok_count = 0;
     for (size_t sample_index = 0; sample_index < samples.size(); ++sample_index) {
-        // 在下一个样本开始前等待，确保上一个样本的管线对象已经释放。
-        if (sample_index > 0 && batch.delay_ms > 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(batch.delay_ms));
-        }
         const auto& sample = samples[sample_index];
-        // 3. 每个样本复用同一算法配置，只替换输入图像与输出目录。
-        PipelineConfig cfg = base_cfg;
-        cfg.image1_path = sample.source_path;
-        cfg.image2_path = sample.target_path;
-        cfg.output_dir = buildOutputDir(OutputMode::BATCH, output_root, cfg, sample.name);
-        if (!batch.save_visuals) {
-            cfg.draw_matches = false;
-        }
-        cfg.show_source_window = false;
-        cfg.show_target_window = false;
-        cfg.show_warped_window = false;
-
-        Registration pipeline;
-        if (!pipeline.configure(cfg)) {
-            // 配置失败单独记为该样本失败，避免影响整批任务继续执行。
+        if (!pipelineConfigured) {
+            // 配置失败单独记为该样本失败，避免影响整批结果汇总。
             RegistrationResult failed;
             failed.success = false;
             failed.message = "pipeline configure failed";
@@ -527,10 +507,15 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
             continue;
         }
 
+        // 4. 当前样本仅传入输入图像和独立输出目录，不再重建算法组件。
+        const PipelineRunOptions runOptions{
+            sample.source_path,
+            sample.target_path,
+            buildOutputDir(OutputMode::BATCH, output_root, configured_cfg, sample.name)};
         RegistrationContext ctx;
-        const bool ok = pipeline.run(ctx);
-        app_helpers::writeRunSummaryFiles(ctx, cfg, sample.name);
-        app_helpers::printSummary(ctx, cfg.methodFamily());
+        const bool ok = pipeline.run(ctx, runOptions);
+        app_helpers::writeRunSummaryFiles(ctx, configured_cfg, sample.name);
+        app_helpers::printSummary(ctx, configured_cfg.methodFamily());
         sample_names.push_back(sample.name);
         results.push_back(ctx.result);
         evaluations.push_back(ctx.evaluation);
@@ -579,7 +564,6 @@ int RegistrationApp::run(const Args& args) {
             IR_LOG_WARN("Failed to load logging config ", logging_config.string(),
                         "; using built-in defaults: ", logging_error);
         }
-        configureOpenCvThreads(findGlobalConfig(args.pipeline_yaml, "performance.yaml"));
         const YAML::Node node = Config::load(args.pipeline_yaml);
         switch (detectRunMode(node)) {
         case RunMode::COMPARE:

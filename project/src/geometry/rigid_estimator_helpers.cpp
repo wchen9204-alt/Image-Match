@@ -137,18 +137,12 @@ std::vector<int> selectSpatiallyDiverseIndices(const std::vector<int>& sortedPoo
     return selected;
 }
 
-// 为单个 rigid 候选补算 containment 与双向 coverage 等前景几何评分。
+// 为单个 rigid 候选补算前景局部包含率，用于候选模型的几何质量排序。
 bool evaluateRigidCandidateMaskScore(const cv::Mat& sourceMask,
                                      const cv::Mat& targetMask,
                                      const cv::Mat& candidateA,
                                      RigidCandidateScore& score) {
-    // 对单个 rigid 候选补算前景 mask 几何指标，
-    // 让候选比较不只看内点数，还能看 warp 后是否更像真实对齐。
     score.containment = -1.0;
-    score.sourceCoverage = -1.0;
-    score.targetCoverage = -1.0;
-    score.bidirectionalCoverage = -1.0;
-
     if (candidateA.empty() || sourceMask.empty() || targetMask.empty()) {
         return false;
     }
@@ -161,45 +155,20 @@ bool evaluateRigidCandidateMaskScore(const cv::Mat& sourceMask,
 
     score.containment = base_pipeline_helpers::computeMaskLocalContainment(
         sourceMask, warpedSourceMask, targetMask);
-    score.sourceCoverage = base_pipeline_helpers::computeMaskCoverage(sourceMask, warpedSourceMask);
-
-    cv::Mat inverseMatrix;
-    if (base_pipeline_helpers::invertTransformMatrix(candidateA, inverseMatrix)) {
-        cv::Mat reverseWarpedTargetMask;
-        if (base_pipeline_helpers::warpMaskToTargetSize(
-                targetMask, sourceMask.size(), inverseMatrix, reverseWarpedTargetMask)) {
-            score.targetCoverage =
-                base_pipeline_helpers::computeMaskCoverage(targetMask, reverseWarpedTargetMask);
-        }
-    }
-
-    if (score.sourceCoverage >= 0.0 && score.targetCoverage >= 0.0) {
-        score.bidirectionalCoverage = std::max(score.sourceCoverage, score.targetCoverage);
-    } else if (score.sourceCoverage >= 0.0) {
-        score.bidirectionalCoverage = score.sourceCoverage;
-    } else if (score.targetCoverage >= 0.0) {
-        score.bidirectionalCoverage = score.targetCoverage;
-    }
-
-    return true;
+    return score.containment >= 0.0;
 }
-
 // 比较两个 rigid 候选的优先级，用于最终多候选选模。
 bool preferRigidCandidateScore(const RigidCandidateScore& lhs, const RigidCandidateScore& rhs) {
     // 候选排序优先级：
     // 1) 是否通过前景 mask 门槛
     // 2) 内点数
-    // 3) 双向 coverage
-    // 4) containment
-    // 5) 重投影误差
+    // 3) containment
+    // 4) 重投影误差
     if (lhs.passedMaskGate != rhs.passedMaskGate) {
         return lhs.passedMaskGate;
     }
     if (lhs.inliers != rhs.inliers) {
         return lhs.inliers > rhs.inliers;
-    }
-    if (lhs.bidirectionalCoverage != rhs.bidirectionalCoverage) {
-        return lhs.bidirectionalCoverage > rhs.bidirectionalCoverage;
     }
     if (lhs.containment != rhs.containment) {
         return lhs.containment > rhs.containment;
@@ -379,22 +348,19 @@ bool selectBestRigidCandidate(const std::vector<cv::Mat>& candidateTransforms,
                               bool enableCandidateMaskScoring,
                               int candidateMaskForegroundThreshold,
                               double candidateMinContainment,
-                              double candidateMinBidirectionalCoverage,
                               double candidateDedupRotationDiffDeg,
                               double candidateDedupTranslationDiff,
                               cv::Mat& bestA,
                               std::vector<unsigned char>& bestMask,
                               int& bestInliers,
                               double& bestError,
-                              double& bestContainment,
-                              double& bestBidirectionalCoverage) {
+                              double& bestContainment) {
     // 第 1 步：先做一次轻量去重，避免几乎相同的 rigid 候选重复参与后续评分。
     bestA.release();
     bestMask.clear();
     bestInliers = 0;
     bestError = std::numeric_limits<double>::infinity();
     bestContainment = -1.0;
-    bestBidirectionalCoverage = -1.0;
 
     std::vector<RigidCandidateScore> scoredCandidates;
     scoredCandidates.reserve(std::min(candidateTransforms.size(), candidateMasks.size()));
@@ -465,12 +431,7 @@ bool selectBestRigidCandidate(const std::vector<cv::Mat>& candidateTransforms,
                 score.passedContainment =
                     score.containment >= 0.0 && score.containment >= candidateMinContainment;
             }
-            if (candidateMinBidirectionalCoverage >= 0.0) {
-                score.passedBidirectionalCoverage =
-                    score.bidirectionalCoverage >= 0.0 &&
-                    score.bidirectionalCoverage >= candidateMinBidirectionalCoverage;
-            }
-            score.passedMaskGate = score.passedContainment || score.passedBidirectionalCoverage;
+            score.passedMaskGate = score.passedContainment;
         }
         scoredCandidates.push_back(std::move(score));
     }
@@ -508,7 +469,6 @@ bool selectBestRigidCandidate(const std::vector<cv::Mat>& candidateTransforms,
     bestInliers = bestIt->inliers;
     bestError = bestIt->reprojError;
     bestContainment = bestIt->containment;
-    bestBidirectionalCoverage = bestIt->bidirectionalCoverage;
     return !bestA.empty();
 }
 

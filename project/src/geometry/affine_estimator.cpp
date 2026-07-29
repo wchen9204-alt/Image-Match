@@ -1,4 +1,4 @@
-﻿#include "geometry/affine_estimator.h"
+#include "geometry/affine_estimator.h"
 
 #include <opencv2/calib3d.hpp>
 
@@ -49,10 +49,7 @@ bool AffineEstimator::estimate(RegistrationContext& ctx) {
     gd.clear();
     gd.type = GeometryType::AFFINE;
 
-    const CorrespondenceSource source = correspondenceSourceFromContext(ctx);
-    const CorrespondenceView view =
-        source == CorrespondenceSource::NONE ? buildBestCorrespondenceView(ctx)
-                                             : buildCorrespondenceView(ctx, source);
+    const CorrespondenceView view = ensureCorrespondenceView(ctx);
     if (view.filtered.size() < 3) {
         gd.message = "need at least 3 correspondences, got " + std::to_string(view.filtered.size());
         IR_LOG_ERROR("AffineEstimator: need at least 3 correspondences, got ", view.filtered.size());

@@ -28,8 +28,9 @@ public:
     /// 保存流水线配置并初始化底层流水线。
     bool configure(const PipelineConfig& cfg) override;
 
-    /// 在给定的注册上下文中执行已配置的流水线。
-    bool run(RegistrationContext& ctx) override;
+    /// 执行已配置的流水线；省略运行时路径时回退到 YAML 配置。
+    bool run(RegistrationContext& ctx,
+             const PipelineRunOptions& options = PipelineRunOptions{}) override;
 
     /// 返回当前保存的流水线配置。
     const PipelineConfig& config() const { return _cfg; }

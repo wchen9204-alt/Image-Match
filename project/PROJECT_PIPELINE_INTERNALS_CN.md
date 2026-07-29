@@ -1,4 +1,4 @@
-﻿# 平台内部流水线与数据流说明
+# 平台内部流水线与数据流说明
 
 本文由粘贴的内部说明文本整理而来，目标是说明平台内部一次配准任务如何执行、数据如何在各阶段流转、YAML 如何创建算法组件，以及结构线匹配为什么能复用通用几何估计流程。
 
@@ -289,55 +289,6 @@ validation:
 
 任一启用的质量检查不达标，本次配准会被判定为失败。两项都关闭时，该阶段直接通过。
 
-### 7.3 Bidirectional Coverage 检查
-
-`warp bidirectional coverage` 用于衡量局部图场景下，是否至少有一个方向能说明“小图被完整保留”。
-
-它会输出三个量：
-
-- `source_coverage`
-- `target_coverage`
-- `bidirectional_coverage = max(source_coverage, target_coverage)`
-
-具体计算方式是：
-
-```text
-source_coverage =
-  countNonZero(warp(source foreground mask) 落在 target 画布内的部分)
-  / countNonZero(source foreground mask)
-
-target_coverage =
-  countNonZero(inverse-warp(target foreground mask) 落在 source 画布内的部分)
-  / countNonZero(target foreground mask)
-
-bidirectional_coverage =
-  max(source_coverage, target_coverage)
-```
-
-这和 `min_containment` 不是一回事：
-
-- `min_containment` 看的是 warped source 与 target 的交集能否覆盖较小前景区域。
-- `bidirectional coverage` 看的是 source / target 是否至少有一个方向在 warp 后仍被完整保留，适合发现“只贴上局部一截”的错误解。
-
-它的用途尤其适合点特征法里的 `Test04`、`Test06` 这类样本：
-
-- 如果 source 是 target 的局部，通常 `source_coverage` 会高。
-- 如果 target 是 source 的局部，通常 `target_coverage` 会高。
-- 如果错误模型只是把左右端局部平移贴上，两个方向的 coverage 往往都会偏低。
-
-当前配置里可这样写：
-
-```yaml
-validation:
-  warp_overlap:
-    enabled: true
-    min_containment: 0.70
-    min_bidirectional_coverage: 0.80
-    foreground_threshold: 10
-```
-
-现版本实现中，`source_coverage`、`target_coverage`、`bidirectional_coverage` 和 `foreground_threshold` 共用同一套前景 mask 语义，不把黑背景算进去。
-
 ## 8. saveOutputs：输出保存
 
 输出分为两层：Pipeline 负责保存图像类结果，`RegistrationApp` 负责保存运行摘要和 CSV 统计表。
@@ -391,7 +342,6 @@ validation:
 | `warp_overlap_containment` / `重叠包含率` | 最终 warped source 与 target 的局部包含率，用于局部图场景下判断较小前景是否被覆盖。 |
 | `warp_source_coverage` / `源图覆盖率` | source 前景经最终变换后仍落在 target 画布内的比例。 |
 | `warp_target_coverage` / `目标图覆盖率` | target 前景经逆变换后仍落在 source 画布内的比例。 |
-| `warp_bidirectional_coverage` / `双向覆盖率` | `warp_source_coverage` 与 `warp_target_coverage` 的较大值，用于双向覆盖质量判断。 |
 | `warp_edge_alignment_iou` / `边缘对齐IoU` | 最终 warped source 与 target 在重叠区域内的边缘对齐 IoU；越大表示边缘越一致。 |
 | `warp_photometric_error` / `光度误差` | 最终 warped source 与 target 重叠区域的 NMAD 灰度误差；越小表示光度越一致。 |
 | `t_load_ms` / `加载耗时_ms` | 图像读取和预处理耗时，单位毫秒。 |

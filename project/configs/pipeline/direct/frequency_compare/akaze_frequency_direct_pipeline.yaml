@@ -23,6 +23,9 @@ visualization:
 
 feature_initializer:
   enabled: true
+  # 初值使用策略：ACCEPTED_ONLY 仅使用通过完整质量门控的点特征结果。
+  # ESTIMATED_WHEN_AVAILABLE 会使用已估计出的合法变换；没有合法矩阵时仍直接使用原图。
+  seed_mode: ACCEPTED_ONLY
   final_validation_reference: BEST_OF_DIRECT_AND_INITIALIZER
   candidate:
     # 可选值示例：SIFT / SURF / ORB / BRISK / KAZE / AKAZE。
@@ -35,32 +38,26 @@ feature_initializer:
     - ../../filter/pairwise_rigid_consistency.yaml
   geometry: ../../geometry/rigid.yaml
   acceptance:
-    min_inliers: 1
+    min_inliers: 2
     min_inlier_ratio: -1
-    min_inlier_spatial_coverage: 0.05
+    min_inlier_spatial_coverage: -1
   validation:
     warp_overlap:
       enabled: true
       min_containment: 0.90
-      min_bidirectional_coverage: 0.98
-      accept_if_either_passes: true
       foreground_threshold: 10
     photometric:
       enabled: true
       max_nmad: 0.15
-      max_nmad_for_coverage_only: 0.095
 
 validation:
   warp_overlap:
     enabled: true
-    min_containment: 0.70
-    min_bidirectional_coverage: 0.98
-    accept_if_either_passes: true
+    min_containment: 0.90
     foreground_threshold: 5
   photometric:
     enabled: true
     max_nmad: 0.15
-    max_nmad_for_coverage_only: -1
   edge_alignment:
     enabled: true
     min_iou: 0.08

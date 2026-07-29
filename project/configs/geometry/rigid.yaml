@@ -1,4 +1,4 @@
-﻿# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # 2D 刚体变换几何估计器
 #
 # 当前实现先使用 OpenCV estimateAffinePartial2D 做 RANSAC 初筛。
@@ -38,7 +38,7 @@ params:
   maxIters: 2000
 
   # RANSAC 置信度；OpenCV 默认 0.99。
-  confidence: 0.99
+  confidence: 0.90
 
   # OpenCV partial affine 细化迭代次数；OpenCV 默认 10。
   refineIters: 10
@@ -60,10 +60,11 @@ params:
   # - 结果可能包含统一缩放，因此不是严格 rigid
   rigidRefineMode: SVD
 
-  # 是否从 filtered_matches 额外抽取严格 rigid 候选。
+  # 是否从 filtered_matches 额外抽取严格 rigid 候选；默认 true。
+  # 开启且候选前置条件满足时始终执行，不受 baseline 是否成功影响。
   enableFilteredMatchCandidates: true
 
-  # 先按描述子距离取前 K 个 filtered 匹配，再从中组合候选对。
+  # 先按描述子距离取前 K 个 filtered 匹配，再从中组合候选对，默认24个。
   filteredMatchCandidateTopK: 24
 
   # 候选 seed 的距离池大小。
@@ -71,15 +72,14 @@ params:
   # 混合做“空间分散选点 + 距离优先补点 + 主旋转峰补点”，再得到最终 seed。
   filteredMatchCandidatePoolSize: 64
 
-  # 最多生成多少个额外候选。
+  # 最多生成多少个额外候选，默认12个。
   filteredMatchCandidateCount: 12
 
-  # 生成候选时，两点之间最小空间间距，避免退化样本。
+  # 生成候选时，两点之间最小空间间距，避免退化样本，默认20.0。
   filteredMatchCandidateMinPairDistance: 20.0
 
   # 是否在多候选 rigid 选模时加入前景 mask 几何评分。
   # 开启后，每个候选都会额外计算 containment / source coverage /
-  # target coverage / bidirectional coverage。
   enableCandidateMaskScoring: true
 
   # 候选 mask 评分时的前景二值化阈值。
@@ -90,14 +90,11 @@ params:
   # 若所有候选都不满足，则自动回退到旧的候选比较规则。
   candidateMinContainment: 0.90
 
-  # 候选选择阶段的最低双向 coverage 阈值。
-  # 双向 coverage 取 max(source_coverage, target_coverage)。
   # 若所有候选都不满足，也会自动回退到旧规则。
-  candidateMinBidirectionalCoverage: 0.98
 
-  # 轻量候选去重时允许的最大旋转角差，单位为度。
+  # 轻量候选去重时允许的最大旋转角差，默认2.0，单位为度。
   # 若两个 rigid 候选的旋转差和平移差都很小，则视为重复候选。
   candidateDedupRotationDiffDeg: 2.0
 
-  # 轻量候选去重时允许的最大平移差，单位为像素。
+  # 轻量候选去重时允许的最大平移差，默认3.0，单位为像素。
   candidateDedupTranslationDiff: 3.0

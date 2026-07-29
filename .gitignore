@@ -47,6 +47,7 @@ outputs/
 
 
 /project/tools/
+/project/tmp/
 
 # CMake generated files
 CMakeFiles/

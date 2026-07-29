@@ -51,13 +51,13 @@ bool Registration::configure(const PipelineConfig& cfg) {
     return true;
 }
 
-bool Registration::run(RegistrationContext& ctx) {
+bool Registration::run(RegistrationContext& ctx, const PipelineRunOptions& options) {
     // 运行前必须已经完成 configure，然后由流水线执行各阶段。
     if (!_pipeline) {
         IR_LOG_ERROR("Registration::run - pipeline not configured.");
         return false;
     }
-    return _pipeline->run(ctx);
+    return _pipeline->run(ctx, options);
 }
 
 } // namespace ir

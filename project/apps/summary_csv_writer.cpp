@@ -1,6 +1,7 @@
-﻿#include "summary_csv_writer.h"
+#include "summary_csv_writer.h"
 
 #include <algorithm>
+#include <iomanip>
 #include <sstream>
 
 #include "utils/file_utils.h"
@@ -67,7 +68,7 @@ void appendKeypointCsvHeader(std::ostringstream& oss) {
         << "num_keypoints_first,num_keypoints_second,"
         << "num_raw_matches,num_filtered_matches,num_inliers,"
         << "inlier_ratio,mean_reproj_error,warp_overlap_containment,"
-        << "warp_source_coverage,warp_target_coverage,warp_bidirectional_coverage,"
+        << "warp_source_coverage,warp_target_coverage,"
         << "warp_edge_alignment_iou,warp_photometric_error,"
         << "t_load_ms,t_extract_ms,t_match_ms,t_filter_ms,t_geometry_ms,t_warp_ms,t_total_ms";
 }
@@ -80,7 +81,7 @@ void appendKeypointCsvRow(std::ostringstream& oss,
         << r.num_raw_matches << "," << r.num_filtered_matches << "," << r.num_inliers << ","
         << r.inlier_ratio << "," << r.mean_reproj_error << ","
         << r.warp_overlap_containment << "," << r.warp_source_coverage << ","
-        << r.warp_target_coverage << "," << r.warp_bidirectional_coverage << ","
+        << r.warp_target_coverage << ","
         << r.warp_edge_alignment_iou << "," << r.warp_photometric_error << ","
         << r.t_load_ms << "," << r.t_extract_ms << "," << r.t_match_ms << ","
         << r.t_filter_ms << "," << r.t_geometry_ms << "," << r.t_warp_ms << ","
@@ -93,7 +94,7 @@ void appendStructureCsvHeader(std::ostringstream& oss) {
         << "num_candidate_structure_matches,num_filtered_structure_matches,"
         << "num_inlier_structure_matches,structure_inlier_ratio,"
         << "mean_structure_reproj_error,warp_overlap_containment,"
-        << "warp_source_coverage,warp_target_coverage,warp_bidirectional_coverage,"
+        << "warp_source_coverage,warp_target_coverage,"
         << "warp_edge_alignment_iou,warp_photometric_error,"
         << "structure_overlap_iou,"
         << "t_load_ms,t_extract_ms,t_associate_ms,t_filter_ms,t_geometry_ms,t_warp_ms,t_total_ms";
@@ -107,7 +108,7 @@ void appendStructureCsvRow(std::ostringstream& oss,
         << r.num_raw_matches << "," << r.num_filtered_matches << "," << r.num_inliers << ","
         << r.inlier_ratio << "," << r.mean_reproj_error << ","
         << r.warp_overlap_containment << "," << r.warp_source_coverage << ","
-        << r.warp_target_coverage << "," << r.warp_bidirectional_coverage << ","
+        << r.warp_target_coverage << ","
         << r.warp_edge_alignment_iou << "," << r.warp_photometric_error << ","
         << r.structure_overlap_iou << ","
         << r.t_load_ms << "," << r.t_extract_ms << "," << r.t_match_ms << ","
@@ -123,7 +124,7 @@ void appendDirectCsvHeader(std::ostringstream& oss) {
         << "初始值内点率,初始值空间覆盖率,"
         << "初始值光度误差,"
         << "重叠包含率,"
-        << "源图覆盖率,目标图覆盖率,双向覆盖率,"
+        << "源图覆盖率,目标图覆盖率,"
         << "边缘对齐IoU,光度误差,"
         << "加载耗时_ms,几何阶段耗时_ms,变换耗时_ms,总耗时_ms";
 }
@@ -139,7 +140,6 @@ void appendDirectCsvRow(std::ostringstream& oss,
         << r.feature_initializer_warp_photometric_error << ","
         << r.warp_overlap_containment << ","
         << r.warp_source_coverage << "," << r.warp_target_coverage << ","
-        << r.warp_bidirectional_coverage << ","
         << r.warp_edge_alignment_iou << "," << r.warp_photometric_error << ","
         << r.t_load_ms << "," << r.t_geometry_ms << "," << r.t_warp_ms << ","
         << r.t_total_ms;
@@ -150,7 +150,7 @@ void appendLearningCsvHeader(std::ostringstream& oss) {
         << "num_learning_points_first,num_learning_points_second,"
         << "num_raw_learning_matches,num_filtered_learning_matches,num_inlier_learning_matches,"
         << "learning_inlier_ratio,mean_reproj_error,warp_overlap_containment,"
-        << "warp_source_coverage,warp_target_coverage,warp_bidirectional_coverage,"
+        << "warp_source_coverage,warp_target_coverage,"
         << "warp_edge_alignment_iou,warp_photometric_error,"
         << "t_load_ms,t_extract_ms,t_match_ms,t_filter_ms,t_geometry_ms,t_warp_ms,t_total_ms";
 }
@@ -163,7 +163,7 @@ void appendLearningCsvRow(std::ostringstream& oss,
         << r.num_raw_matches << "," << r.num_filtered_matches << "," << r.num_inliers << ","
         << r.inlier_ratio << "," << r.mean_reproj_error << ","
         << r.warp_overlap_containment << "," << r.warp_source_coverage << ","
-        << r.warp_target_coverage << "," << r.warp_bidirectional_coverage << ","
+        << r.warp_target_coverage << ","
         << r.warp_edge_alignment_iou << "," << r.warp_photometric_error << ","
         << r.t_load_ms << "," << r.t_extract_ms << "," << r.t_match_ms << ","
         << r.t_filter_ms << "," << r.t_geometry_ms << "," << r.t_warp_ms << ","
@@ -212,6 +212,46 @@ void appendSummaryCsvRow(std::ostringstream& oss,
     }
 }
 
+// 返回各方法族在动态评测指标列之前的固定列数，最后一列均为总耗时。
+size_t fixedSummaryColumnCount(MethodFamily family) {
+    switch (family) {
+    case MethodFamily::STRUCTURE:
+        return 24;
+    case MethodFamily::DIRECT:
+        return 19;
+    case MethodFamily::LEARNING:
+    case MethodFamily::KEYPOINT:
+    default:
+        return 23;
+    }
+}
+
+// 在总耗时列写入所有已写出样本的平均值，其他固定列和动态指标列保持为空。
+void appendAverageTotalTimeRow(std::ostringstream& oss,
+                               MethodFamily family,
+                               const std::vector<std::string>& metric_columns,
+                               const std::vector<RegistrationResult>& results,
+                               size_t row_count) {
+    if (row_count == 0) {
+        return;
+    }
+
+    double total_time_ms = 0.0;
+    for (size_t i = 0; i < row_count; ++i) {
+        total_time_ms += results[i].t_total_ms;
+    }
+
+    oss << "AVERAGE";
+    const size_t fixed_column_count = fixedSummaryColumnCount(family);
+    for (size_t column = 2; column < fixed_column_count; ++column) {
+        oss << ",";
+    }
+    oss << "," << std::fixed << std::setprecision(3)
+        << total_time_ms / static_cast<double>(row_count);
+    appendMetricValues(oss, metric_columns, nullptr);
+    oss << "\n";
+}
+
 } // namespace
 
 void write(const std::filesystem::path& csv_path,
@@ -223,12 +263,15 @@ void write(const std::filesystem::path& csv_path,
     std::ostringstream oss;
     appendSummaryCsvHeader(oss, family, metric_columns);
 
-    for (size_t i = 0; i < sample_names.size() && i < results.size(); ++i) {
+    const size_t row_count = std::min(sample_names.size(), results.size());
+    for (size_t i = 0; i < row_count; ++i) {
         const auto& r = results[i];
         appendSummaryCsvRow(oss, family, sample_names[i], r);
         appendMetricValues(oss, metric_columns, i < evaluations.size() ? &evaluations[i] : nullptr);
         oss << "\n";
     }
+
+    appendAverageTotalTimeRow(oss, family, metric_columns, results, row_count);
 
     file_utils::writeWholeFile(csv_path, oss.str());
 }

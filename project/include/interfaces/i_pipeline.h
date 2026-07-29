@@ -20,8 +20,9 @@ public:
     /// 根据配置初始化流水线各阶段组件。
     virtual bool configure(const PipelineConfig& cfg) = 0;
 
-    /// 执行完整的配准流程。
-    virtual bool run(RegistrationContext& ctx) = 0;
+    /// 使用本次运行的输入输出路径执行流程；省略参数时回退到 YAML 配置。
+    virtual bool run(RegistrationContext& ctx,
+                     const PipelineRunOptions& options = PipelineRunOptions{}) = 0;
 
     /// 按配置显示调试窗口，便于在运行后观察结果。
     virtual bool showWindows(RegistrationContext& ctx) = 0;

@@ -52,8 +52,6 @@ RigidEstimator::RigidEstimator(const YAML::Node& cfg) {
         std::clamp(yaml_utils::getInt(params, "candidateMaskForegroundThreshold", 10), 0, 255);
     _candidateMinContainment =
         yaml_utils::getDouble(params, "candidateMinContainment", -1.0);
-    _candidateMinBidirectionalCoverage =
-        yaml_utils::getDouble(params, "candidateMinBidirectionalCoverage", -1.0);
     _candidateDedupRotationDiffDeg =
         std::max(0.0, yaml_utils::getDouble(params, "candidateDedupRotationDiffDeg", 2.0));
     _candidateDedupTranslationDiff =
@@ -98,8 +96,6 @@ RigidEstimator::RigidEstimator(const YAML::Node& cfg) {
                 _candidateMaskForegroundThreshold,
                 ", candidateMinContainment=",
                 _candidateMinContainment,
-                ", candidateMinBidirectionalCoverage=",
-                _candidateMinBidirectionalCoverage,
                 ", candidateDedupRotationDiffDeg=",
                 _candidateDedupRotationDiffDeg,
                 ", candidateDedupTranslationDiff=",
@@ -115,10 +111,7 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
     gd.type = GeometryType::RIGID;
 
     // 2. 从上下文中解析当前对应点来源，并构造统一的对应关系视图。
-    const CorrespondenceSource source = correspondenceSourceFromContext(ctx);
-    const CorrespondenceView view =
-        source == CorrespondenceSource::NONE ? buildBestCorrespondenceView(ctx)
-                                             : buildCorrespondenceView(ctx, source);
+    const CorrespondenceView view = ensureCorrespondenceView(ctx);
 
     // 3. rigid 至少需要两对点才能估计旋转和平移，不满足时直接失败。
     if (view.filtered.size() < 2) {
@@ -247,15 +240,44 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
         }
     }
 
-    const bool canTryFilteredMatchCandidates =
+    // 7. 在生成额外候选前冻结 baseline 诊断，避免最终选中候选覆盖触发判断依据。
+    const int baselineInliers =
+        refined && !A.empty() ? partial_affine_utils::countInliers(mask) : 0;
+    const double baselineMeanReprojectionError =
+        baselineInliers > 0
+            ? partial_affine_utils::reprojectionErrorSum(pts1, pts2, mask, A) /
+                  static_cast<double>(baselineInliers)
+            : -1.0;
+    const bool baselineFailed =
+        !refined || A.empty() || baselineInliers < _minInliers;
+    gd.baseline_valid = !baselineFailed;
+    gd.baseline_num_inliers = baselineInliers;
+    gd.baseline_mean_reproj_error = baselineMeanReprojectionError;
+
+    // 8. 候选总开关开启且前置条件满足时，始终生成额外候选，不受 baseline 成败影响。
+    const bool candidatePrerequisitesMet =
         _enableFilteredMatchCandidates &&
         _estimatorBackend != "CUSTOM_RIGID_RANSAC" &&
         static_cast<int>(pts1.size()) >= 2 &&
         !filteredDistances.empty() &&
         _filteredMatchCandidateCount > 0;
+    const bool canTryFilteredMatchCandidates = candidatePrerequisitesMet;
+    gd.candidate_fallback_attempted = canTryFilteredMatchCandidates;
+    gd.candidate_fallback_trigger_reason =
+        canTryFilteredMatchCandidates ? "enabled" : "not_available";
 
-    // baseline refine 失败时，如果开启了 filtered 多候选，就继续尝试候选模型。
-    // 这正是为了处理 RANSAC 初始模型陷入局部最优、但 filtered 中仍有可用点的情况。
+    IR_LOG_INFO("RigidEstimator baseline: valid=",
+                gd.baseline_valid,
+                ", inliers=",
+                gd.baseline_num_inliers,
+                ", mean_reproj_error=",
+                gd.baseline_mean_reproj_error,
+                ", candidate_state=",
+                gd.candidate_fallback_trigger_reason,
+                ", candidate_prerequisites=",
+                candidatePrerequisitesMet);
+
+    // 9. baseline 本身失败时，只有满足候选触发条件才允许继续由额外候选接管。
     if (!refined) {
         gd.message = "failed to refine rigid transform from RANSAC inliers";
         IR_LOG_DEBUG("RigidEstimator: baseline refine failed, mode=",
@@ -334,9 +356,8 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
         int selectedInliers = 0;
         double selectedError = std::numeric_limits<double>::infinity();
         double selectedContainment = -1.0;
-        double selectedBidirectionalCoverage = -1.0;
 
-        // 最终统一按“前景几何门槛优先，再比较内点数 / coverage / containment / 误差”
+        // 最终统一按“前景几何门槛优先，再比较内点数 / containment / 误差”
         // 选择最优 rigid。若所有候选都没过前景门槛，则自动回退到旧规则，避免直接清空结果。
         if (rigid_estimator_helpers::selectBestRigidCandidate(candidateTransforms,
                                                               candidateMasks,
@@ -347,15 +368,13 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
                                                               _enableCandidateMaskScoring,
                                                               _candidateMaskForegroundThreshold,
                                                               _candidateMinContainment,
-                                                              _candidateMinBidirectionalCoverage,
                                                               _candidateDedupRotationDiffDeg,
                                                               _candidateDedupTranslationDiff,
                                                               selectedA,
                                                               selectedMask,
                                                               selectedInliers,
                                                               selectedError,
-                                                              selectedContainment,
-                                                              selectedBidirectionalCoverage)) {
+                                                              selectedContainment)) {
             A = selectedA;
             mask = selectedMask;
             IR_LOG_INFO("RigidEstimator filtered-match candidates generated=",
@@ -369,9 +388,7 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
                         ", selected_error=",
                         selectedError,
                         ", selected_containment=",
-                        selectedContainment,
-                        ", selected_bidirectional_coverage=",
-                        selectedBidirectionalCoverage);
+                        selectedContainment);
         } else {
             IR_LOG_INFO("RigidEstimator filtered-match candidates generated=0 or no candidate survived scoring.");
         }

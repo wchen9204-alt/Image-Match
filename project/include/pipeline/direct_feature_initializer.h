@@ -30,7 +30,7 @@ public:
     /// 返回当前配置是否启用了直接法点特征初始化。
     bool enabled() const { return _enabled; }
 
-    /// 尝试生成可用初始矩阵；通过安全门时写入 ctx.feature_initializer_data。
+    /// 尝试生成点特征初值；是否可作为 seed 由 YAML 的 seed_mode 和质量门控共同决定。
     bool run(RegistrationContext& ctx);
 
 private:

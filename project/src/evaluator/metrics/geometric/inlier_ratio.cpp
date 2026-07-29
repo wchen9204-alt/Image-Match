@@ -1,4 +1,4 @@
-﻿#include "evaluator/metrics/geometric/inlier_ratio.h"
+#include "evaluator/metrics/geometric/inlier_ratio.h"
 
 #include "data/correspondence_view.h"
 
@@ -8,14 +8,11 @@ MetricResult InlierRatioMetric::compute(const RegistrationContext& ctx, const Sa
     MetricResult r{name(), 0.0, false, ""};
 
     // 指标优先按当前上下文显式来源读取对应点视图，避免在多方法族之间猜测数据源。
-    const CorrespondenceSource source = correspondenceSourceFromContext(ctx);
-    const CorrespondenceView view =
-        source == CorrespondenceSource::NONE ? buildBestCorrespondenceView(ctx)
-                                             : buildCorrespondenceView(ctx, source);
+    const CorrespondenceView view = cachedCorrespondenceView(ctx);
     if (!view.empty()) {
         r.value = static_cast<double>(view.inlierCount()) / static_cast<double>(view.filteredCount());
         r.valid = true;
-        r.note = view.source_name;
+        r.note = std::string(view.source_name);
         return r;
     }
 

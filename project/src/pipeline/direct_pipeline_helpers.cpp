@@ -199,7 +199,7 @@ void syncFeatureInitializerDiagnostics(RegistrationContext& ctx) {
 }
 
 /// 对尚未内建“初值消费”逻辑的直接法，通用地完成一次 source 预 warp。
-/// 若初始值未被接受，或者该直接法会自己消费初始值，则这里什么都不做并返回 true。
+/// 若没有可用 seed，或者该直接法会自己消费初始值，则这里什么都不做并返回 true。
 bool applyFeatureInitializerPrewarp(RegistrationContext& ctx,
                                     const std::string& alignerName,
                                     cv::Mat& initializerMatrix,
@@ -211,19 +211,24 @@ bool applyFeatureInitializerPrewarp(RegistrationContext& ctx,
     originalColor.release();
     originalGray.release();
 
-    if (!ctx.feature_initializer_data.accepted ||
+    if (!ctx.feature_initializer_data.seed_available ||
         alignerConsumesFeatureInitializerInternally(alignerName)) {
         return true;
     }
 
     if (!matrixFromFeatureInitializer(ctx.feature_initializer_data, initializerMatrix)) {
-        return false;
+        // 宽松 seed 模式下，矩阵无法消费时退回原图，不能让初值阶段阻断直接法。
+        IR_LOG_WARN("DirectPipeline ignored unusable feature initializer matrix; using original source.");
+        return true;
     }
 
     cv::Mat warpedColor;
     cv::Mat warpedGray;
     if (!warpSourceByMatrix(ctx, initializerMatrix, warpedColor, warpedGray)) {
-        return false;
+        // 初始矩阵无法生成预 warp 时，保持原图并继续直接法默认优化。
+        IR_LOG_WARN("DirectPipeline failed to prewarp feature initializer; using original source.");
+        initializerMatrix.release();
+        return true;
     }
 
     originalColor = ctx.images.first.clone();
@@ -280,7 +285,7 @@ bool mergeFeatureInitializerAndDirectResult(RegistrationContext& ctx,
 bool buildInitializerWarpedSource(const RegistrationContext& ctx, cv::Mat& warped) {
     warped.release();
     const auto& init = ctx.feature_initializer_data;
-    if (!init.accepted || ctx.images.first.empty() || ctx.images.second.empty()) {
+    if (!init.seed_available || ctx.images.first.empty() || ctx.images.second.empty()) {
         return false;
     }
 

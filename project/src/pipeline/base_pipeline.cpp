@@ -1,4 +1,4 @@
-﻿#include "pipeline/base_pipeline.h"
+#include "pipeline/base_pipeline.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -9,6 +9,7 @@
 #include <opencv2/imgproc.hpp>
 
 #include "core/config.h"
+#include "data/correspondence_view.h"
 #include "pipeline/base_pipeline_helpers.h"
 #include "evaluator/quality/warp_quality_evaluator.h"
 #include "transform/affine_warper.h"
@@ -28,57 +29,46 @@ void syncWarpQualityToResult(RegistrationResult& result,
     result.warp_overlap_containment = quality.overlap_containment;
     result.warp_source_coverage = quality.source_coverage;
     result.warp_target_coverage = quality.target_coverage;
-    result.warp_bidirectional_coverage = quality.bidirectional_coverage;
     result.warp_edge_alignment_iou = quality.edge_alignment_iou;
     result.warp_photometric_error = quality.photometric_error;
 }
 
-/// 比较两个都已成功的 warp 质量结果，优先选择光度误差更低的结果；
-/// 若光度误差接近，再依次比较边缘对齐、双向 coverage 和 containment。
-bool preferInitializerResult(const warp_quality::WarpQualityResult& directQuality,
+/// 比较两个都已成功的 warp 质量结果。
+/// 两者已通过各自的质量门槛后，将 containment 和 NMAD 归一化为同向分数，
+/// 用综合分选择最终结果；平分时保留直接法结果，避免无意义的来源切换。
+bool preferInitializerResult(const PipelineConfig& cfg,
+                             const warp_quality::WarpQualityResult& directQuality,
                              const FeatureInitializerData& initializer) {
     const double kEps = 1e-6;
 
-    if (initializer.warp_photometric_error >= 0.0 && directQuality.photometric_error >= 0.0) {
-        if (initializer.warp_photometric_error + kEps < directQuality.photometric_error) {
-            return true;
-        }
-        if (directQuality.photometric_error + kEps < initializer.warp_photometric_error) {
-            return false;
-        }
+    const auto& validation = cfg.warp_quality;
+    const double minContainment = validation.overlap.min_containment;
+    const double maxPhotometricError = validation.photometric.max_nmad;
+    constexpr double kContainmentWeight = 0.35;
+    constexpr double kPhotometricWeight = 0.65;
+
+    // 两项门槛未启用或配置非法时，没有可比较的共同评分尺度，保留直接法结果。
+    if (!validation.overlap.containment_enabled || !validation.photometric.enabled ||
+        minContainment < 0.0 || minContainment >= 1.0 || maxPhotometricError <= 0.0) {
+        return false;
     }
 
-    if (initializer.warp_edge_alignment_iou >= 0.0 && directQuality.edge_alignment_iou >= 0.0) {
-        if (initializer.warp_edge_alignment_iou > directQuality.edge_alignment_iou + kEps) {
-            return true;
-        }
-        if (directQuality.edge_alignment_iou > initializer.warp_edge_alignment_iou + kEps) {
-            return false;
-        }
-    }
+    const auto qualityScore = [&](const double containment, const double nmad) {
+        // containment 越接近 1 越好；低于验收线的值归零，验收后只比较剩余提升空间。
+        const double containmentScore =
+            std::clamp((containment - minContainment) / (1.0 - minContainment), 0.0, 1.0);
+        // NMAD 越小越好；达到上限时为零，零误差时为满分。
+        const double photometricScore =
+            std::clamp(1.0 - nmad / maxPhotometricError, 0.0, 1.0);
+        return kContainmentWeight * containmentScore +
+               kPhotometricWeight * photometricScore;
+    };
 
-    if (initializer.warp_bidirectional_coverage >= 0.0 &&
-        directQuality.bidirectional_coverage >= 0.0) {
-        if (initializer.warp_bidirectional_coverage >
-            directQuality.bidirectional_coverage + kEps) {
-            return true;
-        }
-        if (directQuality.bidirectional_coverage >
-            initializer.warp_bidirectional_coverage + kEps) {
-            return false;
-        }
-    }
-
-    if (initializer.warp_overlap_containment >= 0.0 && directQuality.overlap_containment >= 0.0) {
-        if (initializer.warp_overlap_containment > directQuality.overlap_containment + kEps) {
-            return true;
-        }
-        if (directQuality.overlap_containment > initializer.warp_overlap_containment + kEps) {
-            return false;
-        }
-    }
-
-    return false;
+    const double initializerScore = qualityScore(initializer.warp_overlap_containment,
+                                                 initializer.warp_photometric_error);
+    const double directScore = qualityScore(directQuality.overlap_containment,
+                                            directQuality.photometric_error);
+    return initializerScore > directScore + kEps;
 }
 
 /// 将 evaluator 中和通用结果字段同义的指标同步回 RegistrationResult。
@@ -128,8 +118,6 @@ bool resolveDirectFinalValidationReference(const PipelineConfig& cfg,
         ctx.result.warp_overlap_containment = ctx.feature_initializer_data.warp_overlap_containment;
         ctx.result.warp_source_coverage = ctx.feature_initializer_data.warp_source_coverage;
         ctx.result.warp_target_coverage = ctx.feature_initializer_data.warp_target_coverage;
-        ctx.result.warp_bidirectional_coverage =
-            ctx.feature_initializer_data.warp_bidirectional_coverage;
         ctx.result.warp_edge_alignment_iou =
             ctx.feature_initializer_data.warp_edge_alignment_iou;
         ctx.result.warp_photometric_error =
@@ -147,14 +135,12 @@ bool resolveDirectFinalValidationReference(const PipelineConfig& cfg,
         return true;
     }
 
-    if (preferInitializerResult(directQuality, ctx.feature_initializer_data)) {
+    if (preferInitializerResult(cfg, directQuality, ctx.feature_initializer_data)) {
         ctx.result.final_validation_source = "INITIALIZER";
         ctx.result.feature_initializer_used = true;
         ctx.result.warp_overlap_containment = ctx.feature_initializer_data.warp_overlap_containment;
         ctx.result.warp_source_coverage = ctx.feature_initializer_data.warp_source_coverage;
         ctx.result.warp_target_coverage = ctx.feature_initializer_data.warp_target_coverage;
-        ctx.result.warp_bidirectional_coverage =
-            ctx.feature_initializer_data.warp_bidirectional_coverage;
         ctx.result.warp_edge_alignment_iou =
             ctx.feature_initializer_data.warp_edge_alignment_iou;
         ctx.result.warp_photometric_error =
@@ -631,7 +617,6 @@ bool BasePipeline::validateWarpQuality(RegistrationContext& ctx) {
     ctx.result.warp_overlap_containment = -1.0;
     ctx.result.warp_source_coverage = -1.0;
     ctx.result.warp_target_coverage = -1.0;
-    ctx.result.warp_bidirectional_coverage = -1.0;
     ctx.result.warp_edge_alignment_iou = -1.0;
     ctx.result.warp_photometric_error = -1.0;
 
@@ -659,7 +644,7 @@ bool BasePipeline::validateWarpQuality(RegistrationContext& ctx) {
 
     cv::Mat matrix;
     const bool needsTransformMatrix =
-        options.validate_containment || options.validate_bidirectional_coverage;
+        options.validate_containment;
     if (needsTransformMatrix && !base_pipeline_helpers::activeTransformMatrix(ctx, matrix)) {
         ctx.result.message = "warp mask validation failed: no transform matrix";
         IR_LOG_WARN(ctx.result.message);
@@ -688,8 +673,6 @@ bool BasePipeline::validateWarpQuality(RegistrationContext& ctx) {
                 ctx.result.warp_source_coverage,
                 ", target_coverage=",
                 ctx.result.warp_target_coverage,
-                ", bidirectional_coverage=",
-                ctx.result.warp_bidirectional_coverage,
                 ", edge_iou=",
                 ctx.result.warp_edge_alignment_iou,
                 ", nmad=",
@@ -702,15 +685,15 @@ std::string BasePipeline::buildOutputStem(const RegistrationContext& ctx) const 
 }
 
 bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
-    if (_config.output_dir.empty()) {
+    if (!_config.save_visuals || ctx.output_dir.empty()) {
         return true;
     }
 
     // 1. 创建通用输出目录。
-    const fs::path originals_dir = _config.output_dir / "originals";
-    const fs::path warped_dir = _config.output_dir / "warped";
-    const fs::path blend_dir = _config.output_dir / "blend";
-    const fs::path false_color_overlay_dir = _config.output_dir / "false_color_overlay";
+    const fs::path originals_dir = ctx.output_dir / "originals";
+    const fs::path warped_dir = ctx.output_dir / "warped";
+    const fs::path blend_dir = ctx.output_dir / "blend";
+    const fs::path false_color_overlay_dir = ctx.output_dir / "false_color_overlay";
     std::error_code ec;
     fs::create_directories(originals_dir, ec);
     fs::create_directories(warped_dir, ec);
@@ -721,8 +704,8 @@ bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
     const std::string sampleStem = ctx.image1_path.stem().string() + "_" +
                                    ctx.image2_path.stem().string();
 
-    // 2. 保存原始 source / target，便于和 warped / blend 对照。
-    if (!ctx.images.first.empty()) {
+    // 2. 按独立开关保存原始 source / target，便于和 warped / blend 对照。
+    if (_config.save_originals && !ctx.images.first.empty()) {
         const fs::path out = originals_dir / (sampleStem + "_source_original.png");
         if (cv::imwrite(out.string(), ctx.images.first)) {
             IR_LOG_INFO("Wrote source original image: ", out.string());
@@ -730,7 +713,7 @@ bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
             IR_LOG_WARN("Failed to write source original image: ", out.string());
         }
     }
-    if (!ctx.images.second.empty()) {
+    if (_config.save_originals && !ctx.images.second.empty()) {
         const fs::path out = originals_dir / (sampleStem + "_target_original.png");
         if (cv::imwrite(out.string(), ctx.images.second)) {
             IR_LOG_INFO("Wrote target original image: ", out.string());
@@ -741,11 +724,13 @@ bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
 
     // 3. 保存 warped source，并和 target 按同尺寸画布生成 blend。
     if (_config.warp && !ctx.warped_image.empty()) {
-        const fs::path out = warped_dir / (stem + "_warped.png");
-        cv::imwrite(out.string(), ctx.warped_image);
-        IR_LOG_INFO("Wrote warped image: ", out.string());
+        if (_config.save_warped) {
+            const fs::path out = warped_dir / (stem + "_warped.png");
+            cv::imwrite(out.string(), ctx.warped_image);
+            IR_LOG_INFO("Wrote warped image: ", out.string());
+        }
 
-        if (ctx.warped_image.size() == ctx.images.second.size() &&
+        if (_config.save_blend && ctx.warped_image.size() == ctx.images.second.size() &&
             ctx.warped_image.type() == ctx.images.second.type()) {
             cv::Mat blend;
             cv::addWeighted(ctx.warped_image, 0.5, ctx.images.second, 0.5, 0.0, blend);
@@ -754,7 +739,8 @@ bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
             IR_LOG_INFO("Wrote blend image: ", blend_out.string());
         }
 
-        if (ctx.warped_image.size() == ctx.images.second.size()) {
+        if (_config.save_false_color_overlay &&
+            ctx.warped_image.size() == ctx.images.second.size()) {
             cv::Mat falseColorOverlay;
             if (base_pipeline_helpers::buildFalseColorOverlay(
                     ctx.warped_image,
@@ -806,14 +792,14 @@ bool BasePipeline::showWindows(RegistrationContext& ctx) {
     return true;
 }
 
-bool BasePipeline::run(RegistrationContext& ctx) {
+bool BasePipeline::run(RegistrationContext& ctx, const PipelineRunOptions& options) {
     Timer total;
 
-    // 1. 初始化本次运行上下文，并写入输入输出路径。
+    // 1. 初始化本次运行上下文；批处理优先使用本次传入的路径，单次运行回退到 YAML 配置。
     ctx.reset();
-    ctx.image1_path = _config.image1_path;
-    ctx.image2_path = _config.image2_path;
-    ctx.output_dir = _config.output_dir;
+    ctx.image1_path = options.image1_path.empty() ? _config.image1_path : options.image1_path;
+    ctx.image2_path = options.image2_path.empty() ? _config.image2_path : options.image2_path;
+    ctx.output_dir = options.output_dir.empty() ? _config.output_dir : options.output_dir;
 
     auto fail = [&](const std::string& msg) {
         ctx.result.success = false;
@@ -841,7 +827,13 @@ bool BasePipeline::run(RegistrationContext& ctx) {
         return fail(detail);
     }
 
-    if (!runEstimation(ctx)) {
+    // 几何估计器读取同一份预建快照，避免在各估计器内部重新展开对应点。
+    refreshCorrespondenceSnapshot(ctx);
+    const bool estimationOk = runEstimation(ctx);
+
+    // 估计过程会写回内点；刷新后评测和可视化共享最终数据，而不重复构建快照。
+    refreshCorrespondenceSnapshot(ctx);
+    if (!estimationOk) {
         const std::string detail =
             ctx.geometry_data.message.empty()
                 ? std::string("estimation failed")
@@ -866,11 +858,11 @@ bool BasePipeline::run(RegistrationContext& ctx) {
                                               : ctx.result.message);
     }
 
-    saveOutputs(ctx);
-    // 3. 所有阶段完成后记录总耗时和成功状态。
+    // 3. 在写盘前冻结成功路径的总耗时，保证与失败路径采用相同口径。
     ctx.result.success = true;
     ctx.result.t_total_ms = total.elapsedMs();
     ctx.result.message = "OK";
+    saveOutputs(ctx);
     return true;
 }
 

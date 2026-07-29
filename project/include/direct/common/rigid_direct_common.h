@@ -266,11 +266,11 @@ inline bool rigidParamsFromAffine(const cv::Mat& affine, RigidParams& params) {
 }
 
 /// 功能：从上下文中的点特征初始化结果读取刚体初值。
-/// 作用：仅在粗估已通过采用条件时，为直接法提供更稳定的起点。
+/// 作用：仅在初始化结果可作为 seed 时，为直接法提供更稳定的起点。
 inline bool rigidParamsFromContextInitializer(const RegistrationContext& ctx,
                                               RigidParams& params) {
     const auto& init = ctx.feature_initializer_data;
-    if (!init.accepted || init.A.empty()) {
+    if (!init.seed_available || init.A.empty()) {
         return false;
     }
     return rigidParamsFromAffine(init.A, params);

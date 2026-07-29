@@ -18,7 +18,10 @@ struct FeatureInitializerData {
     /// 是否通过初始化阶段自己的接受条件并产出可用初值。
     bool accepted = false;
 
-    /// 被接受的点特征方法名称。
+    /// 是否拥有可供直接法使用的合法几何初值；可与 accepted 独立。
+    bool seed_available = false;
+
+    /// 当前点特征初值来源的方法名称；可能仅作为 seed 使用。
     std::string method;
 
     /// 初始化阶段状态说明；失败时记录拒绝原因。
@@ -46,7 +49,6 @@ struct FeatureInitializerData {
     double warp_overlap_containment = -1.0;
     double warp_source_coverage = -1.0;
     double warp_target_coverage = -1.0;
-    double warp_bidirectional_coverage = -1.0;
     double warp_edge_alignment_iou = -1.0;
     double warp_photometric_error = -1.0;
 
@@ -54,6 +56,7 @@ struct FeatureInitializerData {
     void clear() {
         attempted = false;
         accepted = false;
+        seed_available = false;
         method.clear();
         message.clear();
         type = GeometryType::UNKNOWN;
@@ -69,7 +72,6 @@ struct FeatureInitializerData {
         warp_overlap_containment = -1.0;
         warp_source_coverage = -1.0;
         warp_target_coverage = -1.0;
-        warp_bidirectional_coverage = -1.0;
         warp_edge_alignment_iou = -1.0;
         warp_photometric_error = -1.0;
     }

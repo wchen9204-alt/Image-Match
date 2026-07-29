@@ -1,4 +1,4 @@
-﻿#include "utils/visualization/draw_inliers.h"
+#include "utils/visualization/draw_inliers.h"
 
 #include <algorithm>
 #include <vector>
@@ -17,17 +17,14 @@ cv::Mat DrawInliers::render(const RegistrationContext& ctx, const Options& opt) 
         IR_LOG_WARN("DrawInliers: empty source images.");
         return {};
     }
-    const CorrespondenceSource source = correspondenceSourceFromContext(ctx);
-    const CorrespondenceView view =
-        source == CorrespondenceSource::NONE ? buildBestCorrespondenceView(ctx)
-                                             : buildCorrespondenceView(ctx, source);
+    const CorrespondenceView view = cachedCorrespondenceView(ctx);
     // draw_inliers 直接使用几何阶段已经确认并写回的内点，不在可视化阶段重新推导。
-    if (view.inliers.empty()) {
+    if (!view.first_keypoints_storage || !view.second_keypoints_storage || view.inliers.empty()) {
         IR_LOG_DEBUG("DrawInliers: no inlier matches available.");
         return {};
     }
 
-    std::vector<cv::DMatch> inliers = view.inliers;
+    std::vector<cv::DMatch> inliers(view.inliers.begin(), view.inliers.end());
     if (opt.max_inliers > 0 && static_cast<int>(inliers.size()) > opt.max_inliers) {
         // 内点数量过多时优先保留距离更小的匹配，避免可视化过于拥挤。
         std::partial_sort(inliers.begin(),
@@ -41,9 +38,9 @@ cv::Mat DrawInliers::render(const RegistrationContext& ctx, const Options& opt) 
 
     cv::Mat overlay;
     cv::drawMatches(images.first,
-                    view.first_keypoints,
+                    *view.first_keypoints_storage,
                     images.second,
-                    view.second_keypoints,
+                    *view.second_keypoints_storage,
                     inliers,
                     overlay,
                     opt.inlier_color,

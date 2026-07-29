@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <filesystem>
 #include <string>
@@ -23,6 +23,12 @@ enum class MatchView {
     INLIERS
 };
 
+/// 结构法匹配图使用的对应关系来源。
+enum class StructureMatchSource {
+    RAW,
+    INLIERS
+};
+
 /// 直接法最终成功判定时，如何参考点特征初始化结果。
 enum class DirectValidationReferenceMode {
     /// 只使用直接法最终输出的 warp 质量作为成功判定依据。
@@ -32,6 +38,14 @@ enum class DirectValidationReferenceMode {
     /// 2. 只有一方成功则直接采用成功的一方；
     /// 3. 两者都成功则比较双方质量，选择更优结果作为最终判定依据。
     BEST_OF_DIRECT_AND_INITIALIZER
+};
+
+/// 直接法消费点特征初值的策略。
+enum class FeatureInitializerSeedMode {
+    /// 仅使用通过完整初始化质量门控的点特征结果；未通过时直接法从原图开始。
+    ACCEPTED_ONLY,
+    /// 只要几何估计产出合法变换就作为初值；质量门控失败时仍不能作为最终结果。
+    ESTIMATED_WHEN_AVAILABLE
 };
 
 /// 将 MethodFamily 枚举转为输出目录名。
@@ -74,11 +88,6 @@ struct PipelineConfig {
         /// 局部包含率最低阈值；通常用于“一张图是另一张图局部”的场景。
         double min_containment = 0.20;
         /// 是否启用 warped source / target 的双向前景 coverage 验证。
-        bool bidirectional_coverage_enabled = false;
-        /// 双向 coverage 最低阈值；实际比较时取 source / target coverage 的较大值。
-        double min_bidirectional_coverage = -1.0;
-        /// containment 与 bidirectional coverage 同时启用时，是否允许“任一达标即可通过”。
-        bool accept_if_either_passes = false;
         /// 生成前景 mask 时使用的灰度阈值。
         int foreground_threshold = 10;
     };
@@ -89,8 +98,6 @@ struct PipelineConfig {
         bool enabled = false;
         /// 常规光度误差验证的最大 NMAD 阈值。
         double max_nmad = 0.15;
-        /// 仅靠 coverage 放行、但 containment 未达标时使用的更严格 NMAD 阈值；小于 0 表示禁用。
-        double max_nmad_for_coverage_only = -1.0;
     };
 
     /// warp 边缘对齐验证参数，负责拦截“覆盖了但内容没对上”的误判。
@@ -130,6 +137,8 @@ struct PipelineConfig {
     struct FeatureInitializerConfig {
         /// 是否启用直接法前置点特征初始值估计。
         bool enabled = false;
+        /// 初值消费策略；默认仅使用通过完整质量门控的结果。
+        FeatureInitializerSeedMode seed_mode = FeatureInitializerSeedMode::ACCEPTED_ONLY;
         /// 直接法最终成功判定时，是否允许回看已接受的点特征初值。
         DirectValidationReferenceMode final_validation_reference =
             DirectValidationReferenceMode::DIRECT_ONLY;
@@ -167,15 +176,22 @@ struct PipelineConfig {
     std::filesystem::path image2_path;
     std::filesystem::path output_dir;
 
+    /// 图片输出总开关；false 时跳过所有 PNG 编码和写盘。
+    bool save_visuals = true;
     bool draw_keypoints = false;
     bool draw_matches = true;
-    bool draw_inliers_only = false;
     std::vector<MatchView> match_views = {
         MatchView::RAW,
         MatchView::FILTERED,
         MatchView::INLIERS
     };
     int max_matches_drawn = 100;
+    bool save_originals = true;
+    bool save_warped = true;
+    bool save_blend = true;
+    bool save_false_color_overlay = true;
+    bool save_structure_responses = true;
+    StructureMatchSource structure_match_source = StructureMatchSource::RAW;
     bool warp = true;
     bool show_source_window = false;
     bool show_target_window = false;
@@ -239,6 +255,13 @@ public:
 
     /// 读取一个 pipeline YAML，并解析其中引用到的子配置路径。
     static PipelineConfig loadPipeline(const std::filesystem::path& path);
+
+    /// 重置 batch/compare 使用的可视化字段，避免继承单算法 pipeline 的输出偏好。
+    static void resetVisualization(PipelineConfig& cfg);
+
+    /// 将 visualization YAML 中出现的字段覆盖到 pipeline 配置。
+    static void applyVisualizationOverrides(PipelineConfig& cfg,
+                                            const YAML::Node& visualization);
 
     /// 将相对路径解析成相对于 `base_dir` 的规范化路径。
     static std::filesystem::path resolvePath(const std::filesystem::path& base_dir,

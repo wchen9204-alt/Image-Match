@@ -60,13 +60,9 @@ WarpQualityOptions makeFinalWarpQualityOptions(const PipelineConfig& cfg) {
     WarpQualityOptions options;
     options.validate_containment = overlap.containment_enabled;
     options.min_overlap_containment = overlap.min_containment;
-    options.validate_bidirectional_coverage = overlap.bidirectional_coverage_enabled;
-    options.min_bidirectional_coverage = overlap.min_bidirectional_coverage;
-    options.accept_overlap_if_either_passes = overlap.accept_if_either_passes;
     options.foreground_threshold = overlap.foreground_threshold;
     options.validate_photometric = photometric.enabled;
     options.max_photometric_error = photometric.max_nmad;
-    options.max_photometric_error_for_coverage_only = photometric.max_nmad_for_coverage_only;
     options.validate_edge_alignment = edge.enabled;
     options.min_edge_alignment_iou = edge.min_iou;
     options.edge_alignment_canny_low_threshold = edge.canny_low_threshold;
@@ -84,13 +80,9 @@ WarpQualityOptions makeInitializerWarpQualityOptions(const PipelineConfig& cfg) 
     WarpQualityOptions options;
     options.validate_containment = overlap.containment_enabled;
     options.min_overlap_containment = overlap.min_containment;
-    options.validate_bidirectional_coverage = overlap.bidirectional_coverage_enabled;
-    options.min_bidirectional_coverage = overlap.min_bidirectional_coverage;
-    options.accept_overlap_if_either_passes = overlap.accept_if_either_passes;
     options.foreground_threshold = overlap.foreground_threshold;
     options.validate_photometric = photometric.enabled;
     options.max_photometric_error = photometric.max_nmad;
-    options.max_photometric_error_for_coverage_only = photometric.max_nmad_for_coverage_only;
     options.validate_edge_alignment = edge.enabled;
     options.min_edge_alignment_iou = edge.min_iou;
     options.edge_alignment_canny_low_threshold = edge.canny_low_threshold;
@@ -101,7 +93,7 @@ WarpQualityOptions makeInitializerWarpQualityOptions(const PipelineConfig& cfg) 
 }
 
 bool hasEnabledWarpQualityChecks(const WarpQualityOptions& options) {
-    return options.validate_containment || options.validate_bidirectional_coverage ||
+    return options.validate_containment ||
            options.validate_photometric || options.validate_edge_alignment;
 }
 
@@ -129,7 +121,7 @@ bool evaluateWarpQuality(const WarpQualityOptions& options,
 
     cv::Mat warpedSourceMask;
     const bool needOverlapGeometry =
-        options.validate_containment || options.validate_bidirectional_coverage;
+        options.validate_containment;
     if (needOverlapGeometry) {
         // 2. 几何覆盖类指标必须使用原始 source mask 和 source -> target 矩阵计算。
         if (sourceImage.empty() ||
@@ -145,44 +137,6 @@ bool evaluateWarpQuality(const WarpQualityOptions& options,
         }
     }
 
-    if (options.validate_bidirectional_coverage) {
-        cv::Mat inverseMatrix;
-        cv::Mat reverseWarpedTargetMask;
-
-        // 3. 双向 coverage 需要把 target mask 反向映射回 source 画布。
-        if (!base_pipeline_helpers::invertTransformMatrix(sourceToTargetMatrix,
-                                                          inverseMatrix) ||
-            !base_pipeline_helpers::warpMaskToTargetSize(targetMask,
-                                                         sourceImage.size(),
-                                                         inverseMatrix,
-                                                         reverseWarpedTargetMask)) {
-            fail(result, "warp mask validation failed: cannot inverse-warp target mask");
-            return false;
-        }
-
-        result.source_coverage =
-            base_pipeline_helpers::computeMaskCoverage(sourceMask, warpedSourceMask);
-        result.target_coverage =
-            base_pipeline_helpers::computeMaskCoverage(targetMask, reverseWarpedTargetMask);
-        result.bidirectional_coverage =
-            std::max(result.source_coverage, result.target_coverage);
-
-        if (result.source_coverage < 0.0 || result.target_coverage < 0.0 ||
-            result.bidirectional_coverage < 0.0) {
-            fail(result, "warp bidirectional coverage validation failed: invalid coverage");
-            return false;
-        }
-
-        if (!options.accept_overlap_if_either_passes &&
-            result.bidirectional_coverage < options.min_bidirectional_coverage) {
-            fail(result,
-                 "warp bidirectional coverage below threshold: " +
-                     std::to_string(result.bidirectional_coverage) + " < " +
-                     std::to_string(options.min_bidirectional_coverage));
-            return false;
-        }
-    }
-
     if (options.validate_containment) {
         result.overlap_containment =
             base_pipeline_helpers::computeMaskLocalContainment(sourceMask,
@@ -192,35 +146,11 @@ bool evaluateWarpQuality(const WarpQualityOptions& options,
             fail(result, "warp local containment failed: empty foreground");
             return false;
         }
-
-        if (!options.accept_overlap_if_either_passes &&
-            result.overlap_containment < options.min_overlap_containment) {
+        if (result.overlap_containment < options.min_overlap_containment) {
             fail(result,
                  "warp local containment below threshold: " +
                      std::to_string(result.overlap_containment) + " < " +
                      std::to_string(options.min_overlap_containment));
-            return false;
-        }
-    }
-
-    if (options.accept_overlap_if_either_passes && needOverlapGeometry) {
-        // 4. either-pass 允许 containment 或 bidirectional coverage 任意一项达标。
-        result.containment_pass_for_either =
-            !options.validate_containment ||
-            (result.overlap_containment >= 0.0 &&
-             result.overlap_containment >= options.min_overlap_containment);
-        result.coverage_pass_for_either =
-            !options.validate_bidirectional_coverage ||
-            (result.bidirectional_coverage >= 0.0 &&
-             result.bidirectional_coverage >= options.min_bidirectional_coverage);
-        if (!result.containment_pass_for_either && !result.coverage_pass_for_either) {
-            fail(result,
-                 "warp overlap validation failed: containment " +
-                     std::to_string(result.overlap_containment) + " < " +
-                     std::to_string(options.min_overlap_containment) +
-                     " and bidirectional coverage " +
-                     std::to_string(result.bidirectional_coverage) + " < " +
-                     std::to_string(options.min_bidirectional_coverage));
             return false;
         }
     }
@@ -286,16 +216,6 @@ bool evaluateWarpQuality(const WarpQualityOptions& options,
                  "warp photometric error above threshold: " +
                      std::to_string(result.photometric_error) + " > " +
                      std::to_string(options.max_photometric_error));
-            return false;
-        }
-        if (options.max_photometric_error_for_coverage_only >= 0.0 &&
-            options.accept_overlap_if_either_passes && result.coverage_pass_for_either &&
-            !result.containment_pass_for_either &&
-            result.photometric_error > options.max_photometric_error_for_coverage_only) {
-            fail(result,
-                 "warp coverage-only photometric error above threshold: " +
-                     std::to_string(result.photometric_error) + " > " +
-                     std::to_string(options.max_photometric_error_for_coverage_only));
             return false;
         }
     }

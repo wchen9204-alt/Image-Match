@@ -55,15 +55,33 @@ bool finiteMetric(double value) {
     return std::isfinite(value) && value >= 0.0;
 }
 
-bool validateGeometryGate(const PipelineConfig& cfg,
-                          const GeometryData& geometry,
-                          FeatureInitializerData& data,
-                          std::string& reason) {
+bool captureGeometryEstimate(const GeometryData& geometry,
+                             FeatureInitializerData& data,
+                             std::string& reason) {
     if (!geometry.valid) {
         reason = geometry.message.empty() ? "geometry estimator returned invalid result"
                                           : geometry.message;
         return false;
     }
+
+    cv::Mat matrix;
+    if (!matrixFromGeometry(geometry, matrix)) {
+        reason = "initializer geometry has no usable transform matrix";
+        return false;
+    }
+
+    data.type = geometry.type;
+    data.num_inliers = geometry.num_inliers;
+    data.inlier_ratio = geometry.inlier_ratio;
+    data.A = geometry.A.clone();
+    data.H = geometry.H.clone();
+    data.seed_available = true;
+    return true;
+}
+
+bool validateGeometryGate(const PipelineConfig& cfg,
+                          const GeometryData& geometry,
+                          std::string& reason) {
     const auto& acceptance = cfg.feature_initializer.acceptance;
     if (geometry.num_inliers < acceptance.min_inliers) {
         reason = "initializer inliers below threshold";
@@ -73,16 +91,6 @@ bool validateGeometryGate(const PipelineConfig& cfg,
         geometry.inlier_ratio < acceptance.min_inlier_ratio) {
         reason = "initializer inlier ratio below threshold";
         return false;
-    }
-
-    data.type = geometry.type;
-    data.num_inliers = geometry.num_inliers;
-    data.inlier_ratio = geometry.inlier_ratio;
-    if (!geometry.A.empty()) {
-        data.A = geometry.A.clone();
-    }
-    if (!geometry.H.empty()) {
-        data.H = geometry.H.clone();
     }
     return true;
 }
@@ -125,7 +133,11 @@ bool validateCandidate(const PipelineConfig& cfg,
     data.num_raw_matches = static_cast<int>(ctx.keypoint_match_data.raw_matches.size());
     data.num_filtered_matches = static_cast<int>(ctx.keypoint_match_data.filtered_matches.size());
 
-    if (!validateGeometryGate(cfg, ctx.geometry_data, data, reason)) {
+    // 先保留几何估计得到的合法矩阵，供宽松初值模式在后续质量门控拒绝时使用。
+    if (!captureGeometryEstimate(ctx.geometry_data, data, reason)) {
+        return false;
+    }
+    if (!validateGeometryGate(cfg, ctx.geometry_data, reason)) {
         return false;
     }
 
@@ -163,7 +175,6 @@ bool validateCandidate(const PipelineConfig& cfg,
     data.warp_overlap_containment = quality.overlap_containment;
     data.warp_source_coverage = quality.source_coverage;
     data.warp_target_coverage = quality.target_coverage;
-    data.warp_bidirectional_coverage = quality.bidirectional_coverage;
     data.warp_edge_alignment_iou = quality.edge_alignment_iou;
     data.warp_photometric_error = quality.photometric_error;
     return true;
@@ -258,6 +269,8 @@ bool DirectFeatureInitializer::run(RegistrationContext& ctx) {
 
     FeatureInitializerData best;
     best.attempted = true;
+    // 仅保存“有合法矩阵但未通过质量门控”的候选；不会参与最终结果选择。
+    FeatureInitializerData seedOnly;
     std::vector<std::string> rejectMessages;
 
     // 1. 候选从干净的点特征上下文开始，避免残留匹配污染初始化判断。
@@ -317,15 +330,27 @@ bool DirectFeatureInitializer::run(RegistrationContext& ctx) {
     } else {
         rejectMessages.push_back(_candidate.name + ":" + rejectReason);
         IR_LOG_INFO("DirectFeatureInitializer rejected ", _candidate.name, ": ", rejectReason);
+        if (candidateData.seed_available &&
+            _config.feature_initializer.seed_mode ==
+                FeatureInitializerSeedMode::ESTIMATED_WHEN_AVAILABLE) {
+            seedOnly = candidateData;
+            seedOnly.message = "seed-only: " + rejectReason;
+            IR_LOG_INFO("DirectFeatureInitializer keeps rejected estimate as direct seed: ",
+                        _candidate.name);
+        }
     }
 
     restoreContext(ctx, snapshot);
 
-    output = best.accepted ? best : FeatureInitializerData{};
+    output = best.accepted ? best
+                           : (seedOnly.seed_available ? seedOnly : FeatureInitializerData{});
     output.attempted = true;
     if (best.accepted) {
         output.message = "accepted";
         return true;
+    }
+    if (seedOnly.seed_available) {
+        return false;
     }
 
     std::ostringstream oss;

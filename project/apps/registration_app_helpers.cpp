@@ -1,4 +1,4 @@
-﻿#include "registration_app_helpers.h"
+#include "registration_app_helpers.h"
 
 #include <cmath>
 #include <filesystem>
@@ -164,34 +164,7 @@ std::vector<std::string> readPatternCandidates(const YAML::Node& node,
 }
 
 void applyVisualizationOverrides(PipelineConfig& pipelineCfg, const YAML::Node& node) {
-    if (!node || !node.IsMap()) {
-        return;
-    }
-    if (node["draw_keypoints"])
-        pipelineCfg.draw_keypoints =
-            yaml_utils::getBool(node, "draw_keypoints", pipelineCfg.draw_keypoints);
-    if (node["draw_matches"])
-        pipelineCfg.draw_matches =
-            yaml_utils::getBool(node, "draw_matches", pipelineCfg.draw_matches);
-    if (node["draw_inliers_only"])
-        pipelineCfg.draw_inliers_only =
-            yaml_utils::getBool(node, "draw_inliers_only", pipelineCfg.draw_inliers_only);
-    if (node["max_matches_drawn"])
-        pipelineCfg.max_matches_drawn =
-            yaml_utils::getInt(node, "max_matches_drawn", pipelineCfg.max_matches_drawn);
-    if (node["warp"])
-        pipelineCfg.warp = yaml_utils::getBool(node, "warp", pipelineCfg.warp);
-    if (node["show_source_window"])
-        pipelineCfg.show_source_window =
-            yaml_utils::getBool(node, "show_source_window", pipelineCfg.show_source_window);
-    if (node["show_target_window"])
-        pipelineCfg.show_target_window =
-            yaml_utils::getBool(node, "show_target_window", pipelineCfg.show_target_window);
-    if (node["show_warped_window"])
-        pipelineCfg.show_warped_window =
-            yaml_utils::getBool(node, "show_warped_window", pipelineCfg.show_warped_window);
-    if (node["wait_key"])
-        pipelineCfg.wait_key = yaml_utils::getInt(node, "wait_key", pipelineCfg.wait_key);
+    Config::applyVisualizationOverrides(pipelineCfg, node);
 }
 
 std::string buildKeypointSummaryText(const RegistrationContext& ctx) {
@@ -217,10 +190,6 @@ std::string buildKeypointSummaryText(const RegistrationContext& ctx) {
     if (r.warp_target_coverage >= 0.0) {
         oss << "  warp target   : " << std::fixed << std::setprecision(3)
             << r.warp_target_coverage << "\n";
-    }
-    if (r.warp_bidirectional_coverage >= 0.0) {
-        oss << "  warp bi-cov   : " << std::fixed << std::setprecision(3)
-            << r.warp_bidirectional_coverage << "\n";
     }
     if (r.warp_photometric_error >= 0.0) {
         oss << "  warp NMAD      : " << std::fixed << std::setprecision(4)
@@ -256,10 +225,6 @@ std::string buildLearningSummaryText(const RegistrationContext& ctx) {
     if (r.warp_target_coverage >= 0.0) {
         oss << "  warp target   : " << std::fixed << std::setprecision(3)
             << r.warp_target_coverage << "\n";
-    }
-    if (r.warp_bidirectional_coverage >= 0.0) {
-        oss << "  warp bi-cov   : " << std::fixed << std::setprecision(3)
-            << r.warp_bidirectional_coverage << "\n";
     }
     if (r.warp_photometric_error >= 0.0) {
         oss << "  warp NMAD      : " << std::fixed << std::setprecision(4)
@@ -305,10 +270,6 @@ std::string buildStructureSummaryText(const RegistrationContext& ctx) {
     if (r.warp_target_coverage >= 0.0) {
         oss << "  warp target   : " << std::fixed << std::setprecision(3)
             << r.warp_target_coverage << "\n";
-    }
-    if (r.warp_bidirectional_coverage >= 0.0) {
-        oss << "  warp bi-cov   : " << std::fixed << std::setprecision(3)
-            << r.warp_bidirectional_coverage << "\n";
     }
     if (r.warp_photometric_error >= 0.0) {
         oss << "  warp NMAD      : " << std::fixed << std::setprecision(4)
@@ -394,10 +355,6 @@ std::string buildDirectSummaryText(const RegistrationContext& ctx) {
         oss << "  warp target   : " << std::fixed << std::setprecision(3)
             << r.warp_target_coverage << "\n";
     }
-    if (r.warp_bidirectional_coverage >= 0.0) {
-        oss << "  warp bi-cov   : " << std::fixed << std::setprecision(3)
-            << r.warp_bidirectional_coverage << "\n";
-    }
     if (r.warp_photometric_error >= 0.0) {
         oss << "  warp NMAD      : " << std::fixed << std::setprecision(4)
             << r.warp_photometric_error << "\n";
@@ -481,7 +438,6 @@ std::string buildSummaryJson(const RegistrationContext& ctx,
     oss << "    \"warp_overlap_containment\": " << r.warp_overlap_containment << ",\n";
     oss << "    \"warp_source_coverage\": " << r.warp_source_coverage << ",\n";
     oss << "    \"warp_target_coverage\": " << r.warp_target_coverage << ",\n";
-    oss << "    \"warp_bidirectional_coverage\": " << r.warp_bidirectional_coverage << ",\n";
     oss << "    \"warp_edge_alignment_iou\": " << r.warp_edge_alignment_iou << ",\n";
     oss << "    \"warp_photometric_error\": " << r.warp_photometric_error << ",\n";
     oss << "    \"structure_overlap_iou\": " << r.structure_overlap_iou;
@@ -503,6 +459,20 @@ std::string buildSummaryJson(const RegistrationContext& ctx,
         oss << "  \"translation\": {\n";
         oss << "    \"dx\": " << ctx.structure_match_data.translation.x << ",\n";
         oss << "    \"dy\": " << ctx.structure_match_data.translation.y << "\n";
+        oss << "  },\n";
+    }
+    if (ctx.geometry_data.type == GeometryType::RIGID) {
+        const auto& gd = ctx.geometry_data;
+        oss << "  \"rigid_candidate_fallback\": {\n";
+        oss << "    \"baseline_valid\": "
+            << (gd.baseline_valid ? "true" : "false") << ",\n";
+        oss << "    \"baseline_num_inliers\": " << gd.baseline_num_inliers << ",\n";
+        oss << "    \"baseline_mean_reproj_error\": "
+            << gd.baseline_mean_reproj_error << ",\n";
+        oss << "    \"candidate_fallback_attempted\": "
+            << (gd.candidate_fallback_attempted ? "true" : "false") << ",\n";
+        oss << "    \"candidate_trigger_reason\": \""
+            << json_output::escapeString(gd.candidate_fallback_trigger_reason) << "\"\n";
         oss << "  },\n";
     }
     oss << "  \"timings_ms\": {\n";
@@ -575,13 +545,17 @@ void applyCompareOverrides(PipelineConfig& pipeline_cfg,
         output_dir.empty() ? output_root / pipeline_cfg.name
                            : Config::resolvePath(compare_yaml_dir, output_dir);
 
+    // compare YAML 自己决定可视化，不继承组合 pipeline 的 visualization 配置。
+    Config::resetVisualization(pipeline_cfg);
     const YAML::Node output = compare_cfg["output"];
-    if (output && output.IsMap() && output["save_visuals"]) {
-        pipeline_cfg.draw_matches =
-            yaml_utils::getBool(output, "save_visuals", pipeline_cfg.draw_matches);
-    }
+    pipeline_cfg.save_visuals = yaml_utils::getBool(output, "save_visuals", true);
     applyVisualizationOverrides(pipeline_cfg, compare_cfg["visualization"]);
     applyVisualizationOverrides(pipeline_cfg, combination["visualization"]);
+
+    // compare 暂不显示窗口，避免批量组合运行被交互界面阻塞。
+    pipeline_cfg.show_source_window = false;
+    pipeline_cfg.show_target_window = false;
+    pipeline_cfg.show_warped_window = false;
 }
 
 void writeRunSummaryFiles(const RegistrationContext& ctx,

@@ -267,15 +267,15 @@ std::string KeypointPipeline::buildOutputStem(const RegistrationContext& ctx) co
 }
 
 bool KeypointPipeline::saveOutputs(RegistrationContext& ctx) {
-    if (_config.output_dir.empty()) {
+    if (!_config.save_visuals || ctx.output_dir.empty()) {
         return true;
     }
 
     // 1. 准备点特征专属输出目录。
-    const fs::path keypoints_dir = _config.output_dir / "keypoints";
-    const fs::path all_match_dir = _config.output_dir / "all_match";
-    const fs::path filter_match_dir = _config.output_dir / "filter_match";
-    const fs::path inlier_match_dir = _config.output_dir / "inlier_match";
+    const fs::path keypoints_dir = ctx.output_dir / "keypoints";
+    const fs::path all_match_dir = ctx.output_dir / "all_match";
+    const fs::path filter_match_dir = ctx.output_dir / "filter_match";
+    const fs::path inlier_match_dir = ctx.output_dir / "inlier_match";
     std::error_code ec;
     fs::create_directories(keypoints_dir, ec);
     fs::create_directories(all_match_dir, ec);
@@ -373,7 +373,7 @@ bool KeypointPipeline::saveOutputs(RegistrationContext& ctx) {
             }
         }
 
-        const fs::path old_matches_dir = _config.output_dir / "matches";
+        const fs::path old_matches_dir = ctx.output_dir / "matches";
         removeStale(old_matches_dir / (stem + "_matches.png"));
         removeStale(old_matches_dir / (stem + "_matches_all.png"));
         removeStale(old_matches_dir / (stem + "_matches_inliers.png"));

@@ -62,14 +62,14 @@ inline bool normalizeEuclideanAffine(cv::Mat& affine) {
     return true;
 }
 
-/// 功能：把点特征粗估结果转换成 ECC 可直接使用的初始 warp。
+/// 功能：把允许作为 seed 的点特征粗估结果转换成 ECC 可直接使用的初始 warp。
 /// 作用：平台统一存的是 source -> target，而 ECC 内部需要 target(template) -> source(input)，
 /// 因此这里负责补齐矩阵形状并做一次求逆。
 inline bool initialWarpFromFeatureInitializer(const RegistrationContext& ctx,
                                               int motionType,
                                               cv::Mat& warp) {
     const auto& init = ctx.feature_initializer_data;
-    if (!init.accepted) {
+    if (!init.seed_available) {
         return false;
     }
 

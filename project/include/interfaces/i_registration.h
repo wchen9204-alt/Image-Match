@@ -20,8 +20,9 @@ public:
     /// 应用 pipeline 配置。
     virtual bool configure(const PipelineConfig& cfg) = 0;
 
-    /// 执行一次完整的配准流程。
-    virtual bool run(RegistrationContext& ctx) = 0;
+    /// 使用本次运行的输入输出路径执行已配置的配准流程；省略参数时回退到 YAML 配置。
+    virtual bool run(RegistrationContext& ctx,
+                     const PipelineRunOptions& options = PipelineRunOptions{}) = 0;
 };
 
 } // namespace ir

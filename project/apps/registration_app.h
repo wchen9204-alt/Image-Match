@@ -57,9 +57,10 @@ private:
         std::filesystem::path pipeline_yaml;
         DatasetLoader::Options dataset;
         std::filesystem::path output_root;
+        /// batch YAML 自身的可视化覆盖配置，不继承单算法 pipeline 的输出偏好。
+        YAML::Node visualization;
         bool save_visuals = true;
         bool summary_csv = true;
-        int delay_ms = 0;
     };
 
     /// 执行单个样本的配准流程。

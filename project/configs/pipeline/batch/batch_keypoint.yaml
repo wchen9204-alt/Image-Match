@@ -15,8 +15,19 @@ dataset:
   include: []
 
 output:
-  root: ../../../outputs/
+  root: ../../../tmp/
   save_visuals: true
   summary_csv: true
-  # 两个用例之间等待时间，单位毫秒；0 表示不等待。
-  delay_ms: 0
+
+# 批处理自身的可视化设置；不继承 keypoint pipeline YAML。
+visualization:
+  # 图片总开关在 output.save_visuals；这里控制各类图片。
+  draw_keypoints: true
+  draw_matches: true
+  # 点特征匹配图层级；可选 RAW / FILTERED / INLIERS。
+  match_views: [RAW, FILTERED, INLIERS]
+  max_matches_drawn: 100
+  save_originals: true
+  save_warped: true
+  save_blend: true
+  save_false_color_overlay: true

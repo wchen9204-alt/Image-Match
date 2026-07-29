@@ -23,5 +23,16 @@ output:
   # save_visuals / summary_csv 默认值：由批处理逻辑按当前配置文件显式给出
   save_visuals: true
   summary_csv: true
-  # 两个用例之间的等待时间，单位毫秒；0 表示不等待。
-  delay_ms: 0
+
+# 批处理自身的可视化设置；不继承 structure pipeline YAML。
+visualization:
+  draw_keypoints: false
+  draw_matches: true
+  # 结构匹配图使用的对应关系；可选 RAW / INLIERS。
+  structure_match_source: INLIERS
+  max_matches_drawn: 100
+  save_structure_responses: true
+  save_originals: true
+  save_warped: true
+  save_blend: true
+  save_false_color_overlay: true

@@ -46,31 +46,23 @@ validation:
     # 计算方式：intersection / min(source 原始前景面积, target 前景面积)。
     # 适用于一张图可能是另一张图局部的点特征配准场景。
     min_containment: 0.90
-    # 双向 coverage 最低阈值；取 source / target coverage 的较大值。
-    min_bidirectional_coverage: 0.98
-    # containment 或双向 coverage 任一强通过即可，兼容局部图包含场景。
-    accept_if_either_passes: true
     # 前景二值化阈值。
     foreground_threshold: 10
-  match_quality:
-    # 是否检查匹配质量统计。
-    enabled: true
-    # 是否把 min_inliers / min_inlier_ratio / max_reproj_error 不满足判为失败。
-    # true 表示这些阈值由 YAML 直接控制样例成功/失败；false 表示仅输出日志告警。
-    fail_on_violation: true
-    # 最少内点数；当前改为“只要有内点即可通过”，因此这里设为 1。
-    min_inliers: 2
-    # 最低内点率；当前不再作为成功/失败判断条件，因此设为 -1 禁用。
-    min_inlier_ratio: -1
-    # 最大重投影误差；-1 表示不启用该项阈值。
-    max_reproj_error: -1
-    # 最终内点在 source / target 前景包围盒中的最低空间覆盖率。
-    # 用于拦截少量内点集中在局部边缘导致的错误 rigid。
-    min_inlier_spatial_coverage: 0.05
   photometric:
-    # 是否启用重叠区域光度误差 NMAD 验证。
+    # 是否启用重叠前景区域的光度误差 NMAD 验证。
     enabled: true
-    # 最大 NMAD 阈值；高于该值时样例判失败。
+    # 最大 NMAD 阈值；0.15 表示允许的最大归一化中位绝对偏差。
     max_nmad: 0.15
-    # 仅靠 coverage 放行、但 containment 未达标时使用的更严格 NMAD。
-    max_nmad_for_coverage_only: 0.095
+  match_quality:
+    # 是否检查点特征对应关系的基础质量。
+    enabled: true
+    # 阈值不满足时是否直接判为失败。
+    fail_on_violation: true
+    # 最少内点数；2 是刚体变换的最低对应点数量。
+    min_inliers: 2
+    # 最低内点率；-1 表示不作为最终判定条件。
+    min_inlier_ratio: -1
+    # 最大重投影误差；-1 表示不作为最终判定条件。
+    max_reproj_error: -1
+    # 内点空间覆盖率；-1 表示不作为最终判定条件。
+    min_inlier_spatial_coverage: -1

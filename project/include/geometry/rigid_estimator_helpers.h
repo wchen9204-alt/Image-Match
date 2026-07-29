@@ -22,16 +22,8 @@ struct RigidCandidateScore {
     double reprojError = 0.0;
     /// warped source 与 target 的局部包含率。
     double containment = -1.0;
-    /// source 前景 warp 到目标画布后的保留比例。
-    double sourceCoverage = -1.0;
-    /// target 前景按逆变换 warp 回 source 画布后的保留比例。
-    double targetCoverage = -1.0;
-    /// 双向 coverage，取 source / target coverage 的较大值。
-    double bidirectionalCoverage = -1.0;
     /// 是否通过 containment 门槛。
     bool passedContainment = true;
-    /// 是否通过 bidirectional coverage 门槛。
-    bool passedBidirectionalCoverage = true;
     /// 是否整体通过前景 mask 几何门槛。
     bool passedMaskGate = true;
 };
@@ -74,14 +66,12 @@ bool selectBestRigidCandidate(const std::vector<cv::Mat>& candidateTransforms,
                               bool enableCandidateMaskScoring,
                               int candidateMaskForegroundThreshold,
                               double candidateMinContainment,
-                              double candidateMinBidirectionalCoverage,
                               double candidateDedupRotationDiffDeg,
                               double candidateDedupTranslationDiff,
                               cv::Mat& bestA,
                               std::vector<unsigned char>& bestMask,
                               int& bestInliers,
                               double& bestError,
-                              double& bestContainment,
-                              double& bestBidirectionalCoverage);
+                              double& bestContainment);
 
 } // namespace ir::rigid_estimator_helpers

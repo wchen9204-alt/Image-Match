@@ -1,4 +1,4 @@
-﻿#include "geometry/homography_estimator.h"
+#include "geometry/homography_estimator.h"
 
 #include <opencv2/calib3d.hpp>
 
@@ -42,10 +42,7 @@ bool HomographyEstimator::estimate(RegistrationContext& ctx) {
     gd.clear();
     gd.type = GeometryType::HOMOGRAPHY;
 
-    const CorrespondenceSource source = correspondenceSourceFromContext(ctx);
-    const CorrespondenceView view =
-        source == CorrespondenceSource::NONE ? buildBestCorrespondenceView(ctx)
-                                             : buildCorrespondenceView(ctx, source);
+    const CorrespondenceView view = ensureCorrespondenceView(ctx);
     if (view.filtered.size() < 4) {
         gd.message = "need at least 4 correspondences, got " + std::to_string(view.filtered.size());
         IR_LOG_ERROR("HomographyEstimator: need at least 4 correspondences, got ", view.filtered.size());

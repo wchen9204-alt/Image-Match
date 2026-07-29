@@ -19,5 +19,9 @@ params:
   # 0 表示不限制；>0 时仅保留得票最高的前 K 条匹配。
   keep_top_k: 0
 
+  # pairwise 投票前可参与组合的最大匹配数；默认 0 表示不限制。
+  # >0 时先保留一半描述子距离较小的匹配，再按 source/target 两侧空间分散性补齐。
+  max_input_matches: 0
+
   # 若过滤后为空，是否回退到输入 matches。
   fallback_to_input_if_empty: true

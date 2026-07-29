@@ -1,4 +1,4 @@
-﻿#include "utils/visualization/visualization_manager.h"
+#include "utils/visualization/visualization_manager.h"
 
 #include <filesystem>
 
@@ -55,10 +55,7 @@ bool VisualizationManager::saveAll(const RegistrationContext& ctx,
         }
     }
 
-    const CorrespondenceSource source = correspondenceSourceFromContext(ctx);
-    const CorrespondenceView view =
-        source == CorrespondenceSource::NONE ? buildBestCorrespondenceView(ctx)
-                                             : buildCorrespondenceView(ctx, source);
+    const CorrespondenceView view = cachedCorrespondenceView(ctx);
 
     if (opt.draw_inliers && !view.inliers.empty()) {
         // 内点图只展示几何模型接受的匹配，用于检查鲁棒估计质量。

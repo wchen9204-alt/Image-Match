@@ -16,15 +16,11 @@ struct WarpQualityOptions {
     bool validate_containment = false;
     double min_overlap_containment = 0.20;
 
-    bool validate_bidirectional_coverage = false;
-    double min_bidirectional_coverage = -1.0;
 
-    bool accept_overlap_if_either_passes = false;
     int foreground_threshold = 10;
 
     bool validate_photometric = false;
     double max_photometric_error = 0.15;
-    double max_photometric_error_for_coverage_only = -1.0;
 
     bool validate_edge_alignment = false;
     double min_edge_alignment_iou = 0.08;
@@ -45,12 +41,9 @@ struct WarpQualityResult {
     double overlap_containment = -1.0;
     double source_coverage = -1.0;
     double target_coverage = -1.0;
-    double bidirectional_coverage = -1.0;
     double edge_alignment_iou = -1.0;
     double photometric_error = -1.0;
 
-    bool containment_pass_for_either = false;
-    bool coverage_pass_for_either = false;
 };
 
 /// 从最终配准验证配置生成通用 warp 质量选项。

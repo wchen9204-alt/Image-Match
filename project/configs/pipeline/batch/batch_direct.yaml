@@ -35,10 +35,18 @@ output:
   # 输出根目录；默认值：../../outputs；实际输出会追加 batch/direct/<pipeline>/<sample> 层级。
   root: ../../../outputs
 
-  # 是否保存可视化结果；默认值：true；false 时批处理会关闭 draw_matches 和 warp。
+  # 是否保存全部 PNG 可视化；默认值：true；false 时跳过编码和写盘，算法与验证仍会执行。
   save_visuals: true
 
   # 是否保存批处理汇总 CSV；默认值：true；文件写到 batch/direct/<pipeline>/summary.csv。
   summary_csv: true
-  # 两个用例之间的等待时间，单位毫秒；0 表示不等待。
-  delay_ms: 0
+
+# 批处理自身的可视化设置；不继承 direct pipeline YAML。
+visualization:
+  draw_keypoints: false
+  draw_matches: false
+  match_views: []
+  save_originals: true
+  save_warped: true
+  save_blend: true
+  save_false_color_overlay: true

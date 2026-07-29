@@ -66,12 +66,18 @@ bool DirectPipeline::runEstimation(RegistrationContext& ctx) {
         return false;
     }
 
-    /// 若启用了点特征初始值，则先执行它；未通过采用条件时直接法仍继续跑默认初值。
+    /// 若启用了点特征初始值，则先执行它；是否注入直接法由 seed_mode 决定。
     if (_featureInitializer && _featureInitializer->enabled()) {
         _featureInitializer->run(ctx);
         if (ctx.feature_initializer_data.accepted) {
-            IR_LOG_INFO("DirectPipeline will use feature initializer: ",
+            IR_LOG_INFO("DirectPipeline will use accepted feature initializer: ",
                         ctx.feature_initializer_data.method);
+        } else if (ctx.feature_initializer_data.seed_available) {
+            IR_LOG_INFO("DirectPipeline will use rejected feature initializer as seed: ",
+                        ctx.feature_initializer_data.method,
+                        " (",
+                        ctx.feature_initializer_data.message,
+                        ")");
         } else {
             IR_LOG_INFO("DirectPipeline skipped feature initializer: ",
                         ctx.feature_initializer_data.message);
@@ -131,7 +137,7 @@ std::string DirectPipeline::buildOutputStem(const RegistrationContext& ctx) cons
 }
 
 bool DirectPipeline::saveOutputs(RegistrationContext& ctx) {
-    if (ctx.output_dir.empty()) {
+    if (!_config.save_visuals || ctx.output_dir.empty()) {
         return true;
     }
 
@@ -151,7 +157,8 @@ bool DirectPipeline::saveOutputs(RegistrationContext& ctx) {
 
     cv::Mat initializerWarped;
     cv::Mat initializerOverlay;
-    if (direct_pipeline_helpers::buildInitializerWarpedSource(ctx, initializerWarped) &&
+    if (_config.save_false_color_overlay &&
+        direct_pipeline_helpers::buildInitializerWarpedSource(ctx, initializerWarped) &&
         base_pipeline_helpers::buildFalseColorOverlay(initializerWarped,
                                                       ctx.images.second,
                                                       _config.warp_quality.overlap.foreground_threshold,
@@ -169,7 +176,8 @@ bool DirectPipeline::saveOutputs(RegistrationContext& ctx) {
     }
 
     cv::Mat finalOverlay;
-    if (direct_pipeline_helpers::buildFinalSelectedFalseColorOverlay(
+    if (_config.save_false_color_overlay &&
+        direct_pipeline_helpers::buildFinalSelectedFalseColorOverlay(
             ctx,
             _config.warp_quality.overlap.foreground_threshold,
             finalOverlay)) {

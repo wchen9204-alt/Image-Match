@@ -26,8 +26,6 @@ io:
 visualization:
   # 是否绘制匹配图；默认：true；可选：true / false。
   draw_matches: true
-  # 是否只绘制内点；默认：false；可选：true / false。
-  draw_inliers_only: false
   # 最大绘制匹配数；默认：200；小于等于 0 表示不限制。
   max_matches_drawn: 200
   # 是否保存 warped 图像；默认：true；可选：true / false。

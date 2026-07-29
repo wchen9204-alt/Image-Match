@@ -31,6 +31,9 @@ visualization:
 feature_initializer:
   # 是否在直接法前尝试点特征初始估计；默认 false。
   enabled: true
+  # 初值使用策略：ACCEPTED_ONLY 仅使用通过完整质量门控的点特征结果。
+  # ESTIMATED_WHEN_AVAILABLE 会使用已估计出的合法变换；没有合法矩阵时仍直接使用原图。
+  seed_mode: ACCEPTED_ONLY
   # 直接法最终成功判定参考；可选 DIRECT_ONLY / BEST_OF_DIRECT_AND_INITIALIZER。
   # DIRECT_ONLY: 只用直接法最终 warp 结果做成功判定。
   # BEST_OF_DIRECT_AND_INITIALIZER: direct 和已接受的点特征初值分别按各自规则判定；
@@ -39,8 +42,8 @@ feature_initializer:
   # 单个点特征候选；不配置时表示不使用点特征初始估计。
   candidate:
     # 可选值示例：SIFT / SURF / ORB / BRISK / KAZE / AKAZE。
-    name: KAZE
-    keypoint: ../../keypoint/kaze.yaml
+    name: ORB
+    keypoint: ../../keypoint/orb.yaml
   # 初始化阶段复用点特征 pipeline 的 matcher/filter/geometry 链路。
   matcher: ../../matcher/bf.yaml
   filters:
@@ -50,21 +53,17 @@ feature_initializer:
   geometry: ../../geometry/rigid.yaml
   acceptance:
     # 初始化候选最低内点数；和 AKAZE 点特征 pipeline 的 match_quality 保持一致。
-    min_inliers: 1
+    min_inliers: 2
     # 初始化候选最低内点率；小于 0 表示禁用。
     min_inlier_ratio: -1
     # 初始化候选最低空间覆盖率；和 AKAZE 点特征 pipeline 的 match_quality 保持一致。
-    min_inlier_spatial_coverage: 0.05
+    min_inlier_spatial_coverage: -1
   validation:
     warp_overlap:
       # 初值采用阶段按点特征法的 warp 覆盖口径判断，不继承直接法最终验证阈值。
       enabled: true
       # 最低局部包含率；和 AKAZE 点特征 pipeline 保持一致。
       min_containment: 0.90
-      # 双向 coverage 最低阈值；和 AKAZE 点特征 pipeline 保持一致。
-      min_bidirectional_coverage: 0.98
-      # containment 或双向 coverage 任一强通过即可，兼容局部图包含场景。
-      accept_if_either_passes: true
       # 前景二值化阈值。
       foreground_threshold: 10
     photometric:
@@ -72,19 +71,13 @@ feature_initializer:
       enabled: true
       # 最大 NMAD 阈值；和 AKAZE 点特征 pipeline 保持一致。
       max_nmad: 0.15
-      # 仅靠 coverage 放行时的附加 NMAD 阈值；和 AKAZE 点特征 pipeline 保持一致。
-      max_nmad_for_coverage_only: 0.095
 
 validation:
   warp_overlap:
     # 是否启用 warp 后的前景局部包含率验证。
     enabled: true
     # 最低局部包含率；默认值 0.20，低于该值时样本判失败。
-    min_containment: 0.70
-    # 双向 coverage 最低阈值；取 source / target coverage 的较大值。
-    min_bidirectional_coverage: 0.98
-    # containment 或双向 coverage 任一达标即可，兼容局部图包含场景。
-    accept_if_either_passes: true
+    min_containment: 0.90
     # 前景二值化阈值。
     foreground_threshold: 10
   photometric:
@@ -93,8 +86,6 @@ validation:
     # 常规最大 NMAD 阈值；当前稀疏直接法统一放宽到 0.15，
     # 允许整体几何已对齐、但仍存在一定光度差的样本通过。
     max_nmad: 0.15
-    # 当前直接禁用 coverage-only 的附加更严阈值；小于 0 表示禁用。
-    max_nmad_for_coverage_only: -1
   edge_alignment:
     # 是否启用重叠区域边缘 IoU 验证；适用于能输出 warp 的直接法。
     enabled: true
@@ -112,7 +103,7 @@ validation:
     # 稀疏直接法有离散点对时，复用点特征法中可复用的匹配质量规则。
     enabled: true
     fail_on_violation: true
-    min_inliers: 1
+    min_inliers: 2
     min_inlier_ratio: -1
     max_reproj_error: -1
-    min_inlier_spatial_coverage: 0.05
+    min_inlier_spatial_coverage: -1

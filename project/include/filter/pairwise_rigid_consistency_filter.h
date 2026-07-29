@@ -25,6 +25,8 @@ private:
     int _rotationBins = 36;
     int _minVotes = 2;
     int _keepTopK = 0;
+    /// pairwise 投票前参与组合的最大匹配数；0 表示不限制。
+    int _maxInputMatches = 0;
     bool _fallbackToInputIfEmpty = true;
 };
 

@@ -32,12 +32,16 @@ dataset:
 
 output:
   root: ../../../outputs/compare/direct/frequency_initializers
-  save_visuals: false
+  # 是否保存当前 compare 任务下的全部图片输出；恢复为 true 后，继续按下方 visualization 的分类开关落盘。
+  save_visuals: true
   summary_csv: true
 
+# 批处理自身的可视化设置；不继承 direct pipeline YAML。
 visualization:
+  draw_keypoints: false
   draw_matches: false
-  warp: true
-  show_source_window: false
-  show_target_window: false
-  show_warped_window: false
+  match_views: []
+  save_originals: true
+  save_warped: true
+  save_blend: true
+  save_false_color_overlay: true

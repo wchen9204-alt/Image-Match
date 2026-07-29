@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <string>
 
@@ -56,8 +56,6 @@ private:
     int _candidateMaskForegroundThreshold = 10;
     /// 候选模型要求达到的最低局部包含率；小于 0 表示不启用。
     double _candidateMinContainment = -1.0;
-    /// 候选模型要求达到的最低双向 coverage；小于 0 表示不启用。
-    double _candidateMinBidirectionalCoverage = -1.0;
     /// 候选去重时允许的最大旋转角差，单位度。
     double _candidateDedupRotationDiffDeg = 2.0;
     /// 候选去重时允许的最大平移差，单位像素。

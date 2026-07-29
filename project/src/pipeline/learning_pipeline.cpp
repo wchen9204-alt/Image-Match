@@ -1,5 +1,6 @@
 #include "pipeline/learning_pipeline.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <string>
 
@@ -108,29 +109,46 @@ std::string LearningPipeline::buildOutputStem(const RegistrationContext& ctx) co
 
 /// 保存学习方法的匹配/内点可视化，并复用 BasePipeline 保存原图、warp、blend 和摘要。
 bool LearningPipeline::saveOutputs(RegistrationContext& ctx) {
-    if (_config.output_dir.empty()) {
+    if (!_config.save_visuals || ctx.output_dir.empty()) {
         return true;
     }
 
     // 1. 学习方法的专属可视化放入 learning 子目录，避免和原图/warp 输出混在一起。
-    const fs::path learningDir = _config.output_dir / "learning";
+    const fs::path learningDir = ctx.output_dir / "learning";
     std::error_code ec;
     fs::create_directories(learningDir, ec);
 
     const std::string stem = buildOutputStem(ctx);
-    if (_config.draw_matches) {
-        // 2. 保存全部学习匹配，便于观察模型原始输出的空间分布。
-        DrawMatches::Options allOpt;
-        allOpt.draw_raw_matches = true;
-        allOpt.max_matches = _config.max_matches_drawn;
-        const cv::Mat allVis = DrawMatches::render(ctx, allOpt);
-        if (!allVis.empty()) {
-            const fs::path out = learningDir / (stem + "_all_match.png");
-            cv::imwrite(out.string(), allVis);
-            IR_LOG_INFO("Wrote learning matches visualization: ", out.string());
+    const auto hasMatchView = [&](MatchView view) {
+        return std::find(_config.match_views.begin(), _config.match_views.end(), view) !=
+               _config.match_views.end();
+    };
+    if (_config.draw_matches && hasMatchView(MatchView::RAW)) {
+        // 2. RAW 图用于观察学习匹配器直接输出的候选对应关系。
+        DrawMatches::Options rawOpt;
+        rawOpt.draw_raw_matches = true;
+        rawOpt.max_matches = _config.max_matches_drawn;
+        const cv::Mat rawVis = DrawMatches::render(ctx, rawOpt);
+        if (!rawVis.empty()) {
+            const fs::path out = learningDir / (stem + "_raw_match.png");
+            cv::imwrite(out.string(), rawVis);
+            IR_LOG_INFO("Wrote learning raw visualization: ", out.string());
         }
-
-        // 3. 保存几何估计接受的内点，便于诊断匹配质量和模型筛选效果。
+    }
+    if (_config.draw_matches && hasMatchView(MatchView::FILTERED)) {
+        // 3. FILTERED 图用于观察过滤后的学习匹配结果。
+        DrawMatches::Options filteredOpt;
+        filteredOpt.draw_raw_matches = false;
+        filteredOpt.max_matches = _config.max_matches_drawn;
+        const cv::Mat filteredVis = DrawMatches::render(ctx, filteredOpt);
+        if (!filteredVis.empty()) {
+            const fs::path out = learningDir / (stem + "_filtered_match.png");
+            cv::imwrite(out.string(), filteredVis);
+            IR_LOG_INFO("Wrote learning filtered visualization: ", out.string());
+        }
+    }
+    if (_config.draw_matches && hasMatchView(MatchView::INLIERS)) {
+        // 4. INLIERS 图只显示几何估计接受的对应点。
         DrawInliers::Options inlierOpt;
         inlierOpt.max_inliers = _config.max_matches_drawn;
         const cv::Mat inlierVis = DrawInliers::render(ctx, inlierOpt);

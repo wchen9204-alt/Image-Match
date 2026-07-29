@@ -7,7 +7,7 @@ project(ImageRegistrationFramework
 # ---------------------------------------------------------------------------
 # Compiler and language settings
 # ---------------------------------------------------------------------------
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -96,7 +96,7 @@ target_link_libraries(ir_core
         ${YAML_CPP_TARGET}
 )
 
-target_compile_features(ir_core PUBLIC cxx_std_17)
+target_compile_features(ir_core PUBLIC cxx_std_20)
 
 if(OpenCV_line_descriptor_FOUND)
     target_compile_definitions(ir_core PUBLIC IR_HAS_OPENCV_LINE_DESCRIPTOR=1)

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <string>
 
@@ -35,8 +35,6 @@ struct RegistrationResult {
     double warp_source_coverage = -1.0;
     /// target 前景反向 warp 到 source 画布后的保留比例。
     double warp_target_coverage = -1.0;
-    /// 双向 coverage，取 source / target coverage 的较大值。
-    double warp_bidirectional_coverage = -1.0;
     /// warped source 与 target 重叠区域内的边缘对齐 IoU。
     double warp_edge_alignment_iou = -1.0;
     double warp_photometric_error = -1.0;

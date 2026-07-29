@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <filesystem>
 #include <memory>
@@ -20,6 +20,15 @@
 
 namespace ir {
 
+class CorrespondenceSnapshot;
+
+/// 单次运行可变的输入输出参数；批处理复用同一 pipeline 时由调用方传入。
+struct PipelineRunOptions {
+    std::filesystem::path image1_path;
+    std::filesystem::path image2_path;
+    std::filesystem::path output_dir;
+};
+
 /// 配准流程贯穿各阶段的共享上下文。
 class RegistrationContext {
 public:
@@ -33,6 +42,11 @@ public:
 
     /// 当前阶段显式使用的对应点来源类型；由 pipeline 或 direct aligner 在进入几何/可视化阶段前写入。
     std::string correspondence_source;
+
+    /// 当前运行统一对应点的共享快照。
+    /// 点特征/学习方法只借用上下文数据；直接法和结构法保存其转换后的稳定点对，
+    /// 供几何估计、评测与可视化共同读取，避免重复构建。
+    std::shared_ptr<CorrespondenceSnapshot> correspondence_snapshot;
 
     /// 直接法阶段的专属输出；DirectPipeline 会从这里同步通用几何结果和可视化点对。
     DirectData direct_data;
@@ -60,6 +74,7 @@ public:
         structure_match_data.clear();
         keypoint_match_data.clear();
         correspondence_source.clear();
+        correspondence_snapshot.reset();
         direct_data.clear();
         feature_initializer_data.clear();
         geometry_data.clear();

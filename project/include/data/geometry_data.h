@@ -25,6 +25,17 @@ struct GeometryData {
     /// 内点比例。
     double inlier_ratio = 0.0;
 
+    /// 进入额外候选前的 baseline 是否已达到最少内点要求。
+    bool baseline_valid = false;
+    /// 进入额外候选前的 baseline 内点数；未得到 baseline 时为 0。
+    int baseline_num_inliers = 0;
+    /// 进入额外候选前的 baseline 平均重投影误差；无可用内点时为 -1。
+    double baseline_mean_reproj_error = -1.0;
+    /// 本次是否进入额外 rigid 候选生成与评分流程。
+    bool candidate_fallback_attempted = false;
+    /// 候选流程状态；总开关与前置条件满足时为 enabled，否则为 not_available。
+    std::string candidate_fallback_trigger_reason = "not_available";
+
     /// 几何估计对应点的内点掩码，与本次估计读取的 CorrespondenceView.filtered 对齐。
     std::vector<unsigned char> inlier_mask;
 
@@ -45,6 +56,11 @@ struct GeometryData {
         valid = false;
         num_inliers = 0;
         inlier_ratio = 0.0;
+        baseline_valid = false;
+        baseline_num_inliers = 0;
+        baseline_mean_reproj_error = -1.0;
+        candidate_fallback_attempted = false;
+        candidate_fallback_trigger_reason = "not_triggered";
         inlier_mask.clear();
         correspondence_source.clear();
         num_correspondences = 0;

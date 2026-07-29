@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <utility>
 #include <vector>
 
 #include <opencv2/core.hpp>
@@ -21,18 +23,26 @@ struct PairSupport {
     double rotationDeg = 0.0;
 };
 
-// 计算两点欧氏距离，供 pair 长度一致性判断使用。
-double pairDistance(const cv::Point2f& a, const cv::Point2f& b) {
+// 计算两点平方距离，先筛掉短向量以减少后续开方与角度计算。
+double pairDistanceSquared(const cv::Point2f& a, const cv::Point2f& b) {
     const double dx = static_cast<double>(a.x) - static_cast<double>(b.x);
     const double dy = static_cast<double>(a.y) - static_cast<double>(b.y);
-    return std::sqrt(dx * dx + dy * dy);
+    return dx * dx + dy * dy;
 }
 
-// 计算 from->to 向量方向角，单位为度。
-double vectorAngleDeg(const cv::Point2f& from, const cv::Point2f& to) {
-    const double dx = static_cast<double>(to.x) - static_cast<double>(from.x);
-    const double dy = static_cast<double>(to.y) - static_cast<double>(from.y);
-    return std::atan2(dy, dx) * 180.0 / CV_PI;
+// 通过叉积与点积直接计算 source 向量旋转到 target 向量的相对角度。
+double relativeRotationDeg(const cv::Point2f& srcFrom,
+                           const cv::Point2f& srcTo,
+                           const cv::Point2f& dstFrom,
+                           const cv::Point2f& dstTo) {
+    const double srcDx = static_cast<double>(srcTo.x) - static_cast<double>(srcFrom.x);
+    const double srcDy = static_cast<double>(srcTo.y) - static_cast<double>(srcFrom.y);
+    const double dstDx = static_cast<double>(dstTo.x) - static_cast<double>(dstFrom.x);
+    const double dstDy = static_cast<double>(dstTo.y) - static_cast<double>(dstFrom.y);
+    const double cross = srcDx * dstDy - srcDy * dstDx;
+    const double dot = srcDx * dstDx + srcDy * dstDy;
+    const double rotationDeg = std::atan2(cross, dot) * 180.0 / CV_PI;
+    return rotationDeg <= -180.0 ? rotationDeg + 360.0 : rotationDeg;
 }
 
 // 将角度归一化到 (-180, 180]，便于直方图统计和差值比较。
@@ -62,6 +72,7 @@ PairwiseRigidConsistencyFilter::PairwiseRigidConsistencyFilter(const YAML::Node&
     _rotationBins = yaml_utils::getInt(params, "rotation_bins", 36);
     _minVotes = yaml_utils::getInt(params, "min_votes", 2);
     _keepTopK = yaml_utils::getInt(params, "keep_top_k", 0);
+    _maxInputMatches = yaml_utils::getInt(params, "max_input_matches", 0);
     _fallbackToInputIfEmpty = yaml_utils::getBool(params, "fallback_to_input_if_empty", true);
 
     _minPairDistance = std::max(0.0, _minPairDistance);
@@ -70,6 +81,9 @@ PairwiseRigidConsistencyFilter::PairwiseRigidConsistencyFilter(const YAML::Node&
     _rotationBins = std::max(8, _rotationBins);
     _minVotes = std::max(0, _minVotes);
     _keepTopK = std::max(0, _keepTopK);
+    if (_maxInputMatches > 0) {
+        _maxInputMatches = std::max(3, _maxInputMatches);
+    }
 
     IR_LOG_INFO("PairwiseRigidConsistencyFilter: min_pair_distance=",
                 _minPairDistance,
@@ -83,6 +97,8 @@ PairwiseRigidConsistencyFilter::PairwiseRigidConsistencyFilter(const YAML::Node&
                 _minVotes,
                 ", keep_top_k=",
                 _keepTopK,
+                ", max_input_matches=",
+                _maxInputMatches,
                 ", fallback_to_input_if_empty=",
                 _fallbackToInputIfEmpty);
 }
@@ -99,7 +115,7 @@ bool PairwiseRigidConsistencyFilter::apply(RegistrationContext& ctx) {
     auto& md = ctx.keypoint_match_data;
     const auto& keypoints1 = ctx.keypoint_data.first.keypoints;
     const auto& keypoints2 = ctx.keypoint_data.second.keypoints;
-    const std::vector<cv::DMatch> input = md.filtered_matches;
+    const std::vector<cv::DMatch>& input = md.filtered_matches;
 
     // 2. 少于 3 个匹配时，pairwise vote 几乎没有统计意义，直接保留输入。
     if (input.size() < 3) {
@@ -135,43 +151,141 @@ bool PairwiseRigidConsistencyFilter::apply(RegistrationContext& ctx) {
         md.filtered_matches.clear();
         return false;
     }
+    // 5. 匹配数量超出上限时，先保留质量与空间分布都具代表性的子集，控制后续 O(M^2) 投票成本。
+    if (_maxInputMatches > 0 &&
+        validMatches.size() > static_cast<size_t>(_maxInputMatches)) {
+        // 先固定描述子距离较小的一半匹配，再以 source/target 两侧的最小间距贪心补足其余名额。
+        // 5.1 为每条合法匹配建立索引，后续仅移动索引以避免反复复制匹配与坐标数据。
+        std::vector<size_t> rankedIndices(validMatches.size());
+        for (size_t i = 0; i < rankedIndices.size(); ++i) {
+            rankedIndices[i] = i;
+        }
+        // 5.2 按 DMatch.distance 稳定排序，优先确定描述子距离较小的可靠匹配。
+        std::stable_sort(rankedIndices.begin(),
+                         rankedIndices.end(),
+                         [&](size_t lhs, size_t rhs) {
+                             return validMatches[lhs].distance < validMatches[rhs].distance;
+                         });
 
-    std::vector<PairSupport> supports;
-    supports.reserve(validMatches.size() * 2);
+        // 5.3 记录已选状态，并维护每条候选到已选集合的最小双图空间间距。
+        std::vector<unsigned char> selected(validMatches.size(), 0);
+        std::vector<double> minSeparation(validMatches.size(),
+                                          std::numeric_limits<double>::infinity());
+        const size_t limit = static_cast<size_t>(_maxInputMatches);
+        const size_t qualityCount = std::min((limit + 1) / 2, rankedIndices.size());
+
+        // 5.4 每选中一条匹配，就增量更新其余候选在 source/target 两侧的最小间距。
+        const auto updateMinSeparation = [&](size_t selectedIndex) {
+            for (size_t candidate = 0; candidate < validMatches.size(); ++candidate) {
+                if (selected[candidate] != 0) {
+                    continue;
+                }
+                const double sourceSeparation =
+                    pairDistanceSquared(srcPoints[selectedIndex], srcPoints[candidate]);
+                const double targetSeparation =
+                    pairDistanceSquared(dstPoints[selectedIndex], dstPoints[candidate]);
+                minSeparation[candidate] = std::min(
+                    minSeparation[candidate], std::min(sourceSeparation, targetSeparation));
+            }
+        };
+
+        // 5.5 先选取上限约一半的距离优先匹配，保证描述子层面的匹配质量。
+        size_t selectedCount = 0;
+        for (size_t rank = 0; rank < qualityCount; ++rank) {
+            const size_t index = rankedIndices[rank];
+            selected[index] = 1;
+            ++selectedCount;
+            updateMinSeparation(index);
+        }
+
+        // 5.6 再以贪心方式补足名额：每轮选择与已选集合在两张图中都最分散的候选。
+        while (selectedCount < limit) {
+            size_t bestIndex = validMatches.size();
+            for (size_t candidate = 0; candidate < validMatches.size(); ++candidate) {
+                if (selected[candidate] != 0) {
+                    continue;
+                }
+                // 若空间分散性相同，则以较小描述子距离打破并列，保持结果确定性。
+                if (bestIndex == validMatches.size() ||
+                    minSeparation[candidate] > minSeparation[bestIndex] ||
+                    (minSeparation[candidate] == minSeparation[bestIndex] &&
+                     validMatches[candidate].distance < validMatches[bestIndex].distance)) {
+                    bestIndex = candidate;
+                }
+            }
+            if (bestIndex == validMatches.size()) {
+                break;
+            }
+            selected[bestIndex] = 1;
+            ++selectedCount;
+            updateMinSeparation(bestIndex);
+        }
+
+        // 按原输入顺序重建子集，保持后续 pair 枚举及同票时的结果确定性。
+        // 5.7 根据选中标记重建匹配与两侧坐标子集，作为后续 pairwise 投票的唯一输入。
+        std::vector<cv::DMatch> cappedMatches;
+        std::vector<cv::Point2f> cappedSrcPoints;
+        std::vector<cv::Point2f> cappedDstPoints;
+        cappedMatches.reserve(selectedCount);
+        cappedSrcPoints.reserve(selectedCount);
+        cappedDstPoints.reserve(selectedCount);
+        for (size_t i = 0; i < validMatches.size(); ++i) {
+            if (selected[i] == 0) {
+                continue;
+            }
+            cappedMatches.push_back(validMatches[i]);
+            cappedSrcPoints.push_back(srcPoints[i]);
+            cappedDstPoints.push_back(dstPoints[i]);
+        }
+        // 5.8 记录实际限流规模，便于从运行日志确认该优化是否触发。
+        IR_LOG_INFO("PairwiseRigidConsistencyFilter capped input ",
+                    validMatches.size(),
+                    " -> ",
+                    cappedMatches.size(),
+                    " matches (quality_spatial selection).");
+        // 5.9 将代表性子集替换为当前投票输入，后续流程不再访问被限流排除的匹配。
+        validMatches = std::move(cappedMatches);
+        srcPoints = std::move(cappedSrcPoints);
+        dstPoints = std::move(cappedDstPoints);
+    }
+    std::vector<std::vector<PairSupport>> supportsByBin(static_cast<size_t>(_rotationBins));
+    size_t supportCount = 0;
     std::vector<int> histogram(static_cast<size_t>(_rotationBins), 0);
     const double binWidth = 360.0 / static_cast<double>(_rotationBins);
-
-    // 5. 两两组成 match pair：
+    const double minPairDistanceSquared = _minPairDistance * _minPairDistance;
+// 6. 两两组成 match pair：
     //    - 先过滤过近 pair，避免短向量导致旋转不稳定；
     //    - 再比较 source / target pair 长度差，压掉明显不满足 rigid 的组合；
     //    - 最后把相对旋转角投票到直方图中，估计主旋转峰。
     for (size_t i = 0; i + 1 < validMatches.size(); ++i) {
         for (size_t j = i + 1; j < validMatches.size(); ++j) {
-            const double srcDistance = pairDistance(srcPoints[i], srcPoints[j]);
-            const double dstDistance = pairDistance(dstPoints[i], dstPoints[j]);
-            if (srcDistance < _minPairDistance || dstDistance < _minPairDistance) {
+            const double srcDistanceSquared = pairDistanceSquared(srcPoints[i], srcPoints[j]);
+            const double dstDistanceSquared = pairDistanceSquared(dstPoints[i], dstPoints[j]);
+            if (srcDistanceSquared < minPairDistanceSquared ||
+                dstDistanceSquared < minPairDistanceSquared) {
                 continue;
             }
 
-            const double distanceDiff = std::abs(srcDistance - dstDistance);
-            if (distanceDiff > _maxDistanceDiff) {
+            const double srcDistance = std::sqrt(srcDistanceSquared);
+            const double dstDistance = std::sqrt(dstDistanceSquared);
+            if (std::abs(srcDistance - dstDistance) > _maxDistanceDiff) {
                 continue;
             }
 
-            const double srcAngle = vectorAngleDeg(srcPoints[i], srcPoints[j]);
-            const double dstAngle = vectorAngleDeg(dstPoints[i], dstPoints[j]);
-            const double rotationDeg = normalizeAngleDeg(dstAngle - srcAngle);
+            const double rotationDeg = relativeRotationDeg(
+                srcPoints[i], srcPoints[j], dstPoints[i], dstPoints[j]);
             const double shifted = rotationDeg + 180.0;
             int bin = static_cast<int>(std::floor(shifted / binWidth));
             bin = std::clamp(bin, 0, _rotationBins - 1);
 
-            supports.push_back(PairSupport{static_cast<int>(i), static_cast<int>(j), rotationDeg});
+            supportsByBin[static_cast<size_t>(bin)].push_back(
+                PairSupport{static_cast<int>(i), static_cast<int>(j), rotationDeg});
+            ++supportCount;
             ++histogram[static_cast<size_t>(bin)];
         }
     }
-
-    // 6. 如果没有任何有效支持 pair，说明当前 filtered matches 在 rigid 假设下太散。
-    if (supports.empty()) {
+// 7. 如果没有任何有效支持 pair，说明当前 filtered matches 在 rigid 假设下太散。
+    if (supportCount == 0) {
         IR_LOG_WARN("PairwiseRigidConsistencyFilter: no valid support pairs.");
         if (_fallbackToInputIfEmpty) {
             return true;
@@ -179,34 +293,39 @@ bool PairwiseRigidConsistencyFilter::apply(RegistrationContext& ctx) {
         md.filtered_matches.clear();
         return false;
     }
-
-    // 7. 选出票数最高的旋转 bin，把它当作当前场景的主旋转候选。
+// 8. 选出票数最高的旋转 bin，把它当作当前场景的主旋转候选。
     const auto peakIt = std::max_element(histogram.begin(), histogram.end());
     const int peakBin = static_cast<int>(std::distance(histogram.begin(), peakIt));
     const double peakCenterDeg = -180.0 + (static_cast<double>(peakBin) + 0.5) * binWidth;
 
     std::vector<int> votes(validMatches.size(), 0);
-    // 8. 只统计“接近主旋转峰”的 pair 支持票数。
+// 9. 只统计“接近主旋转峰”的 pair 支持票数。
     //    这一步的目标不是直接找最终几何模型，而是给每条 match 一个
     //    “它和多少其他 match 能共同支持同一 rigid 方向”的粗评分。
-    for (const auto& support : supports) {
-        if (angleDiffDeg(support.rotationDeg, peakCenterDeg) > _maxAngleDiffDeg) {
+    const double candidateBinRadius = _maxAngleDiffDeg + binWidth * 0.5;
+    for (int bin = 0; bin < _rotationBins; ++bin) {
+        const double binCenterDeg = -180.0 + (static_cast<double>(bin) + 0.5) * binWidth;
+        if (angleDiffDeg(binCenterDeg, peakCenterDeg) > candidateBinRadius) {
             continue;
         }
-        ++votes[static_cast<size_t>(support.first)];
-        ++votes[static_cast<size_t>(support.second)];
+        for (const auto& support : supportsByBin[static_cast<size_t>(bin)]) {
+            if (angleDiffDeg(support.rotationDeg, peakCenterDeg) > _maxAngleDiffDeg) {
+                continue;
+            }
+            ++votes[static_cast<size_t>(support.first)];
+            ++votes[static_cast<size_t>(support.second)];
+        }
     }
 
     std::vector<int> keptIndices;
     keptIndices.reserve(validMatches.size());
-    // 9. 按最少支持票数筛掉几乎没有几何同伴支持的匹配。
+// 10. 按最少支持票数筛掉几乎没有几何同伴支持的匹配。
     for (size_t i = 0; i < votes.size(); ++i) {
         if (votes[i] >= _minVotes) {
             keptIndices.push_back(static_cast<int>(i));
         }
     }
-
-    // 10. 如果配置了 keepTopK，则在通过票数门槛的匹配中继续保留最稳定的一批。
+// 11. 如果配置了 keepTopK，则在通过票数门槛的匹配中继续保留最稳定的一批。
     //     优先看 votes，其次再用原始描述子距离打破并列。
     if (_keepTopK > 0 && static_cast<int>(keptIndices.size()) > _keepTopK) {
         std::stable_sort(keptIndices.begin(),
@@ -226,8 +345,7 @@ bool PairwiseRigidConsistencyFilter::apply(RegistrationContext& ctx) {
     for (const int index : keptIndices) {
         kept.push_back(validMatches[static_cast<size_t>(index)]);
     }
-
-    // 11. 过滤结果为空时，按配置决定回退到输入，避免过严过滤把后续几何彻底饿死。
+// 12. 过滤结果为空时，按配置决定回退到输入，避免过严过滤把后续几何彻底饿死。
     if (kept.empty()) {
         IR_LOG_WARN("PairwiseRigidConsistencyFilter kept 0 / ",
                     validMatches.size(),
@@ -241,14 +359,13 @@ bool PairwiseRigidConsistencyFilter::apply(RegistrationContext& ctx) {
         md.filtered_matches.clear();
         return false;
     }
-
-    // 12. 写回最终保留的 matches，后续由 rigid_estimator 继续求解。
+// 13. 写回最终保留的 matches，后续由 rigid_estimator 继续求解。
     IR_LOG_INFO("PairwiseRigidConsistencyFilter kept ",
                 kept.size(),
                 " / ",
                 validMatches.size(),
                 " matches (pairs=",
-                supports.size(),
+                supportCount,
                 ", peak_rotation_deg=",
                 peakCenterDeg,
                 ")");

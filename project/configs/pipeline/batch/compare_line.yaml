@@ -39,5 +39,19 @@ dataset:
 
 output:
   root: ../../../outputs/compare
-  save_visuals: false
+  # 是否保存当前 compare 任务下的全部图片输出；恢复为 true 后，继续按下方 visualization 的分类开关落盘。
+  save_visuals: true
   summary_csv: true
+
+# 批处理自身的可视化设置；不继承 structure pipeline YAML。
+visualization:
+  draw_keypoints: false
+  draw_matches: true
+  # 结构匹配图使用的对应关系；可选 RAW / INLIERS。
+  structure_match_source: INLIERS
+  max_matches_drawn: 100
+  save_structure_responses: true
+  save_originals: true
+  save_warped: true
+  save_blend: true
+  save_false_color_overlay: true

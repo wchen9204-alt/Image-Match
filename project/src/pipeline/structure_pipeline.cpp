@@ -1,4 +1,4 @@
-﻿#include "pipeline/structure_pipeline.h"
+#include "pipeline/structure_pipeline.h"
 
 #include <filesystem>
 #include <string>
@@ -60,7 +60,8 @@ bool restoreContourAssociatorGeometry(RegistrationContext& ctx,
 void promoteStructureInliersFromGeometryMask(RegistrationContext& ctx) {
     auto& md = ctx.structure_match_data;
     const auto& gd = ctx.geometry_data;
-    const CorrespondenceView view = buildStructureCorrespondenceView(ctx);
+    // 必须复用几何估计前建立的快照，保证内点 mask 与端点展开顺序一致。
+    const CorrespondenceView view = cachedCorrespondenceView(ctx);
 
     std::vector<int> pointInlierCounts(md.line_matches.size(), 0);
     for (size_t i = 0; i < view.filtered.size() && i < gd.inlier_mask.size(); ++i) {
@@ -239,7 +240,7 @@ bool StructurePipeline::runEstimation(RegistrationContext& ctx) {
 
     // 3. 有结构匹配时，几何估计器直接读取 CorrespondenceView，不再临时伪装成 keypoint match。
     if (_geometry && !ctx.structure_match_data.line_matches.empty()) {
-        if (buildStructureCorrespondenceView(ctx).empty()) {
+        if (ensureCorrespondenceView(ctx).empty()) {
             gd.message = "no valid structure correspondences for geometry estimation";
             IR_LOG_WARN("StructurePipeline::runEstimation: ", gd.message);
             return false;
@@ -358,13 +359,13 @@ std::string StructurePipeline::buildOutputStem(const RegistrationContext& ctx) c
 }
 
 bool StructurePipeline::saveOutputs(RegistrationContext& ctx) {
-    if (_config.output_dir.empty()) {
+    if (!_config.save_visuals || ctx.output_dir.empty()) {
         return true;
     }
 
     // 1. 创建结构响应图和结构匹配图的输出目录。
-    const fs::path structureDir = _config.output_dir / "structures";
-    const fs::path matchesDir = _config.output_dir / "matches";
+    const fs::path structureDir = ctx.output_dir / "structures";
+    const fs::path matchesDir = ctx.output_dir / "matches";
     std::error_code ec;
     fs::create_directories(structureDir, ec);
     fs::create_directories(matchesDir, ec);
@@ -375,13 +376,13 @@ bool StructurePipeline::saveOutputs(RegistrationContext& ctx) {
     const std::string structureStem =
         sampleStem + "_" + (_extractor ? _extractor->outputLabel() : std::string("STRUCTURE"));
 
-    // 2. 保存结构提取器生成的 source / target 响应图。
-    if (!ctx.structure_data.first.response.empty()) {
+    // 2. 按结构响应图开关保存 source / target 响应图。
+    if (_config.save_structure_responses && !ctx.structure_data.first.response.empty()) {
         const fs::path out = structureDir / (structureStem + "_source_structure.png");
         cv::imwrite(out.string(), ctx.structure_data.first.response);
         IR_LOG_INFO("Wrote source structure visualization: ", out.string());
     }
-    if (!ctx.structure_data.second.response.empty()) {
+    if (_config.save_structure_responses && !ctx.structure_data.second.response.empty()) {
         const fs::path out = structureDir / (structureStem + "_target_structure.png");
         cv::imwrite(out.string(), ctx.structure_data.second.response);
         IR_LOG_INFO("Wrote target structure visualization: ", out.string());
@@ -391,7 +392,8 @@ bool StructurePipeline::saveOutputs(RegistrationContext& ctx) {
     if (_config.draw_matches) {
         cv::Mat vis;
         const bool preferInliers =
-            _config.draw_inliers_only && !ctx.structure_match_data.inlier_line_matches.empty();
+            _config.structure_match_source == StructureMatchSource::INLIERS &&
+            !ctx.structure_match_data.inlier_line_matches.empty();
         const std::vector<cv::DMatch>& preferredMatches =
             preferInliers ? ctx.structure_match_data.inlier_line_matches
                           : ctx.structure_match_data.line_matches;

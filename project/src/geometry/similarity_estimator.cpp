@@ -1,4 +1,4 @@
-﻿#include "geometry/similarity_estimator.h"
+#include "geometry/similarity_estimator.h"
 
 #include <opencv2/calib3d.hpp>
 
@@ -49,10 +49,7 @@ bool SimilarityEstimator::estimate(RegistrationContext& ctx) {
     gd.clear();
     gd.type = GeometryType::SIMILARITY;
 
-    const CorrespondenceSource source = correspondenceSourceFromContext(ctx);
-    const CorrespondenceView view =
-        source == CorrespondenceSource::NONE ? buildBestCorrespondenceView(ctx)
-                                             : buildCorrespondenceView(ctx, source);
+    const CorrespondenceView view = ensureCorrespondenceView(ctx);
     if (view.filtered.size() < 2) {
         gd.message = "need at least 2 correspondences, got " + std::to_string(view.filtered.size());
         IR_LOG_ERROR("SimilarityEstimator: need at least 2 correspondences, got ", view.filtered.size());

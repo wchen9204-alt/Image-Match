@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <cmath>
 #include <opencv2/core.hpp>
@@ -25,10 +25,7 @@ public:
         if (!gd.valid || (gd.A.empty() && gd.H.empty())) { r.note = "no valid geometry"; return r; }
 
         // 通过统一对应点视图读取点对，优先使用上下文显式来源。
-        const CorrespondenceSource source = correspondenceSourceFromContext(ctx);
-        const CorrespondenceView view =
-            source == CorrespondenceSource::NONE ? buildBestCorrespondenceView(ctx)
-                                                 : buildCorrespondenceView(ctx, source);
+        const CorrespondenceView view = cachedCorrespondenceView(ctx);
         if (view.empty()) { r.note = "no correspondences"; return r; }
 
         // 单侧重投影：用内点计算 source -> target 的平均像素误差。
@@ -69,7 +66,7 @@ public:
         if (count == 0) { r.note = "no inliers"; return r; }
         r.value = sum / count;
         r.valid = true;
-        r.note = view.source_name;
+        r.note = std::string(view.source_name);
         return r;
     }
 

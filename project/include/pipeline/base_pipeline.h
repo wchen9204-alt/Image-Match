@@ -17,8 +17,9 @@ public:
     /// 加载 pipeline 配置，重置阶段对象和评测器，并委托子类配置专属阶段组件。
     bool configure(const PipelineConfig& cfg) override;
 
-    /// 执行一次完整配准流程；失败时仍尽量保存已有可视化和摘要信息。
-    bool run(RegistrationContext& ctx) override;
+    /// 执行一次完整配准流程；省略运行时路径时回退到 YAML 配置。
+    bool run(RegistrationContext& ctx,
+             const PipelineRunOptions& options = PipelineRunOptions{}) override;
 
     /// 按 visualization 配置显示源图、目标图或 warp 结果窗口。
     bool showWindows(RegistrationContext& ctx) override;

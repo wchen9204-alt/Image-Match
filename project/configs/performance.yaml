@@ -1,4 +1,0 @@
-# 全局运行时资源限制。
-performance:
-  # 限制 OpenCV 内部工作线程池。
-  opencv_threads: 6

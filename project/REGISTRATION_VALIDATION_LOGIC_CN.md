@@ -39,8 +39,6 @@
 
 - `enabled`：是否启用。
 - `min_containment`：warped source 对 target 的局部包含率下限。
-- `min_bidirectional_coverage`：双向 coverage 下限。
-- `accept_if_either_passes`：当 containment 和 coverage 同时启用时，是否允许任一通过即可。
 - `foreground_threshold`：生成前景 mask 时使用的灰度阈值。
 
 输出指标：
@@ -48,7 +46,6 @@
 - `warp_overlap_containment`
 - `warp_source_coverage`
 - `warp_target_coverage`
-- `warp_bidirectional_coverage`
 
 局限：它主要回答“区域有没有覆盖上”，不能单独保证区域内部的结构和纹理也真正对齐。
 
@@ -62,7 +59,6 @@
 
 - `enabled`：是否启用。
 - `max_nmad`：常规 NMAD 上限，越小越严格。
-- `max_nmad_for_coverage_only`：仅靠 coverage 放行、但 containment 未达标时使用的附加 NMAD 上限；小于 0 表示禁用。
 
 输出指标：
 
@@ -224,17 +220,15 @@ direct 最终结果和已接受的 initializer 分别按各自已有规则先得
 3. 如果 initializer 失败、direct 成功，则直接使用 direct 结果。
 4. 如果两者都成功，则比较双方质量，选择更优结果作为最终结果。
 
-当前“都成功时”的比较顺序是：
+当前“都成功时”只比较 `containment` 与 `photometric` 的综合分：
 
-1. 优先比较 `photometric`
-2. 再比较 `edge_alignment`
-3. 再比较 `bidirectional_coverage`
-4. 最后比较 `containment`
+```text
+containmentScore = clamp((containment - min_containment) / (1 - min_containment), 0, 1)
+photometricScore = clamp(1 - NMAD / max_nmad, 0, 1)
+finalScore = 0.35 * containmentScore + 0.65 * photometricScore
+```
 
-其中：
-
-- 光度误差更小更优
-- 边缘 IoU、更高的 coverage、更高的 containment 更优
+分数更高者作为最终结果；平分时保留 direct 结果。`edge_alignment` 仍可作为各自结果的质量门槛，但不参与两者的最终排序。
 
 ## 关于“覆盖上了但根本没对上”
 
