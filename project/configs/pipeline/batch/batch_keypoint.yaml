@@ -21,6 +21,10 @@ output:
 
 # 批处理自身的可视化设置；不继承 keypoint pipeline YAML。
 visualization:
+  # false 图前景阈值；仅影响可视化。0 表示显示所有非黑像素。
+  false_color_foreground_threshold: 0
+  # 是否保存 source/target 原图前景 mask，以及 warped source/target 前景重叠图。
+  save_foreground_masks: true
   # 图片总开关在 output.save_visuals；这里控制各类图片。
   draw_keypoints: true
   draw_matches: true

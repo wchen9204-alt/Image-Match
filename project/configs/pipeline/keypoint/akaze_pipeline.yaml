@@ -27,11 +27,15 @@ geometry: ../../geometry/rigid.yaml
 evaluator: ../../evaluator/metrics.yaml
 
 io:
-  image1: ../../../datasets/test39/source.png
-  image2: ../../../datasets/test39/target.png
+  image1: ../../../datasets/test29/source.png
+  image2: ../../../datasets/test29/target.png
   output_dir: ../../../outputs
 
 visualization:
+  # false 图前景阈值；仅影响可视化。0 表示显示所有非黑像素。
+  false_color_foreground_threshold: 0
+  # 是否保存 source/target 原图前景 mask，以及 warped source/target 前景重叠图。
+  save_foreground_masks: true
   draw_keypoints: true
   draw_matches: true
   max_matches_drawn: 100
@@ -51,6 +55,8 @@ validation:
     min_containment: 0.90
     # 前景二值化阈值。
     foreground_threshold: 5
+    # 局部包含率的像素匹配容差；0 表示严格像素重叠。
+    containment_tolerance_pixels: 1
   photometric:
     # 是否启用重叠前景区域的光度误差 NMAD 验证。
     # 用于拦截 mask 覆盖率很高、但纹理或灰度内容没有真正对齐的错误 warp。

@@ -61,6 +61,7 @@ WarpQualityOptions makeFinalWarpQualityOptions(const PipelineConfig& cfg) {
     options.validate_containment = overlap.containment_enabled;
     options.min_overlap_containment = overlap.min_containment;
     options.foreground_threshold = overlap.foreground_threshold;
+    options.containment_tolerance_pixels = overlap.containment_tolerance_pixels;
     options.validate_photometric = photometric.enabled;
     options.max_photometric_error = photometric.max_nmad;
     options.validate_edge_alignment = edge.enabled;
@@ -81,6 +82,7 @@ WarpQualityOptions makeInitializerWarpQualityOptions(const PipelineConfig& cfg) 
     options.validate_containment = overlap.containment_enabled;
     options.min_overlap_containment = overlap.min_containment;
     options.foreground_threshold = overlap.foreground_threshold;
+    options.containment_tolerance_pixels = overlap.containment_tolerance_pixels;
     options.validate_photometric = photometric.enabled;
     options.max_photometric_error = photometric.max_nmad;
     options.validate_edge_alignment = edge.enabled;
@@ -139,9 +141,11 @@ bool evaluateWarpQuality(const WarpQualityOptions& options,
 
     if (options.validate_containment) {
         result.overlap_containment =
-            base_pipeline_helpers::computeMaskLocalContainment(sourceMask,
-                                                               warpedSourceMask,
-                                                               targetMask);
+            base_pipeline_helpers::computeMaskLocalContainment(
+                sourceMask,
+                warpedSourceMask,
+                targetMask,
+                options.containment_tolerance_pixels);
         if (result.overlap_containment < 0.0) {
             fail(result, "warp local containment failed: empty foreground");
             return false;

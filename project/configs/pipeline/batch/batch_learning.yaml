@@ -38,6 +38,10 @@ output:
 
 # 批处理自身的可视化设置；不继承 learning pipeline YAML。
 visualization:
+  # false 图前景阈值；仅影响可视化。0 表示显示所有非黑像素。
+  false_color_foreground_threshold: 0
+  # 是否保存 source/target 原图前景 mask，以及 warped source/target 前景重叠图。
+  save_foreground_masks: true
   draw_keypoints: false
   draw_matches: true
   # 学习匹配图层级；可选 RAW / FILTERED / INLIERS。

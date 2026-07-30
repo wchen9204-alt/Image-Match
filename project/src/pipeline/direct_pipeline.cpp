@@ -153,6 +153,11 @@ bool DirectPipeline::saveOutputs(RegistrationContext& ctx) {
     direct_pipeline_helpers::removeStaleDirectVisualization(
         ctx.output_dir / "final_false_color_overlay" / (stem + "_final_false_color_overlay.png"));
 
+    if (!direct_pipeline_helpers::applyFinalSelectedWarpedImage(ctx)) {
+        IR_LOG_WARN("DirectPipeline failed to build the final selected warped image.");
+        return false;
+    }
+
     const bool ok = BasePipeline::saveOutputs(ctx);
 
     cv::Mat initializerWarped;
@@ -161,7 +166,7 @@ bool DirectPipeline::saveOutputs(RegistrationContext& ctx) {
         direct_pipeline_helpers::buildInitializerWarpedSource(ctx, initializerWarped) &&
         base_pipeline_helpers::buildFalseColorOverlay(initializerWarped,
                                                       ctx.images.second,
-                                                      _config.warp_quality.overlap.foreground_threshold,
+                                                      _config.false_color_foreground_threshold,
                                                       initializerOverlay)) {
         const fs::path overlayDir = ctx.output_dir / "false_color_overlay";
         std::error_code ec;
@@ -179,7 +184,7 @@ bool DirectPipeline::saveOutputs(RegistrationContext& ctx) {
     if (_config.save_false_color_overlay &&
         direct_pipeline_helpers::buildFinalSelectedFalseColorOverlay(
             ctx,
-            _config.warp_quality.overlap.foreground_threshold,
+            _config.false_color_foreground_threshold,
             finalOverlay)) {
         const fs::path finalOverlayDir = ctx.output_dir / "final_false_color_overlay";
         std::error_code ec;

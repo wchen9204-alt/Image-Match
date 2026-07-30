@@ -15,9 +15,8 @@ namespace ir::warp_quality {
 struct WarpQualityOptions {
     bool validate_containment = false;
     double min_overlap_containment = 0.20;
-
-
     int foreground_threshold = 10;
+    int containment_tolerance_pixels = 0;
 
     bool validate_photometric = false;
     double max_photometric_error = 0.15;

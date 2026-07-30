@@ -89,7 +89,9 @@ struct PipelineConfig {
         double min_containment = 0.20;
         /// 是否启用 warped source / target 的双向前景 coverage 验证。
         /// 生成前景 mask 时使用的灰度阈值。
-        int foreground_threshold = 10;
+        int foreground_threshold = 20;
+        /// 局部包含率的匹配容差，单位为像素；0 表示严格像素重叠。
+        int containment_tolerance_pixels = 0;
     };
 
     /// warp 光度验证参数，负责重叠区域 NMAD 判定。
@@ -190,6 +192,10 @@ struct PipelineConfig {
     bool save_warped = true;
     bool save_blend = true;
     bool save_false_color_overlay = true;
+    /// false 图生成前景 mask 时使用的灰度阈值；仅影响可视化，不参与配准结果判定。
+    int false_color_foreground_threshold = 0;
+    /// 是否保存 source/target 原图前景 mask，以及 warped source/target 前景重叠图。
+    bool save_foreground_masks = true;
     bool save_structure_responses = true;
     StructureMatchSource structure_match_source = StructureMatchSource::RAW;
     bool warp = true;

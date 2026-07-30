@@ -281,10 +281,31 @@ double computeMaskIou(const cv::Mat& a, const cv::Mat& b) {
            static_cast<double>(unionCount);
 }
 
+void expandMaskForContainmentTolerance(const cv::Mat& targetMask,
+                                       int tolerancePixels,
+                                       cv::Mat& expandedMask) {
+    expandedMask.release();
+    if (targetMask.empty()) {
+        return;
+    }
+
+    expandedMask = targetMask.clone();
+    const int radius = std::max(0, tolerancePixels);
+    if (radius == 0) {
+        return;
+    }
+
+    const int kernelSize = radius * 2 + 1;
+    const cv::Mat kernel = cv::getStructuringElement(
+        cv::MORPH_ELLIPSE, cv::Size(kernelSize, kernelSize));
+    cv::dilate(targetMask, expandedMask, kernel);
+}
+
 // 计算 warped source 与 target 的局部包含率，支持一张图是另一张图局部的场景。
 double computeMaskLocalContainment(const cv::Mat& sourceMask,
                                    const cv::Mat& warpedSourceMask,
-                                   const cv::Mat& targetMask) {
+                                   const cv::Mat& targetMask,
+                                   int tolerancePixels) {
     if (sourceMask.empty() || warpedSourceMask.empty() || targetMask.empty() ||
         warpedSourceMask.size() != targetMask.size()) {
         return -1.0;
@@ -297,10 +318,13 @@ double computeMaskLocalContainment(const cv::Mat& sourceMask,
         return -1.0;
     }
 
+    cv::Mat tolerantTargetMask;
+    expandMaskForContainmentTolerance(targetMask, tolerancePixels, tolerantTargetMask);
     cv::Mat intersectionMask;
-    cv::bitwise_and(warpedSourceMask, targetMask, intersectionMask);
-    return static_cast<double>(cv::countNonZero(intersectionMask)) /
-           static_cast<double>(denominator);
+    cv::bitwise_and(warpedSourceMask, tolerantTargetMask, intersectionMask);
+    const double containment = static_cast<double>(cv::countNonZero(intersectionMask)) /
+                               static_cast<double>(denominator);
+    return std::min(containment, 1.0);
 }
 
 // 计算前景 mask 经过 warp 后仍落在目标画布内的比例。

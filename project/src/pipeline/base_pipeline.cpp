@@ -694,11 +694,13 @@ bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
     const fs::path warped_dir = ctx.output_dir / "warped";
     const fs::path blend_dir = ctx.output_dir / "blend";
     const fs::path false_color_overlay_dir = ctx.output_dir / "false_color_overlay";
+    const fs::path foreground_masks_dir = ctx.output_dir / "foreground_masks";
     std::error_code ec;
     fs::create_directories(originals_dir, ec);
     fs::create_directories(warped_dir, ec);
     fs::create_directories(blend_dir, ec);
     fs::create_directories(false_color_overlay_dir, ec);
+    fs::create_directories(foreground_masks_dir, ec);
 
     const std::string stem = buildOutputStem(ctx);
     const std::string sampleStem = ctx.image1_path.stem().string() + "_" +
@@ -745,7 +747,7 @@ bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
             if (base_pipeline_helpers::buildFalseColorOverlay(
                     ctx.warped_image,
                     ctx.images.second,
-                    _config.warp_quality.overlap.foreground_threshold,
+                    _config.false_color_foreground_threshold,
                     falseColorOverlay)) {
                 const fs::path false_color_out =
                     false_color_overlay_dir / (stem + "_false_color_overlay.png");
@@ -754,6 +756,72 @@ bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
             } else {
                 IR_LOG_WARN("Failed to build false-color overlay image for: ", stem);
             }
+        }
+
+    }
+
+    if (_config.save_foreground_masks &&
+        !ctx.images.first.empty() && !ctx.images.second.empty()) {
+        const int thresholdValue = _config.warp_quality.overlap.foreground_threshold;
+        cv::Mat sourceForegroundMask;
+        cv::Mat targetForegroundMask;
+        if (base_pipeline_helpers::buildForegroundMask(ctx.images.first,
+                                                       thresholdValue,
+                                                       sourceForegroundMask) &&
+            base_pipeline_helpers::buildForegroundMask(ctx.images.second,
+                                                       thresholdValue,
+                                                       targetForegroundMask)) {
+            const fs::path staleWarpedSourceMaskOut =
+                foreground_masks_dir / (stem + "_warped_source_foreground_mask.png");
+            fs::remove(staleWarpedSourceMaskOut, ec);
+            ec.clear();
+
+            const fs::path sourceMaskOut =
+                foreground_masks_dir / (stem + "_source_foreground_mask.png");
+            const fs::path targetMaskOut =
+                foreground_masks_dir / (stem + "_target_foreground_mask.png");
+            cv::imwrite(sourceMaskOut.string(), sourceForegroundMask);
+            cv::imwrite(targetMaskOut.string(), targetForegroundMask);
+            const fs::path staleOriginalOverlayOut =
+                foreground_masks_dir / (stem + "_foreground_mask_overlay.png");
+            fs::remove(staleOriginalOverlayOut, ec);
+            ec.clear();
+
+            const fs::path warpedOverlayOut =
+                foreground_masks_dir / (stem + "_warped_source_target_foreground_mask_overlay.png");
+            fs::remove(warpedOverlayOut, ec);
+            ec.clear();
+
+            cv::Mat matrix;
+            if (base_pipeline_helpers::activeTransformMatrix(ctx, matrix)) {
+                cv::Mat warpedSourceForegroundMask;
+                if (base_pipeline_helpers::warpMaskToTargetSize(sourceForegroundMask,
+                                                                 targetForegroundMask.size(),
+                                                                 matrix,
+                                                                 warpedSourceForegroundMask)) {
+                    cv::Mat tolerantTargetForegroundMask;
+                    base_pipeline_helpers::expandMaskForContainmentTolerance(
+                        targetForegroundMask,
+                        _config.warp_quality.overlap.containment_tolerance_pixels,
+                        tolerantTargetForegroundMask);
+                    cv::Mat blue = cv::Mat::zeros(targetForegroundMask.size(), CV_8U);
+                    cv::Mat channels[] = {blue, tolerantTargetForegroundMask, warpedSourceForegroundMask};
+                    cv::Mat overlay;
+                    cv::merge(channels, 3, overlay);
+                    cv::imwrite(warpedOverlayOut.string(), overlay);
+                    IR_LOG_INFO("Wrote warped source and target foreground mask overlay: ",
+                                warpedOverlayOut.string());
+                } else {
+                    IR_LOG_WARN("Failed to warp source foreground mask for: ", stem);
+                }
+            } else {
+                IR_LOG_WARN("Skipped foreground mask overlay because no active transform matrix is available for: ",
+                            stem);
+            }
+            IR_LOG_INFO("Wrote original foreground masks: ", sourceMaskOut.string(),
+                        ", ", targetMaskOut.string());
+        } else {
+            IR_LOG_WARN("Failed to build original foreground masks for: ", stem);
         }
     }
 

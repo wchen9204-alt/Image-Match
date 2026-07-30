@@ -75,7 +75,6 @@ bool captureGeometryEstimate(const GeometryData& geometry,
     data.inlier_ratio = geometry.inlier_ratio;
     data.A = geometry.A.clone();
     data.H = geometry.H.clone();
-    data.seed_available = true;
     return true;
 }
 
@@ -127,16 +126,6 @@ bool validateCandidate(const PipelineConfig& cfg,
                        const std::string& candidateName,
                        FeatureInitializerData& data,
                        std::string& reason) {
-    data.method = candidateName;
-    data.num_keypoints_first = static_cast<int>(ctx.keypoint_data.first.keypoints.size());
-    data.num_keypoints_second = static_cast<int>(ctx.keypoint_data.second.keypoints.size());
-    data.num_raw_matches = static_cast<int>(ctx.keypoint_match_data.raw_matches.size());
-    data.num_filtered_matches = static_cast<int>(ctx.keypoint_match_data.filtered_matches.size());
-
-    // 先保留几何估计得到的合法矩阵，供宽松初值模式在后续质量门控拒绝时使用。
-    if (!captureGeometryEstimate(ctx.geometry_data, data, reason)) {
-        return false;
-    }
     if (!validateGeometryGate(cfg, ctx.geometry_data, reason)) {
         return false;
     }
@@ -270,7 +259,7 @@ bool DirectFeatureInitializer::run(RegistrationContext& ctx) {
     FeatureInitializerData best;
     best.attempted = true;
     // 仅保存“有合法矩阵但未通过质量门控”的候选；不会参与最终结果选择。
-    FeatureInitializerData seedOnly;
+    FeatureInitializerData estimatedOnly;
     std::vector<std::string> rejectMessages;
 
     // 1. 候选从干净的点特征上下文开始，避免残留匹配污染初始化判断。
@@ -310,9 +299,23 @@ bool DirectFeatureInitializer::run(RegistrationContext& ctx) {
 
     FeatureInitializerData candidateData;
     candidateData.attempted = true;
-    if (stageOk &&
+    candidateData.method = _candidate.name;
+    candidateData.num_keypoints_first = static_cast<int>(ctx.keypoint_data.first.keypoints.size());
+    candidateData.num_keypoints_second = static_cast<int>(ctx.keypoint_data.second.keypoints.size());
+    candidateData.num_raw_matches = static_cast<int>(ctx.keypoint_match_data.raw_matches.size());
+    candidateData.num_filtered_matches = static_cast<int>(ctx.keypoint_match_data.filtered_matches.size());
+
+    std::string matrixReason;
+    const bool hasEstimatedMatrix =
+        captureGeometryEstimate(ctx.geometry_data, candidateData, matrixReason);
+    if (stageOk && !hasEstimatedMatrix) {
+        rejectReason = matrixReason;
+    }
+
+    if (stageOk && hasEstimatedMatrix &&
         validateCandidate(_config, ctx, _candidate.name, candidateData, rejectReason)) {
         candidateData.accepted = true;
+        candidateData.seed_available = true;
         candidateData.message = "accepted";
         best = candidateData;
         IR_LOG_INFO("DirectFeatureInitializer accepted ",
@@ -330,11 +333,13 @@ bool DirectFeatureInitializer::run(RegistrationContext& ctx) {
     } else {
         rejectMessages.push_back(_candidate.name + ":" + rejectReason);
         IR_LOG_INFO("DirectFeatureInitializer rejected ", _candidate.name, ": ", rejectReason);
-        if (candidateData.seed_available &&
+        estimatedOnly = candidateData;
+        estimatedOnly.message = "visualization-only: " + rejectReason;
+        if (hasEstimatedMatrix &&
             _config.feature_initializer.seed_mode ==
                 FeatureInitializerSeedMode::ESTIMATED_WHEN_AVAILABLE) {
-            seedOnly = candidateData;
-            seedOnly.message = "seed-only: " + rejectReason;
+            estimatedOnly.seed_available = true;
+            estimatedOnly.message = "seed-only: " + rejectReason;
             IR_LOG_INFO("DirectFeatureInitializer keeps rejected estimate as direct seed: ",
                         _candidate.name);
         }
@@ -343,16 +348,12 @@ bool DirectFeatureInitializer::run(RegistrationContext& ctx) {
     restoreContext(ctx, snapshot);
 
     output = best.accepted ? best
-                           : (seedOnly.seed_available ? seedOnly : FeatureInitializerData{});
+                           : estimatedOnly;
     output.attempted = true;
     if (best.accepted) {
         output.message = "accepted";
         return true;
     }
-    if (seedOnly.seed_available) {
-        return false;
-    }
-
     std::ostringstream oss;
     oss << "no feature initializer candidate accepted";
     if (!rejectMessages.empty()) {

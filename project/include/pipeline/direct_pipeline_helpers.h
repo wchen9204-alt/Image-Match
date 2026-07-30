@@ -33,8 +33,12 @@ bool mergeFeatureInitializerAndDirectResult(RegistrationContext& ctx,
 /// 基于点特征初始值单独生成一张 warp 后的 source 图，用于 false-color overlay 输出。
 bool buildInitializerWarpedSource(const RegistrationContext& ctx, cv::Mat& warped);
 
-/// 根据最终判定采用的结果来源，生成 direct 最终对外展示的 false-color overlay。
-/// 当最终来源为 INITIALIZER 时，使用 initializer warp；否则使用 direct 的 warped_image。
+/// 将最终判定采用的配准结果写入 warped_image，供 warped、blend 和通用 false 图统一输出。
+/// 当最终来源为 INITIALIZER 时，重建点特征 warp；否则保留直接法的 warped_image。
+bool applyFinalSelectedWarpedImage(RegistrationContext& ctx);
+
+/// 基于最终选中的 warped_image 生成 direct 最终对外展示的 false-color overlay。
+/// warped_image 已在通用输出前按最终判定来源统一为 initializer 或 direct 结果。
 bool buildFinalSelectedFalseColorOverlay(const RegistrationContext& ctx,
                                          int foregroundThreshold,
                                          cv::Mat& overlay);

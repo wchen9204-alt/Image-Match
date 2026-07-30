@@ -285,7 +285,7 @@ bool mergeFeatureInitializerAndDirectResult(RegistrationContext& ctx,
 bool buildInitializerWarpedSource(const RegistrationContext& ctx, cv::Mat& warped) {
     warped.release();
     const auto& init = ctx.feature_initializer_data;
-    if (!init.seed_available || ctx.images.first.empty() || ctx.images.second.empty()) {
+    if (ctx.images.first.empty() || ctx.images.second.empty()) {
         return false;
     }
 
@@ -316,28 +316,31 @@ bool buildInitializerWarpedSource(const RegistrationContext& ctx, cv::Mat& warpe
     return false;
 }
 
-/// 按最终判定来源在 initializer overlay 和 direct overlay 之间二选一，生成最终展示图。
+/// 将最终判定选中的 warp 写回上下文，使通用 warped、blend 和 false 图输出与最终结果一致。
+bool applyFinalSelectedWarpedImage(RegistrationContext& ctx) {
+    if (ctx.result.final_validation_source != "INITIALIZER") {
+        return true;
+    }
+
+    cv::Mat initializerWarped;
+    if (!buildInitializerWarpedSource(ctx, initializerWarped)) {
+        return false;
+    }
+
+    ctx.warped_image = std::move(initializerWarped);
+    return true;
+}
+
+/// 基于最终选中的 warped_image 生成 final false-color overlay，保证与 warped 输出一致。
 bool buildFinalSelectedFalseColorOverlay(const RegistrationContext& ctx,
                                          int foregroundThreshold,
                                          cv::Mat& overlay) {
     overlay.release();
-    cv::Mat selectedWarped;
-
-    // 1. 若最终结果采用 initializer，则单独重建 initializer 的 warped source。
-    if (ctx.result.final_validation_source == "INITIALIZER") {
-        if (!buildInitializerWarpedSource(ctx, selectedWarped)) {
-            return false;
-        }
-    } else {
-        // 2. 其它情况默认沿用 direct 最终 warp 结果。
-        if (ctx.warped_image.empty()) {
-            return false;
-        }
-        selectedWarped = ctx.warped_image;
+    if (ctx.warped_image.empty()) {
+        return false;
     }
 
-    // 3. 使用统一的 false-color overlay 逻辑，保证 direct / initializer 的显示口径一致。
-    return base_pipeline_helpers::buildFalseColorOverlay(selectedWarped,
+    return base_pipeline_helpers::buildFalseColorOverlay(ctx.warped_image,
                                                          ctx.images.second,
                                                          foregroundThreshold,
                                                          overlay);

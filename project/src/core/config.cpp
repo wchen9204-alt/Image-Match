@@ -179,6 +179,10 @@ void parseFeatureInitializer(const YAML::Node& node, const fs::path& base, Pipel
                 yaml_utils::getInt(overlap,
                                    "foreground_threshold",
                                    overlapCfg.foreground_threshold);
+            overlapCfg.containment_tolerance_pixels =
+                yaml_utils::getInt(overlap,
+                                   "containment_tolerance_pixels",
+                                   overlapCfg.containment_tolerance_pixels);
         }
         if (validation["photometric"] && validation["photometric"].IsMap()) {
             const auto& photometric = validation["photometric"];
@@ -281,6 +285,8 @@ void Config::resetVisualization(PipelineConfig& cfg) {
     cfg.save_warped = true;
     cfg.save_blend = true;
     cfg.save_false_color_overlay = true;
+    cfg.false_color_foreground_threshold = 0;
+    cfg.save_foreground_masks = true;
     cfg.save_structure_responses = true;
     cfg.structure_match_source = StructureMatchSource::RAW;
     cfg.warp = true;
@@ -311,6 +317,12 @@ void Config::applyVisualizationOverrides(PipelineConfig& cfg, const YAML::Node& 
     if (vis["save_false_color_overlay"])
         cfg.save_false_color_overlay = yaml_utils::getBool(
             vis, "save_false_color_overlay", cfg.save_false_color_overlay);
+    if (vis["false_color_foreground_threshold"])
+        cfg.false_color_foreground_threshold = yaml_utils::getInt(
+            vis, "false_color_foreground_threshold", cfg.false_color_foreground_threshold);
+    if (vis["save_foreground_masks"])
+        cfg.save_foreground_masks = yaml_utils::getBool(
+            vis, "save_foreground_masks", cfg.save_foreground_masks);
     if (vis["save_structure_responses"])
         cfg.save_structure_responses = yaml_utils::getBool(
             vis, "save_structure_responses", cfg.save_structure_responses);
@@ -398,6 +410,10 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
                                     hasContainmentThreshold);
             overlapCfg.foreground_threshold =
                 yaml_utils::getInt(overlap, "foreground_threshold", overlapCfg.foreground_threshold);
+            overlapCfg.containment_tolerance_pixels =
+                yaml_utils::getInt(overlap,
+                                   "containment_tolerance_pixels",
+                                   overlapCfg.containment_tolerance_pixels);
         }
         if (validation["photometric"] && validation["photometric"].IsMap()) {
             const auto& photometric = validation["photometric"];

@@ -18,6 +18,10 @@ io:
   output_dir: ../../../outputs
 
 visualization:
+  # false 图前景阈值；仅影响可视化。0 表示显示所有非黑像素。
+  false_color_foreground_threshold: 0
+  # 是否保存 source/target 原图前景 mask，以及 warped source/target 前景重叠图。
+  save_foreground_masks: true
   draw_matches: true
   # 结构匹配图使用的对应关系；可选 RAW / INLIERS。
   structure_match_source: INLIERS
@@ -34,7 +38,9 @@ validation:
     enabled: true
     # 最低局部包含率；默认值 0.20。
     min_containment: 0.70
-    foreground_threshold: 10
+    foreground_threshold: 20
+    # 局部包含率的像素匹配容差；0 表示严格像素重叠。
+    containment_tolerance_pixels: 0
   structure_overlap:
     enabled: true
     min_iou: 0.12

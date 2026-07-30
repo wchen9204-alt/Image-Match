@@ -34,10 +34,16 @@ double computeEdgeAlignmentIou(const cv::Mat& warped,
 /// 计算两个前景 mask 的交并比，主要用于结构重叠验证。
 double computeMaskIou(const cv::Mat& a, const cv::Mat& b);
 
+/// 扩张 target 前景 mask，供局部包含率的像素容差匹配使用。
+void expandMaskForContainmentTolerance(const cv::Mat& targetMask,
+                                       int tolerancePixels,
+                                       cv::Mat& expandedMask);
+
 /// 计算 warped source 与 target 的局部包含率，支持一张图是另一张图局部的场景。
 double computeMaskLocalContainment(const cv::Mat& sourceMask,
                                    const cv::Mat& warpedSourceMask,
-                                   const cv::Mat& targetMask);
+                                   const cv::Mat& targetMask,
+                                   int tolerancePixels = 0);
 
 /// 计算前景 mask 经过 warp 后仍落在目标画布内的比例。
 double computeMaskCoverage(const cv::Mat& originalMask, const cv::Mat& warpedMask);
