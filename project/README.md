@@ -15,8 +15,6 @@ matches JSON，然后复用同一套 C++ 几何与评测阶段。
 
 ## 目录结构
 
-下面的目录树只使用 ASCII 字符，这样在不同终端和编码环境里都更容易读。
-
 ```text
 project/
 |-- CMakeLists.txt
@@ -111,18 +109,16 @@ project/build-mingw/bin/registration_app.exe
 运行一个 pipeline YAML：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/keypoint/sift_pipeline.yaml
+project/build-mingw/bin/registration_app.exe project/configs/pipeline/keypoint/orb_pipeline.yaml
 ```
 
 按方法族的示例：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/keypoint/sift_pipeline.yaml
+project/build-mingw/bin/registration_app.exe project/configs/pipeline/keypoint/orb_pipeline.yaml
 project/build-mingw/bin/registration_app.exe project/configs/pipeline/structure/line_pipeline.yaml
 project/build-mingw/bin/registration_app.exe project/configs/pipeline/direct/frequency_direct_pipeline.yaml
 project/build-mingw/bin/registration_app.exe project/configs/pipeline/learning/loftr_learning_pipeline.yaml
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/learning/superpoint_lightglue_learning_pipeline.yaml
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/learning/superpoint_superglue_learning_pipeline.yaml
 ```
 
 每个 pipeline 也可以通过 `io` 块覆盖输入图像和输出目录。
@@ -147,101 +143,3 @@ project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/comp
 
 批处理会扫描配置的数据集根目录，对每个样本运行指定的单次 pipeline，
 并写出汇总 CSV。
-
-## 学习法
-
-学习法流水线的数据流如下：
-
-```text
-LearningPipeline
-  -> PythonLearningMatcher
-  -> learning_backend.py in single or worker mode
-  -> matches JSON
-  -> C++ correspondence view with source LEARNING
-  -> geometry estimation
-  -> warp, metrics, visualization, summaries
-```
-
-已实现的学习方法：
-
-- `LOFTR`: backed by Kornia LoFTR.
-- `SUPERPOINT_LIGHTGLUE`: backed by SuperPoint + LightGlue.
-- `SUPERPOINT_SUPERGLUE`: backed by SuperPoint + SuperGlue.
-
-Python 主入口是：
-
-```text
-tools/deep/learning_backend.py
-```
-
-它支持两种模式：
-
-- `single`: start Python, load one model, process one image pair, then exit.
-- `worker`: keep Python alive, load the model once, and process many image pairs.
-
-三个方法专属脚本仍可作为兼容和调试入口，但学习法 YAML 现在统一使用
-后端封装。
-
-当前学习法 YAML 指向：
-
-```text
-C:/Users/wangchenyu/AppData/Local/Python/bin/python.exe
-```
-
-这样可以避开 WindowsApps 的 Python 别名，直接启动真实解释器。
-
-学习脚本已经依赖的 Python 包包括：
-
-- torch
-- torchvision
-- opencv-python
-- kornia
-- certifi
-
-仅作为源码依赖放在 `third_party/` 下、不会被 CMake 编译的目录包括：
-
-```text
-project/third_party/LightGlue
-project/third_party/SuperGluePretrainedNetwork
-```
-
-Python 脚本会自动把这些目录加入 `sys.path`。
-
-## 输出
-
-单次运行输出位于：
-
-```text
-project/outputs/single/<method_family>/<pipeline>/
-```
-
-批量输出位于：
-
-```text
-project/outputs/batch/<method_family>/<pipeline>/
-```
-
-常见输出文件包括：
-
-- original images
-- all-match visualization
-- inlier visualization
-- warped image
-- blend image
-- false-color overlay image
-- `run_summary.txt`
-- `run_summary.json`
-- batch `summary.csv`
-
-## 扩展
-
-常见扩展点：
-
-- 通过实现 `IKeypointExtractor` 并注册到工厂中，新增点特征提取器。
-- 通过结构接口新增结构提取器或关联器。
-- 通过 `IDirectAligner` 和 direct pipeline 配置新增直接法配准器。
-- 通过输出统一 matches JSON 的 Python 脚本新增学习法匹配器。
-- 通过 geometry YAML 切换或新增几何估计器。
-
-共享的 `RegistrationContext` 会在各个阶段之间携带图像数据、匹配、几何、
-warp 结果、指标和运行摘要。

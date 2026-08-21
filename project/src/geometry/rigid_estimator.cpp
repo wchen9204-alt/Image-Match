@@ -46,12 +46,24 @@ RigidEstimator::RigidEstimator(const YAML::Node& cfg) {
         std::max(0, yaml_utils::getInt(params, "filteredMatchCandidateCount", 12));
     _filteredMatchCandidateMinPairDistance =
         std::max(0.0, yaml_utils::getDouble(params, "filteredMatchCandidateMinPairDistance", 20.0));
+    const std::string candidatePairStrategyRaw =
+        yaml_utils::getString(params, "filteredMatchCandidatePairStrategy", "COVERAGE_FIRST");
+    _filteredMatchCandidatePairStrategy =
+        rigid_estimator_helpers::normalizeCandidatePairStrategy(candidatePairStrategyRaw);
+    const std::string normalizedCandidatePairStrategyRaw =
+        string_utils::normalizedKey(candidatePairStrategyRaw);
+    if (normalizedCandidatePairStrategyRaw != "COVERAGEFIRST" &&
+        normalizedCandidatePairStrategyRaw != "LEGACYLEXICOGRAPHIC") {
+        IR_LOG_WARN("RigidEstimator: unknown filteredMatchCandidatePairStrategy=",
+                    candidatePairStrategyRaw,
+                    ", fallback to COVERAGE_FIRST.");
+    }
     _enableCandidateMaskScoring =
         yaml_utils::getBool(params, "enableCandidateMaskScoring", false);
     _candidateMaskForegroundThreshold =
         std::clamp(yaml_utils::getInt(params, "candidateMaskForegroundThreshold", 10), 0, 255);
-    _candidateMinContainment =
-        yaml_utils::getDouble(params, "candidateMinContainment", -1.0);
+    _candidateContainmentTieMargin =
+        std::max(0.0, yaml_utils::getDouble(params, "candidateContainmentTieMargin", 0.20));
     _candidateDedupRotationDiffDeg =
         std::max(0.0, yaml_utils::getDouble(params, "candidateDedupRotationDiffDeg", 2.0));
     _candidateDedupTranslationDiff =
@@ -90,12 +102,13 @@ RigidEstimator::RigidEstimator(const YAML::Node& cfg) {
                 _filteredMatchCandidateCount,
                 ", filteredMatchCandidateMinPairDistance=",
                 _filteredMatchCandidateMinPairDistance,
+                ", filteredMatchCandidatePairStrategy=",
+                _filteredMatchCandidatePairStrategy,
                 ", enableCandidateMaskScoring=",
                 _enableCandidateMaskScoring,
+
                 ", candidateMaskForegroundThreshold=",
                 _candidateMaskForegroundThreshold,
-                ", candidateMinContainment=",
-                _candidateMinContainment,
                 ", candidateDedupRotationDiffDeg=",
                 _candidateDedupRotationDiffDeg,
                 ", candidateDedupTranslationDiff=",
@@ -309,56 +322,66 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
                                                                     _filteredMatchCandidateTopK,
                                                                     _filteredMatchCandidateMinPairDistance);
         const int topK = static_cast<int>(seedIndices.size());
-        const double minPairDistance2 =
-            _filteredMatchCandidateMinPairDistance * _filteredMatchCandidateMinPairDistance;
+        const std::vector<rigid_estimator_helpers::CandidateSeedPair> candidateSeedPairs =
+            rigid_estimator_helpers::buildCandidateSeedPairs(seedIndices,
+                                                              pts1,
+                                                              pts2,
+                                                              filteredDistances,
+                                                              _filteredMatchCandidateMinPairDistance);
+        std::vector<unsigned char> attemptedPairs(candidateSeedPairs.size(), 0);
+        std::vector<int> successfulSeedUsage(pts1.size(), 0);
         int generatedCandidates = 0;
-        for (int i = 0; i < topK && generatedCandidates < _filteredMatchCandidateCount; ++i) {
-            for (int j = i + 1; j < topK && generatedCandidates < _filteredMatchCandidateCount; ++j) {
-                const int first = seedIndices[static_cast<size_t>(i)];
-                const int second = seedIndices[static_cast<size_t>(j)];
-
-                // 两个样本点如果在 source 或 target 上离得太近，旋转方向会非常不稳定，
-                // 这类 2 点 rigid 假设容易退化，直接跳过。
-                if (rigid_estimator_helpers::pairDistance2(pts1[first], pts1[second]) < minPairDistance2 ||
-                    rigid_estimator_helpers::pairDistance2(pts2[first], pts2[second]) < minPairDistance2) {
-                    continue;
-                }
-
-                cv::Mat candidateA;
-                std::vector<unsigned char> candidateMask;
-
-                // 先用 2 对点生成一个最小刚体假设，再投影回全部 filtered 点上拿到初始 mask。
-                if (!rigid_estimator_helpers::buildRigidCandidateFromPair(
-                        pts1, pts2, first, second, _ransacReprojThreshold, candidateA, candidateMask)) {
-                    continue;
-                }
-
-                bool candidateRefined = false;
-                if (_rigidRefineMode == "NONE") {
-                    candidateRefined = true;
-                } else {
-                    candidateRefined = partial_affine_utils::refineRigidFromMask(
-                        pts1, pts2, _ransacReprojThreshold, candidateMask, candidateA, false);
-                }
-                if (!candidateRefined || candidateA.empty()) {
-                    continue;
-                }
-
-                // 候选经过 rigid refine 后再入池，确保和 baseline 比较时都是“最终可用模型”。
-                candidateTransforms.push_back(candidateA.clone());
-                candidateMasks.push_back(candidateMask);
-                ++generatedCandidates;
+        int attemptedPairCount = 0;
+        while (generatedCandidates < _filteredMatchCandidateCount) {
+            const int pairIndex = rigid_estimator_helpers::selectNextCandidateSeedPair(
+                candidateSeedPairs,
+                attemptedPairs,
+                successfulSeedUsage,
+                _filteredMatchCandidatePairStrategy);
+            if (pairIndex < 0) {
+                break;
             }
-        }
+            attemptedPairs[static_cast<size_t>(pairIndex)] = 1;
+            ++attemptedPairCount;
+            const auto& seedPair = candidateSeedPairs[static_cast<size_t>(pairIndex)];
+            const int first = seedPair.first;
+            const int second = seedPair.second;
 
+            cv::Mat candidateA;
+            std::vector<unsigned char> candidateMask;
+
+            // 先用 2 对点生成一个最小刚体假设，再投影回全部 filtered 点上拿到初始 mask。
+            if (!rigid_estimator_helpers::buildRigidCandidateFromPair(
+                    pts1, pts2, first, second, _ransacReprojThreshold, candidateA, candidateMask)) {
+                continue;
+            }
+
+            bool candidateRefined = false;
+            if (_rigidRefineMode == "NONE") {
+                candidateRefined = true;
+            } else {
+                candidateRefined = partial_affine_utils::refineRigidFromMask(
+                    pts1, pts2, _ransacReprojThreshold, candidateMask, candidateA, false);
+            }
+            if (!candidateRefined || candidateA.empty()) {
+                continue;
+            }
+
+            // 只有成功建模并精修的候选才消耗 seed 覆盖名额；失败点对会继续尝试其他组合。
+            ++successfulSeedUsage[static_cast<size_t>(first)];
+            ++successfulSeedUsage[static_cast<size_t>(second)];
+            candidateTransforms.push_back(candidateA.clone());
+            candidateMasks.push_back(candidateMask);
+            ++generatedCandidates;
+        }
         cv::Mat selectedA;
         std::vector<unsigned char> selectedMask;
         int selectedInliers = 0;
         double selectedError = std::numeric_limits<double>::infinity();
         double selectedContainment = -1.0;
+        std::vector<cv::Mat> validCandidateTransforms;
 
-        // 最终统一按“前景几何门槛优先，再比较内点数 / containment / 误差”
-        // 选择最优 rigid。若所有候选都没过前景门槛，则自动回退到旧规则，避免直接清空结果。
+        // 先按 containment 缩小候选窗口，再用平均重投影误差选出刚体。
         if (rigid_estimator_helpers::selectBestRigidCandidate(candidateTransforms,
                                                               candidateMasks,
                                                               ctx,
@@ -367,21 +390,29 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
                                                               _minInliers,
                                                               _enableCandidateMaskScoring,
                                                               _candidateMaskForegroundThreshold,
-                                                              _candidateMinContainment,
+                                                               _candidateContainmentTieMargin,
                                                               _candidateDedupRotationDiffDeg,
                                                               _candidateDedupTranslationDiff,
                                                               selectedA,
-                                                              selectedMask,
-                                                              selectedInliers,
-                                                              selectedError,
-                                                              selectedContainment)) {
+                                                               selectedMask,
+                                                               selectedInliers,
+                                                               selectedError,
+                                                               selectedContainment,
+                                                               validCandidateTransforms)) {
             A = selectedA;
+            gd.candidate_transforms = std::move(validCandidateTransforms);
             mask = selectedMask;
             IR_LOG_INFO("RigidEstimator filtered-match candidates generated=",
                         generatedCandidates,
                         ", seed_count=",
                         topK,
-                        ", total_candidates=",
+                        ", legal_pair_count=",
+                        candidateSeedPairs.size(),
+                        ", attempted_pair_count=",
+                        attemptedPairCount,
+                        ", pair_strategy=",
+                        _filteredMatchCandidatePairStrategy,
+                        ", candidate_pool_size_including_baseline=",
                         candidateTransforms.size(),
                         ", selected_inliers=",
                         selectedInliers,
@@ -390,7 +421,12 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
                         ", selected_containment=",
                         selectedContainment);
         } else {
-            IR_LOG_INFO("RigidEstimator filtered-match candidates generated=0 or no candidate survived scoring.");
+            IR_LOG_INFO("RigidEstimator filtered-match candidates generated=0 or no candidate survived scoring, legal_pair_count=",
+                        candidateSeedPairs.size(),
+                        ", attempted_pair_count=",
+                        attemptedPairCount,
+                        ", pair_strategy=",
+                        _filteredMatchCandidatePairStrategy);
         }
     }
 

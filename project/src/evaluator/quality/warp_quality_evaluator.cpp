@@ -50,53 +50,156 @@ void fail(WarpQualityResult& result, const std::string& message) {
     result.message = message;
 }
 
+void syncHeightDifferenceDiagnostics(
+    WarpQualityResult& result,
+    const height_difference_evaluator::Statistics& statistics,
+    const cv::Mat& targetMask) {
+    result.height_diff_valid_count = statistics.raw_abs_diff_count;
+    const int targetForegroundCount = targetMask.empty() ? 0 : cv::countNonZero(targetMask);
+    result.height_diff_overlap_ratio =
+        targetForegroundCount > 0
+            ? static_cast<double>(statistics.raw_abs_diff_count) /
+                  static_cast<double>(targetForegroundCount)
+            : -1.0;
+    result.height_diff_mean = statistics.raw_abs_diff_mean;
+    result.height_diff_p50 = statistics.raw_abs_diff_p50;
+    result.height_diff_p75 = statistics.raw_abs_diff_p75;
+    result.height_diff_p90 = statistics.raw_abs_diff_p90;
+    result.height_diff_p95 = statistics.raw_abs_diff_p95;
+    result.height_diff_max = statistics.raw_abs_diff_max;
+    result.height_diff_p90_p75_gap =
+        statistics.raw_abs_diff_p90 >= 0.0 && statistics.raw_abs_diff_p75 >= 0.0
+            ? statistics.raw_abs_diff_p90 - statistics.raw_abs_diff_p75
+            : -1.0;
+    if (statistics.compensated_p50 >= 0.0) {
+        result.height_diff_global_offset = statistics.height_offset;
+        result.height_diff_compensated_mean = statistics.compensated_mean;
+        result.height_diff_compensated_p50 = statistics.compensated_p50;
+        result.height_diff_compensated_p75 = statistics.compensated_p75;
+        result.height_diff_compensated_p90 = statistics.compensated_p90;
+        result.height_diff_compensated_p95 = statistics.compensated_p95;
+        result.height_diff_compensated_max = statistics.compensated_max;
+    }
+}
+
 } // namespace
 
 WarpQualityOptions makeFinalWarpQualityOptions(const PipelineConfig& cfg) {
     const auto& overlap = cfg.warp_quality.overlap;
-    const auto& photometric = cfg.warp_quality.photometric;
-    const auto& edge = cfg.warp_quality.edge_alignment;
-
+    const auto& heightDifference = cfg.warp_quality.height_difference;
     WarpQualityOptions options;
     options.validate_containment = overlap.containment_enabled;
     options.min_overlap_containment = overlap.min_containment;
     options.foreground_threshold = overlap.foreground_threshold;
     options.containment_tolerance_pixels = overlap.containment_tolerance_pixels;
-    options.validate_photometric = photometric.enabled;
-    options.max_photometric_error = photometric.max_nmad;
-    options.validate_edge_alignment = edge.enabled;
-    options.min_edge_alignment_iou = edge.min_iou;
-    options.edge_alignment_canny_low_threshold = edge.canny_low_threshold;
-    options.edge_alignment_canny_high_threshold = edge.canny_high_threshold;
-    options.edge_alignment_dilate_size = edge.dilate_size;
-    options.min_edge_alignment_pixels = edge.min_edge_pixels;
+    options.validate_height_difference = heightDifference.enabled;
+    options.compensate_global_height_offset = heightDifference.compensate_global_height_offset;
+    options.height_difference_percentile = heightDifference.percentile;
+    options.max_height_difference_error = heightDifference.max_abs_error;
+    options.allow_local_noise_fallback = heightDifference.local_noise_fallback_enabled;
+    options.local_noise_p75_max_abs_error = heightDifference.local_noise_p75_max_abs_error;
+    options.local_noise_min_containment = heightDifference.local_noise_min_containment;
+    const auto& edgeStructure = cfg.warp_quality.edge_structure_diagnostic;
+    options.edge_structure.enabled = edgeStructure.enabled;
+    options.edge_structure.visibility_threshold = edgeStructure.visibility_threshold;
+    options.edge_structure.min_foreground_elongation_ratio =
+        edgeStructure.min_foreground_elongation_ratio;
+    options.edge_structure.min_axis_occupancy = edgeStructure.min_axis_occupancy;
+    options.edge_structure.max_centerline_deviation_ratio =
+        edgeStructure.max_centerline_deviation_ratio;
+    options.edge_structure.max_canvas_side_pixels = edgeStructure.max_canvas_side_pixels;
+    options.edge_structure.max_canvas_pixels = edgeStructure.max_canvas_pixels;
+    options.edge_structure.duplicate_line_normal_tolerance_pixels =
+        edgeStructure.duplicate_line_normal_tolerance_pixels;
+    options.edge_structure.duplicate_line_min_span_overlap_ratio =
+        edgeStructure.duplicate_line_min_span_overlap_ratio;
+    options.edge_structure.outer_longitudinal_edge_min_normal_separation_pixels =
+        edgeStructure.outer_longitudinal_edge_min_normal_separation_pixels;
+    options.edge_structure.outer_longitudinal_edge_max_normal_separation_pixels =
+        edgeStructure.outer_longitudinal_edge_max_normal_separation_pixels;
+    options.edge_structure.outer_longitudinal_edge_min_span_overlap_ratio =
+        edgeStructure.outer_longitudinal_edge_min_span_overlap_ratio;
+    options.edge_structure.min_fragment_length_pixels =
+        edgeStructure.min_fragment_length_pixels;
+    options.edge_structure.group_max_angle_difference_degrees =
+        edgeStructure.group_max_angle_difference_degrees;
+    options.edge_structure.group_max_normal_distance_pixels =
+        edgeStructure.group_max_normal_distance_pixels;
+    options.edge_structure.post_fit_group_normal_distance_pixels =
+        edgeStructure.post_fit_group_normal_distance_pixels;
+    options.edge_structure.min_line_group_actual_length_pixels =
+        edgeStructure.min_line_group_actual_length_pixels;
+    options.edge_structure.min_line_group_continuity_ratio =
+        edgeStructure.min_line_group_continuity_ratio;
+    options.edge_structure.max_line_group_gap_ratio = edgeStructure.max_line_group_gap_ratio;
+    options.edge_structure.max_fragment_direction_spread_degrees =
+        edgeStructure.max_fragment_direction_spread_degrees;
+    options.edge_structure.max_line_fit_residual_pixels =
+        edgeStructure.max_line_fit_residual_pixels;
+    options.edge_structure.min_main_line_actual_length_ratio =
+        edgeStructure.min_main_line_actual_length_ratio;
+    options.edge_structure.direction_cluster_tolerance_degrees =
+        edgeStructure.direction_cluster_tolerance_degrees;
+    options.edge_structure.min_main_direction_support_ratio =
+        edgeStructure.min_main_direction_support_ratio;
+    options.edge_structure.max_main_direction_spread_degrees =
+        edgeStructure.max_main_direction_spread_degrees;
+    options.edge_structure.min_main_direction_margin = edgeStructure.min_main_direction_margin;
+    options.edge_structure.max_main_direction_difference_degrees =
+        edgeStructure.max_main_direction_difference_degrees;
+    options.edge_structure.max_axis_classification_error_degrees =
+        edgeStructure.max_axis_classification_error_degrees;
+    options.edge_structure.min_horizontal_actual_length_ratio =
+        edgeStructure.min_horizontal_actual_length_ratio;
+    options.edge_structure.min_vertical_actual_length_ratio =
+        edgeStructure.min_vertical_actual_length_ratio;
+    options.edge_structure.max_vertical_unmatched_length_ratio =
+        edgeStructure.max_vertical_unmatched_length_ratio;
+    options.edge_structure.profile_smoothing_sigma = edgeStructure.profile_smoothing_sigma;
+    options.edge_structure.min_peak_prominence = edgeStructure.min_peak_prominence;
+    options.edge_structure.candidate_position_tolerance_pixels =
+        edgeStructure.candidate_position_tolerance_pixels;
+    options.edge_structure.final_position_tolerance_pixels =
+        edgeStructure.final_position_tolerance_pixels;
+    options.edge_structure.candidate_min_span_overlap_ratio =
+        edgeStructure.candidate_min_span_overlap_ratio;
+    options.edge_structure.min_shorter_line_overlap_ratio =
+        edgeStructure.min_shorter_line_overlap_ratio;
+    options.edge_structure.max_line_pair_angle_difference_degrees =
+        edgeStructure.max_line_pair_angle_difference_degrees;
+    options.edge_structure.match_position_cost_weight = edgeStructure.match_position_cost_weight;
+    options.edge_structure.match_overlap_cost_weight = edgeStructure.match_overlap_cost_weight;
+    options.edge_structure.match_angle_cost_weight = edgeStructure.match_angle_cost_weight;
+    options.edge_structure.match_prominence_cost_weight =
+        edgeStructure.match_prominence_cost_weight;
+    options.edge_structure.min_strong_line_actual_length_pixels =
+        edgeStructure.min_strong_line_actual_length_pixels;
+    options.edge_structure.min_strong_peak_prominence = edgeStructure.min_strong_peak_prominence;
+    options.edge_structure.ambiguity_score_margin = edgeStructure.ambiguity_score_margin;
     return options;
 }
 
 WarpQualityOptions makeInitializerWarpQualityOptions(const PipelineConfig& cfg) {
     const auto& overlap = cfg.feature_initializer.validation.overlap;
-    const auto& photometric = cfg.feature_initializer.validation.photometric;
-    const auto& edge = cfg.feature_initializer.validation.edge_alignment;
-
+    const auto& heightDifference = cfg.feature_initializer.validation.height_difference;
     WarpQualityOptions options;
     options.validate_containment = overlap.containment_enabled;
     options.min_overlap_containment = overlap.min_containment;
     options.foreground_threshold = overlap.foreground_threshold;
     options.containment_tolerance_pixels = overlap.containment_tolerance_pixels;
-    options.validate_photometric = photometric.enabled;
-    options.max_photometric_error = photometric.max_nmad;
-    options.validate_edge_alignment = edge.enabled;
-    options.min_edge_alignment_iou = edge.min_iou;
-    options.edge_alignment_canny_low_threshold = edge.canny_low_threshold;
-    options.edge_alignment_canny_high_threshold = edge.canny_high_threshold;
-    options.edge_alignment_dilate_size = edge.dilate_size;
-    options.min_edge_alignment_pixels = edge.min_edge_pixels;
+    options.validate_height_difference = heightDifference.enabled;
+    options.compensate_global_height_offset = heightDifference.compensate_global_height_offset;
+    options.height_difference_percentile = heightDifference.percentile;
+    options.max_height_difference_error = heightDifference.max_abs_error;
+    options.allow_local_noise_fallback = heightDifference.local_noise_fallback_enabled;
+    options.local_noise_p75_max_abs_error = heightDifference.local_noise_p75_max_abs_error;
+    options.local_noise_min_containment = heightDifference.local_noise_min_containment;
     return options;
 }
 
 bool hasEnabledWarpQualityChecks(const WarpQualityOptions& options) {
-    return options.validate_containment ||
-           options.validate_photometric || options.validate_edge_alignment;
+    return options.validate_containment || options.validate_height_difference ||
+           options.edge_structure.enabled;
 }
 
 bool evaluateWarpQuality(const WarpQualityOptions& options,
@@ -110,20 +213,29 @@ bool evaluateWarpQuality(const WarpQualityOptions& options,
         return true;
     }
 
+    // NGF 使用独立的几何可见域并完整运行。诊断模式仅记录三态结果，不改变旧判定。
     const int thresholdValue = std::clamp(options.foreground_threshold, 0, 255);
     cv::Mat sourceMask;
     cv::Mat targetMask;
 
-    // 1. 先构建 target 前景 mask；后续 overlap、photometric 和 edge 都依赖它。
-    if (targetImage.empty() ||
-        !base_pipeline_helpers::buildForegroundMask(targetImage, thresholdValue, targetMask)) {
+    const bool needHeightDifferenceDiagnostics = options.validate_height_difference;
+    const bool needAppearance = needHeightDifferenceDiagnostics;
+    // 结构诊断也必须比较最终 warp 后的 source 与 target；不能回到原始 source 坐标。
+    const bool needWarpedSource = needAppearance || options.edge_structure.enabled;
+    const bool needLocalNoiseGeometry =
+        options.validate_height_difference && options.allow_local_noise_fallback;
+    const bool needTargetMask = options.validate_containment || needAppearance;
+    // 1. 只有 overlap/外观检查需要构建 target 前景 mask。
+    if (needTargetMask &&
+        (targetImage.empty() ||
+         !base_pipeline_helpers::buildForegroundMask(targetImage, thresholdValue, targetMask))) {
         fail(result, "warp validation failed: cannot build target foreground mask");
         return false;
     }
 
     cv::Mat warpedSourceMask;
-    const bool needOverlapGeometry =
-        options.validate_containment;
+    const bool needOverlapGeometry = options.validate_containment || needLocalNoiseGeometry;
+    std::string containmentFailureMessage;
     if (needOverlapGeometry) {
         // 2. 几何覆盖类指标必须使用原始 source mask 和 source -> target 矩阵计算。
         if (sourceImage.empty() ||
@@ -134,35 +246,37 @@ bool evaluateWarpQuality(const WarpQualityOptions& options,
                                                          targetImage.size(),
                                                          sourceToTargetMatrix,
                                                          warpedSourceMask)) {
-            fail(result, "warp mask validation failed: cannot warp source mask");
-            return false;
+            containmentFailureMessage = "warp mask validation failed: cannot warp source mask";
         }
     }
 
-    if (options.validate_containment) {
-        result.overlap_containment =
-            base_pipeline_helpers::computeMaskLocalContainment(
-                sourceMask,
-                warpedSourceMask,
-                targetMask,
-                options.containment_tolerance_pixels);
-        if (result.overlap_containment < 0.0) {
-            fail(result, "warp local containment failed: empty foreground");
-            return false;
+    if (needOverlapGeometry && containmentFailureMessage.empty()) {
+        const double containment = base_pipeline_helpers::computeMaskLocalContainment(
+            sourceMask,
+            warpedSourceMask,
+            targetMask,
+            options.containment_tolerance_pixels);
+        if (options.validate_containment) {
+            result.overlap_containment = containment;
+            if (result.overlap_containment < 0.0) {
+                fail(result, "warp local containment failed: empty foreground");
+                return false;
+            }
+            if (result.overlap_containment < options.min_overlap_containment) {
+                containmentFailureMessage =
+                    "warp local containment below threshold: " +
+                    std::to_string(result.overlap_containment) + " < " +
+                    std::to_string(options.min_overlap_containment);
+            }
         }
-        if (result.overlap_containment < options.min_overlap_containment) {
-            fail(result,
-                 "warp local containment below threshold: " +
-                     std::to_string(result.overlap_containment) + " < " +
-                     std::to_string(options.min_overlap_containment));
-            return false;
+        if (needLocalNoiseGeometry) {
+            result.height_diff_local_noise_containment = containment;
         }
     }
 
     cv::Mat warped = prewarpedSource;
-    const bool needAppearance = options.validate_photometric || options.validate_edge_alignment;
-    if (needAppearance) {
-        // 5. 外观类指标需要 warped 图像；未传入时用候选矩阵临时生成。
+    if (needWarpedSource) {
+        // 5. 外观与结构指标都在 target 坐标系比较；未传入时用候选矩阵临时生成。
         if (warped.empty() &&
             !warpImageToTarget(sourceImage, targetImage.size(), sourceToTargetMatrix, warped)) {
             fail(result, "warp validation failed: cannot build warped source image");
@@ -171,6 +285,27 @@ bool evaluateWarpQuality(const WarpQualityOptions& options,
         if (warped.empty() || warped.size() != targetImage.size()) {
             fail(result,
                  "warp validation failed: warped image and target have different sizes");
+            return false;
+        }
+    }
+
+    // 结构诊断优先给出三态结果：PASS 直接通过，FAIL 直接失败，
+    // INSUFFICIENT 才继续使用高度差等通用质量指标。
+    // 这里传入最终 warp 图，后续共同参考方向只做双方共有的坐标投影，不再承担几何配准。
+    if (options.edge_structure.enabled) {
+        edge_structure_diagnostic::evaluate(options.edge_structure,
+                                            warped,
+                                            targetImage,
+                                            result.edge_structure);
+        if (result.edge_structure.status == "PASS") {
+            result.pass = true;
+            result.message = "edge structure validation passed";
+            return true;
+        }
+        if (result.edge_structure.status == "FAIL") {
+            fail(result,
+                 "edge structure validation failed: " +
+                     result.edge_structure.message);
             return false;
         }
     }
@@ -185,46 +320,57 @@ bool evaluateWarpQuality(const WarpQualityOptions& options,
         cv::bitwise_and(warpedMask, targetMask, overlapMask);
     }
 
-    if (options.validate_edge_alignment) {
-        result.edge_alignment_iou =
-            base_pipeline_helpers::computeEdgeAlignmentIou(
-                warped,
-                targetImage,
-                overlapMask,
-                options.edge_alignment_canny_low_threshold,
-                options.edge_alignment_canny_high_threshold,
-                options.edge_alignment_dilate_size,
-                options.min_edge_alignment_pixels);
-        if (result.edge_alignment_iou < 0.0) {
-            fail(result, "warp edge alignment validation failed: invalid edge overlap");
-            return false;
-        }
-        if (result.edge_alignment_iou < options.min_edge_alignment_iou) {
-            fail(result,
-                 "warp edge alignment IoU below threshold: " +
-                     std::to_string(result.edge_alignment_iou) + " < " +
-                     std::to_string(options.min_edge_alignment_iou));
-            return false;
-        }
+    height_difference_evaluator::Result heightDifferenceResult;
+    if (needHeightDifferenceDiagnostics) {
+        height_difference_evaluator::Options heightDifferenceOptions;
+        heightDifferenceOptions.compensate_global_offset =
+            options.compensate_global_height_offset;
+        heightDifferenceOptions.percentile = options.height_difference_percentile;
+        heightDifferenceOptions.max_abs_error = options.max_height_difference_error;
+        heightDifferenceOptions.allow_local_noise_fallback =
+            options.allow_local_noise_fallback;
+        heightDifferenceOptions.local_noise_p75_max_abs_error =
+            options.local_noise_p75_max_abs_error;
+        heightDifferenceOptions.local_noise_min_containment =
+            options.local_noise_min_containment;
+        heightDifferenceResult = height_difference_evaluator::evaluate(
+            warped,
+            targetImage,
+            overlapMask,
+            result.height_diff_local_noise_containment,
+            heightDifferenceOptions);
+        syncHeightDifferenceDiagnostics(
+            result, heightDifferenceResult.statistics, targetMask);
+        result.height_diff_compensation_attempted =
+            heightDifferenceResult.compensation_attempted;
+        result.height_diff_local_noise_candidate = heightDifferenceResult.local_noise_pass;
     }
 
-    if (options.validate_photometric) {
-        result.photometric_error =
-            base_pipeline_helpers::computePhotometricError(warped, targetImage, overlapMask);
-        if (result.photometric_error < 0.0) {
-            fail(result, "warp photometric validation failed: empty overlap");
-            return false;
-        }
-        if (result.photometric_error > options.max_photometric_error) {
-            fail(result,
-                 "warp photometric error above threshold: " +
-                     std::to_string(result.photometric_error) + " > " +
-                     std::to_string(options.max_photometric_error));
-            return false;
-        }
+    const bool rawHeightPass =
+        !options.validate_height_difference || heightDifferenceResult.raw_pass;
+    const bool compensatedHeightPass = heightDifferenceResult.compensated_pass;
+    const std::string& heightFailureMessage = heightDifferenceResult.failure_message;
+
+    const bool containmentPass =
+        !options.validate_containment || containmentFailureMessage.empty();
+    const bool heightBranchPass = rawHeightPass ||
+                                   result.height_diff_local_noise_candidate ||
+                                   compensatedHeightPass;
+    const bool legacyPass = containmentPass && heightBranchPass;
+    result.pass = legacyPass;
+    if (result.pass) {
+        result.message = "OK";
+        return true;
     }
 
-    return true;
+    if (!containmentPass) {
+        result.message = containmentFailureMessage;
+    } else if (!heightBranchPass && !heightFailureMessage.empty()) {
+        result.message = heightFailureMessage;
+    } else {
+        result.message = "warp quality validation failed";
+    }
+    return false;
 }
 
 } // namespace ir::warp_quality

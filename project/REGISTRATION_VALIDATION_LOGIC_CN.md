@@ -20,8 +20,7 @@
   - `structure_overlap`：结构法响应图重叠验证。
 - `validateSharedFinalQuality` 当前统一落在 `warp_quality`：
   - `warp_overlap`
-  - `photometric`
-  - `edge_alignment`
+  - `height_difference`
 
 每个验证项只有在对应 YAML 配置块显式 `enabled: true` 时才会参与判定；同时代码还会先检查方法族，避免某个方法误进入自己用不到的逻辑。
 
@@ -49,26 +48,34 @@
 
 局限：它主要回答“区域有没有覆盖上”，不能单独保证区域内部的结构和纹理也真正对齐。
 
-### photometric
+### height_difference
 
-配置位置：`validation.photometric`
+配置位置：`validation.height_difference`
 
-作用：检查 warped source 与 target 在重叠前景区域内的光度误差。当前实现只在重叠区域统计误差，避免“一张图只是另一张图局部”时被非重叠区域污染。
+作用：检查 warped source 与 target 在有效重叠前景区域内的绝对高度差分布。当前高度单位由归一化灰度表示，统计覆盖区域内每个有效重叠像素。
 
 主要字段：
 
 - `enabled`：是否启用。
-- `max_nmad`：常规 NMAD 上限，越小越严格。
+- `compensate_global_height_offset`：原始高度差未通过时，是否尝试全局高度偏移补偿回退验证，默认 `false`。
+- `percentile`：用于判定的分位数，支持 `50`、`75`、`90`、`95`，默认 `90`。
+- `max_abs_error`：所选高度差分位数的最大允许值，默认 `0.10`。
 
 输出指标：
 
-- `warp_photometric_error`
+- `warp_height_diff_valid_count`
+- `warp_height_diff_overlap_ratio`
+- `warp_height_diff_mean`
+- `warp_height_diff_p50`
+- `warp_height_diff_p75`
+- `warp_height_diff_p90`
+- `warp_height_diff_p95`
+- `warp_height_diff_max`
 
-局限：如果阈值设得过松，仍可能放过“覆盖了但没对上”的结果；因此通常需要和 `edge_alignment` 配合使用。
+默认仅使用未补偿高度差的配置分位数。设置 `compensate_global_height_offset: true` 时，先检查未补偿的配置分位数；仅当其未通过时，才使用有效重叠区域有符号高度差的 90% 截尾均值估计单个全局偏移，并再次检查相同分位数。最终条件为：`原始 Pxx <= 阈值 OR (补偿已尝试且补偿后 Pxx <= 阈值)`。
 
-### edge_alignment
+局限：如果阈值设得过松，仍可能放过“覆盖了但没对上”的结果。
 
-配置位置：`validation.edge_alignment`
 
 作用：在重叠区域分别提取 warped source 和 target 的边缘，计算边缘 IoU，用来补充拦截“前景覆盖充分，但内容结构没有真正对齐”的结果。
 
@@ -83,7 +90,6 @@
 
 输出指标：
 
-- `warp_edge_alignment_iou`
 
 局限：低纹理、强模糊或边缘很少的样本，对边缘 IoU 不友好，因此它更适合作为公共最终判定里的补充项，而不是唯一依据。
 
@@ -169,8 +175,7 @@
    - 全局/频域直接法如果主要输出矩阵和算法分数，可以启用 `direct_quality`。
 2. 再做公共最终判定：
    - `warp_overlap`
-   - `photometric`
-   - `edge_alignment`
+   - `height_difference`
 
 这意味着：
 
@@ -220,16 +225,16 @@ direct 最终结果和已接受的 initializer 分别按各自已有规则先得
 3. 如果 initializer 失败、direct 成功，则直接使用 direct 结果。
 4. 如果两者都成功，则比较双方质量，选择更优结果作为最终结果。
 
-当前“都成功时”只比较 `containment` 与 `photometric` 的综合分：
+当前“都成功时”比较 `containment` 与所选高度差分位数：
 
 ```text
 containmentScore = clamp((containment - min_containment) / (1 - min_containment), 0, 1)
-photometricScore = clamp(1 - NMAD / max_nmad, 0, 1)
-finalScore = 0.35 * containmentScore + 0.65 * photometricScore
+heightDifference = select(warp_height_diff_p50, p75, p90, p95)
+heightDifferenceScore = clamp(1 - heightDifference / max_abs_error, 0, 1)
+finalScore = 0.35 * containmentScore + 0.65 * heightDifferenceScore
 ```
 
-分数更高者作为最终结果；平分时保留 direct 结果。`edge_alignment` 仍可作为各自结果的质量门槛，但不参与两者的最终排序。
-
+分数更高者作为最终结果；平分时保留 direct 结果。
 ## 关于“覆盖上了但根本没对上”
 
 像 ECC Test04 这类样本，问题通常不是前景完全没覆盖上，而是内容结构没有真正对齐。
@@ -237,8 +242,7 @@ finalScore = 0.35 * containmentScore + 0.65 * photometricScore
 这类样本不能只看 `warp_overlap`，因为它主要看区域覆盖；更合理的口径应该是组合判断：
 
 1. `warp_overlap`：几何覆盖是否成立。
-2. `photometric`：重叠区域灰度内容是否接近。
-3. `edge_alignment`：重叠区域结构边缘是否对齐。
+2. `height_difference`：重叠区域灰度内容是否接近。
 4. 直接法额外再看 `direct_quality`，点特征法额外再看 `match_quality`。
 
 因此，“公共最终判定一致，方法特有判定分开”是当前更通用、也更稳定的结构。

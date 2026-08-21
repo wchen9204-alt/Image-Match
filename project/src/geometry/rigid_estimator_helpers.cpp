@@ -7,6 +7,8 @@
 #include <utility>
 #include <vector>
 
+#include <opencv2/imgproc.hpp>
+
 #include "geometry/partial_affine_utils.h"
 #include "pipeline/base_pipeline_helpers.h"
 #include "utils/string_utils.h"
@@ -157,25 +159,6 @@ bool evaluateRigidCandidateMaskScore(const cv::Mat& sourceMask,
         sourceMask, warpedSourceMask, targetMask);
     return score.containment >= 0.0;
 }
-// 比较两个 rigid 候选的优先级，用于最终多候选选模。
-bool preferRigidCandidateScore(const RigidCandidateScore& lhs, const RigidCandidateScore& rhs) {
-    // 候选排序优先级：
-    // 1) 是否通过前景 mask 门槛
-    // 2) 内点数
-    // 3) containment
-    // 4) 重投影误差
-    if (lhs.passedMaskGate != rhs.passedMaskGate) {
-        return lhs.passedMaskGate;
-    }
-    if (lhs.inliers != rhs.inliers) {
-        return lhs.inliers > rhs.inliers;
-    }
-    if (lhs.containment != rhs.containment) {
-        return lhs.containment > rhs.containment;
-    }
-    return lhs.reprojError < rhs.reprojError;
-}
-
 // 从 2x3 刚体矩阵中提取旋转角，供轻量去重比较使用。
 double rigidRotationDeg(const cv::Mat& transform) {
     if (transform.empty() || transform.rows < 2 || transform.cols < 3) {
@@ -225,6 +208,15 @@ std::string normalizeRigidEstimatorBackend(const std::string& raw) {
         return "CUSTOM_RIGID_RANSAC";
     }
     return "OPENCV_PARTIAL_AFFINE";
+}
+
+// 将候选点对调度策略统一为固定枚举值，未知值回退到默认的分散覆盖策略。
+std::string normalizeCandidatePairStrategy(const std::string& raw) {
+    const std::string key = string_utils::normalizedKey(raw);
+    if (key == "LEGACYLEXICOGRAPHIC") {
+        return "LEGACY_LEXICOGRAPHIC";
+    }
+    return "COVERAGE_FIRST";
 }
 
 // 计算两点的平方距离，供候选生成阶段做快速距离比较。
@@ -338,6 +330,180 @@ std::vector<int> buildMixedCandidateSeedIndices(const std::vector<cv::Point2f>& 
     return seedIndices;
 }
 
+// 从混合式 seed 集合中预先枚举全部合法点对，并为每对缓存稳定的质量信息。
+std::vector<CandidateSeedPair> buildCandidateSeedPairs(const std::vector<int>& seedIndices,
+                                                        const std::vector<cv::Point2f>& src,
+                                                        const std::vector<cv::Point2f>& dst,
+                                                        const std::vector<float>& distances,
+                                                        double minPairDistance) {
+    // 第 1 步：只接受三组数据都能安全访问的 seed，并去除重复下标。
+    // 这使 helper 即使在未来被其他调用点复用时，也不会因距离数组不对齐而越界。
+    const size_t usableCount = std::min(src.size(), std::min(dst.size(), distances.size()));
+    std::vector<int> validSeedIndices;
+    validSeedIndices.reserve(seedIndices.size());
+    for (const int index : seedIndices) {
+        if (index < 0 || static_cast<size_t>(index) >= usableCount ||
+            std::find(validSeedIndices.begin(), validSeedIndices.end(), index) != validSeedIndices.end()) {
+            continue;
+        }
+        validSeedIndices.push_back(index);
+    }
+    if (validSeedIndices.size() < 2) {
+        return {};
+    }
+
+    // 第 2 步：在当前 seed 内建立稳定的描述子距离排名。
+    // 有限距离优先；距离相同时按原始点下标打破平局；NaN / Inf 统一视为最差，
+    // 避免排序结果受运行时或 STL 实现细节影响。
+    std::vector<int> distanceRankedIndices = validSeedIndices;
+    std::sort(distanceRankedIndices.begin(),
+              distanceRankedIndices.end(),
+              [&](int lhs, int rhs) {
+                  const float lhsDistance = distances[static_cast<size_t>(lhs)];
+                  const float rhsDistance = distances[static_cast<size_t>(rhs)];
+                  const bool lhsFinite = std::isfinite(lhsDistance);
+                  const bool rhsFinite = std::isfinite(rhsDistance);
+                  if (lhsFinite != rhsFinite) {
+                      return lhsFinite;
+                  }
+                  if (lhsFinite && lhsDistance != rhsDistance) {
+                      return lhsDistance < rhsDistance;
+                  }
+                  return lhs < rhs;
+              });
+    std::vector<int> distanceRankByIndex(usableCount, -1);
+    for (size_t rank = 0; rank < distanceRankedIndices.size(); ++rank) {
+        distanceRankByIndex[static_cast<size_t>(distanceRankedIndices[rank])] =
+            static_cast<int>(rank);
+    }
+
+    // 第 3 步：枚举所有合法 seed 对。source 和 target 任一侧太近都会导致
+    // 两点 rigid 的旋转方向不稳定，因此保持历史的“距离小于阈值即跳过”语义。
+    const double minPairDistance2 = minPairDistance * minPairDistance;
+    std::vector<CandidateSeedPair> pairs;
+    for (size_t i = 0; i + 1 < validSeedIndices.size(); ++i) {
+        for (size_t j = i + 1; j < validSeedIndices.size(); ++j) {
+            const int first = validSeedIndices[i];
+            const int second = validSeedIndices[j];
+            const double srcDistance2 = pairDistance2(src[first], src[second]);
+            const double dstDistance2 = pairDistance2(dst[first], dst[second]);
+            if (srcDistance2 < minPairDistance2 || dstDistance2 < minPairDistance2) {
+                continue;
+            }
+
+            const int firstRank = distanceRankByIndex[static_cast<size_t>(first)];
+            const int secondRank = distanceRankByIndex[static_cast<size_t>(second)];
+            pairs.push_back({first,
+                             second,
+                             std::max(firstRank, secondRank),
+                             firstRank + secondRank,
+                             std::min(srcDistance2, dstDistance2)});
+        }
+    }
+    return pairs;
+}
+
+// 根据当前已成功建模的 seed 覆盖情况选择下一对；失败尝试不会消耗覆盖名额。
+int selectNextCandidateSeedPair(const std::vector<CandidateSeedPair>& pairs,
+                                const std::vector<unsigned char>& attempted,
+                                const std::vector<int>& successfulSeedUsage,
+                                const std::string& strategy) {
+    const size_t pairCount = std::min(pairs.size(), attempted.size());
+    if (normalizeCandidatePairStrategy(strategy) == "LEGACY_LEXICOGRAPHIC") {
+        // A/B 对照模式：按 buildCandidateSeedPairs 保留的历史 i/j 顺序逐个尝试。
+        for (size_t i = 0; i < pairCount; ++i) {
+            if (!attempted[i]) {
+                return static_cast<int>(i);
+            }
+        }
+        return -1;
+    }
+
+    int bestPairIndex = -1;
+    for (size_t i = 0; i < pairCount; ++i) {
+        if (attempted[i]) {
+            continue;
+        }
+
+        const CandidateSeedPair& current = pairs[i];
+        if (current.first < 0 || current.second < 0 ||
+            current.first >= static_cast<int>(successfulSeedUsage.size()) ||
+            current.second >= static_cast<int>(successfulSeedUsage.size())) {
+            continue;
+        }
+
+        if (bestPairIndex < 0) {
+            bestPairIndex = static_cast<int>(i);
+            continue;
+        }
+
+        const CandidateSeedPair& best = pairs[static_cast<size_t>(bestPairIndex)];
+        const int currentFirstUsage = successfulSeedUsage[static_cast<size_t>(current.first)];
+        const int currentSecondUsage = successfulSeedUsage[static_cast<size_t>(current.second)];
+        const int bestFirstUsage = successfulSeedUsage[static_cast<size_t>(best.first)];
+        const int bestSecondUsage = successfulSeedUsage[static_cast<size_t>(best.second)];
+        const int currentNewCoverage = (currentFirstUsage == 0 ? 1 : 0) +
+                                       (currentSecondUsage == 0 ? 1 : 0);
+        const int bestNewCoverage = (bestFirstUsage == 0 ? 1 : 0) +
+                                    (bestSecondUsage == 0 ? 1 : 0);
+
+        // 第 1 优先级：尽可能让下一次成功模型覆盖尚未参与过的 seed。
+        if (currentNewCoverage != bestNewCoverage) {
+            if (currentNewCoverage > bestNewCoverage) {
+                bestPairIndex = static_cast<int>(i);
+            }
+            continue;
+        }
+
+        // 第 2 优先级：覆盖相同后，优先复用次数更少的两端，避免又集中到同一 seed。
+        const int currentMaxUsage = std::max(currentFirstUsage, currentSecondUsage);
+        const int bestMaxUsage = std::max(bestFirstUsage, bestSecondUsage);
+        if (currentMaxUsage != bestMaxUsage) {
+            if (currentMaxUsage < bestMaxUsage) {
+                bestPairIndex = static_cast<int>(i);
+            }
+            continue;
+        }
+        const int currentUsageSum = currentFirstUsage + currentSecondUsage;
+        const int bestUsageSum = bestFirstUsage + bestSecondUsage;
+        if (currentUsageSum != bestUsageSum) {
+            if (currentUsageSum < bestUsageSum) {
+                bestPairIndex = static_cast<int>(i);
+            }
+            continue;
+        }
+
+        // 第 3 优先级：覆盖相同时，优先两端描述子距离都更好的点对。
+        if (current.worst_distance_rank != best.worst_distance_rank) {
+            if (current.worst_distance_rank < best.worst_distance_rank) {
+                bestPairIndex = static_cast<int>(i);
+            }
+            continue;
+        }
+        if (current.distance_rank_sum != best.distance_rank_sum) {
+            if (current.distance_rank_sum < best.distance_rank_sum) {
+                bestPairIndex = static_cast<int>(i);
+            }
+            continue;
+        }
+
+        // 第 4 优先级：质量仍相同才优先两图中共同间距更大的点对，降低退化风险。
+        if (current.min_spacing2 != best.min_spacing2) {
+            if (current.min_spacing2 > best.min_spacing2) {
+                bestPairIndex = static_cast<int>(i);
+            }
+            continue;
+        }
+
+        // 第 5 优先级：完全并列时按原始点下标稳定决胜，保证可复现实验顺序。
+        if (current.first < best.first ||
+            (current.first == best.first && current.second < best.second)) {
+            bestPairIndex = static_cast<int>(i);
+        }
+    }
+    return bestPairIndex;
+}
+
 // 在 baseline 与额外 rigid 候选之间按统一评分规则选出最优模型。
 bool selectBestRigidCandidate(const std::vector<cv::Mat>& candidateTransforms,
                               const std::vector<std::vector<unsigned char>>& candidateMasks,
@@ -347,20 +513,22 @@ bool selectBestRigidCandidate(const std::vector<cv::Mat>& candidateTransforms,
                               int minInliers,
                               bool enableCandidateMaskScoring,
                               int candidateMaskForegroundThreshold,
-                              double candidateMinContainment,
+                               double candidateContainmentTieMargin,
                               double candidateDedupRotationDiffDeg,
                               double candidateDedupTranslationDiff,
                               cv::Mat& bestA,
                               std::vector<unsigned char>& bestMask,
                               int& bestInliers,
                               double& bestError,
-                              double& bestContainment) {
+                               double& bestContainment,
+                              std::vector<cv::Mat>& validCandidateTransforms) {
     // 第 1 步：先做一次轻量去重，避免几乎相同的 rigid 候选重复参与后续评分。
     bestA.release();
     bestMask.clear();
     bestInliers = 0;
     bestError = std::numeric_limits<double>::infinity();
     bestContainment = -1.0;
+    validCandidateTransforms.clear();
 
     std::vector<RigidCandidateScore> scoredCandidates;
     scoredCandidates.reserve(std::min(candidateTransforms.size(), candidateMasks.size()));
@@ -394,8 +562,9 @@ bool selectBestRigidCandidate(const std::vector<cv::Mat>& candidateTransforms,
         dedupedMasks.push_back(candidateMask);
     }
 
-    // 第 2 步：遍历去重后的候选，统一补齐内点、重投影误差和前景 mask 几何评分。
-    // Source/target masks are invariant across candidate transforms; build them once per case.
+    // 第 2 步：遍历去重后的候选。仅保留达到最少内点数的模型，
+    // 再补齐平均重投影误差和前景 mask 几何评分。
+    // 两张原始前景 mask 与候选变换无关，每个用例只构建一次。
     cv::Mat sourceScoringMask;
     cv::Mat targetScoringMask;
     if (enableCandidateMaskScoring && !dedupedTransforms.empty()) {
@@ -421,17 +590,13 @@ bool selectBestRigidCandidate(const std::vector<cv::Mat>& candidateTransforms,
         score.transform = candidateA.clone();
         score.mask = candidateMask;
         score.inliers = candidateInliers;
-        score.reprojError =
-            partial_affine_utils::reprojectionErrorSum(src, dst, candidateMask, candidateA);
+        score.meanReprojError =
+            partial_affine_utils::reprojectionErrorSum(src, dst, candidateMask, candidateA) /
+            static_cast<double>(candidateInliers);
         if (enableCandidateMaskScoring) {
-            // 启用前景几何评分时，额外标记 containment / coverage 是否达标。
+            // 启用前景几何评分时，计算候选变换后的局部包含率。
             evaluateRigidCandidateMaskScore(
                 sourceScoringMask, targetScoringMask, candidateA, score);
-            if (candidateMinContainment >= 0.0) {
-                score.passedContainment =
-                    score.containment >= 0.0 && score.containment >= candidateMinContainment;
-            }
-            score.passedMaskGate = score.passedContainment;
         }
         scoredCandidates.push_back(std::move(score));
     }
@@ -440,35 +605,54 @@ bool selectBestRigidCandidate(const std::vector<cv::Mat>& candidateTransforms,
         return false;
     }
 
-    // 第 3 步：如果所有候选都没过前景门槛，则回退到旧比较规则，
-    // 避免新评分过严时直接把整个 rigid 结果清空。
-    const auto passedMaskGate = std::count_if(scoredCandidates.begin(),
-                                              scoredCandidates.end(),
-                                              [](const RigidCandidateScore& score) {
-                                                  return score.passedMaskGate;
-                                              });
-    if (enableCandidateMaskScoring && passedMaskGate == 0) {
+    validCandidateTransforms.reserve(scoredCandidates.size());
+    for (const auto& score : scoredCandidates) {
+        validCandidateTransforms.push_back(score.transform.clone());
+    }
+
+    // 第 3 步：以最高 containment 建立窗口，而不是对候选两两做带容差比较，
+    // 避免非传递排序导致 max_element 的结果不稳定。
+    std::vector<RigidCandidateScore*> contenders;
+    if (enableCandidateMaskScoring) {
+        const auto highestContainmentIt = std::max_element(
+            scoredCandidates.begin(),
+            scoredCandidates.end(),
+            [](const RigidCandidateScore& lhs, const RigidCandidateScore& rhs) {
+                return lhs.containment < rhs.containment;
+            });
+        if (highestContainmentIt != scoredCandidates.end() &&
+            highestContainmentIt->containment >= 0.0) {
+            const double containmentFloor = highestContainmentIt->containment -
+                                            std::max(0.0, candidateContainmentTieMargin);
+            for (auto& score : scoredCandidates) {
+                if (score.containment >= containmentFloor) {
+                    contenders.push_back(&score);
+                }
+            }
+        }
+    }
+    if (contenders.empty()) {
         for (auto& score : scoredCandidates) {
-            score.passedMaskGate = true;
+            contenders.push_back(&score);
         }
     }
 
-    // 第 4 步：最终按统一优先级选出最优候选，并把关键评分一并返回给上层日志。
-    const auto bestIt = std::max_element(scoredCandidates.begin(),
-                                         scoredCandidates.end(),
-                                         [](const RigidCandidateScore& lhs,
-                                            const RigidCandidateScore& rhs) {
-                                             return preferRigidCandidateScore(rhs, lhs);
-                                         });
-    if (bestIt == scoredCandidates.end()) {
+    // 第 4 步：containment 接近时，以平均重投影误差选择最优刚体候选。
+    RigidCandidateScore* bestScore = *std::min_element(
+        contenders.begin(),
+        contenders.end(),
+        [](const RigidCandidateScore* lhs, const RigidCandidateScore* rhs) {
+            return lhs->meanReprojError < rhs->meanReprojError;
+        });
+    if (bestScore == nullptr) {
         return false;
     }
 
-    bestA = bestIt->transform.clone();
-    bestMask = bestIt->mask;
-    bestInliers = bestIt->inliers;
-    bestError = bestIt->reprojError;
-    bestContainment = bestIt->containment;
+    bestA = bestScore->transform.clone();
+    bestMask = bestScore->mask;
+    bestInliers = bestScore->inliers;
+    bestError = bestScore->meanReprojError;
+    bestContainment = bestScore->containment;
     return !bestA.empty();
 }
 

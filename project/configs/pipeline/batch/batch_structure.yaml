@@ -5,7 +5,7 @@
 name: batch_pipeline
 
 # pipeline 默认值：无固定默认，必须显式指定
-pipeline: ../structure/contour_pipeline.yaml
+pipeline: ../structure/line_pipeline.yaml
 
 dataset:
   # root 默认值：无固定默认，必须显式指定

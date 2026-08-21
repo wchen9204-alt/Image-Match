@@ -2,13 +2,25 @@
 type: CONTOUR
 
 extractor:
-  # 当前实现：Canny 边缘 + findContours。
+  # 边缘算子输出后统一使用 findContours 生成可匹配轮廓。
   method: CANNY_FIND_CONTOURS
   params:
-    # Canny 前的高斯模糊核；0 表示关闭，>1 时自动归一化为奇数。
-    blur_kernel: 3
+    # 边缘提取算子：CANNY / SCHARR / LOG_RESPONSE /
+    # LOG_ZERO_CROSSING / MORPH_GRADIENT。
+    edge_operator: CANNY
+    # true：边缘图经 findContours 后作为区域轮廓使用；false：直接使用算子的二值边缘图。
+    # false 时 association.method 必须使用 CHAMFER / HAUSDORFF / ICP，不能使用 CONTOUR_DESCRIPTOR。
+    use_find_contours: true
+    # 仅 use_find_contours=true 生效。false 时保留所有原始轮廓，不做零面积、面积、尺寸、
+    # extent、长宽比及最大数量过滤；开放轮廓仍不能被 Hu / Fourier / EFD 等区域描述子稳定描述。
+    filter_contours: false
+    # Canny / Scharr / 形态学梯度的 Gaussian sigma，>0 时优先于 blur_kernel；观察集使用 sigma=1.0。
+    # LoG 只使用下方 log_sigma，避免重复平滑。
+    gaussian_sigma: 1.0
+    # gaussian_sigma <= 0 时使用的 Canny 前模糊核；0 表示关闭，>1 自动归一化为奇数。
+    blur_kernel: 0
     # 是否根据图像灰度中位数自动估计 Canny 双阈值。
-    auto_canny: true
+    auto_canny: false
 
     # Canny 低阈值，默认值：50.0。
     cannyThreshold1: 50.0
@@ -16,6 +28,11 @@ extractor:
     cannyThreshold2: 150.0
     # Canny 内部 Sobel 算子的孔径大小，可选：3 / 5 / 7。
     apertureSize: 3
+    # SCHARR / LOG_RESPONSE / MORPH_GRADIENT 的二值化阈值；<=0 使用 Otsu。
+    edge_binary_threshold: 0.0
+    # LoG 高斯 sigma，以及 LoG 零交叉的最小相邻响应差。
+    log_sigma: 1.2
+    log_zero_crossing_threshold: 10.0
 
     # 轮廓检索模式，可选：EXTERNAL / LIST / CCOMP / TREE。
     retrievalMode: TREE

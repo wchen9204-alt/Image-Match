@@ -48,6 +48,7 @@ outputs/
 
 /project/tools/
 /project/tmp/
+/project/datasets/
 
 # CMake generated files
 CMakeFiles/

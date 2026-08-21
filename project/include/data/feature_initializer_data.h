@@ -49,8 +49,14 @@ struct FeatureInitializerData {
     double warp_overlap_containment = -1.0;
     double warp_source_coverage = -1.0;
     double warp_target_coverage = -1.0;
-    double warp_edge_alignment_iou = -1.0;
-    double warp_photometric_error = -1.0;
+    int warp_height_diff_valid_count = 0;
+    double warp_height_diff_overlap_ratio = -1.0;
+    double warp_height_diff_mean = -1.0;
+    double warp_height_diff_p50 = -1.0;
+    double warp_height_diff_p75 = -1.0;
+    double warp_height_diff_p90 = -1.0;
+    double warp_height_diff_p95 = -1.0;
+    double warp_height_diff_max = -1.0;
 
     /// 清空初始化阶段缓存。
     void clear() {
@@ -72,8 +78,14 @@ struct FeatureInitializerData {
         warp_overlap_containment = -1.0;
         warp_source_coverage = -1.0;
         warp_target_coverage = -1.0;
-        warp_edge_alignment_iou = -1.0;
-        warp_photometric_error = -1.0;
+        warp_height_diff_valid_count = 0;
+        warp_height_diff_overlap_ratio = -1.0;
+        warp_height_diff_mean = -1.0;
+        warp_height_diff_p50 = -1.0;
+        warp_height_diff_p75 = -1.0;
+        warp_height_diff_p90 = -1.0;
+        warp_height_diff_p95 = -1.0;
+        warp_height_diff_max = -1.0;
     }
 };
 

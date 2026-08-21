@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <numeric>
 
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
@@ -165,102 +166,6 @@ bool buildForegroundMask(const cv::Mat& image, int thresholdValue, cv::Mat& mask
     return true;
 }
 
-// 计算 warped 与 target 在 overlapMask 区域内的归一化平均绝对灰度差。
-double computePhotometricError(const cv::Mat& warped,
-                               const cv::Mat& target,
-                               const cv::Mat& overlapMask) {
-    // 1. 先检查重叠区域是否合法；没有重叠时无法计算光度误差。
-    if (overlapMask.empty() || cv::countNonZero(overlapMask) == 0) {
-        return -1.0;
-    }
-
-    // 2. 统一转为单通道灰度图，避免彩色通道差异影响后续直接比较。
-    cv::Mat warpedGray;
-    cv::Mat targetGray;
-    if (warped.channels() == 1) {
-        warpedGray = warped;
-    } else {
-        cv::cvtColor(warped, warpedGray, cv::COLOR_BGR2GRAY);
-    }
-    if (target.channels() == 1) {
-        targetGray = target;
-    } else {
-        cv::cvtColor(target, targetGray, cv::COLOR_BGR2GRAY);
-    }
-
-    // 3. 归一化到浮点 [0, 1]，让不同图像都在统一数值范围内比较。
-    cv::Mat warpedFloat;
-    cv::Mat targetFloat;
-    warpedGray.convertTo(warpedFloat, CV_32F, 1.0 / 255.0);
-    targetGray.convertTo(targetFloat, CV_32F, 1.0 / 255.0);
-
-    // 4. 逐像素求绝对光度差，得到两张图在每个位置的灰度偏差。
-    cv::Mat diff;
-    cv::absdiff(warpedFloat, targetFloat, diff);
-
-    // 5. 只在重叠区域内求均值，并将该均值作为最终光度误差返回。
-    const cv::Scalar meanDiff = cv::mean(diff, overlapMask);
-    return meanDiff[0];
-}
-
-// 计算重叠区域内的边缘 IoU；边缘比前景覆盖更敏感，可发现内容错位但覆盖率较高的误配。
-double computeEdgeAlignmentIou(const cv::Mat& warped,
-                               const cv::Mat& target,
-                               const cv::Mat& overlapMask,
-                               int cannyLowThreshold,
-                               int cannyHighThreshold,
-                               int dilateSize,
-                               int minEdgePixels) {
-    // 1. 先检查输入尺寸和 overlap mask 是否有效；没有重叠时无法比较边缘。
-    if (warped.empty() || target.empty() || warped.size() != target.size() ||
-        overlapMask.empty() || overlapMask.size() != warped.size() ||
-        cv::countNonZero(overlapMask) == 0) {
-        return -1.0;
-    }
-
-    // 2. 统一转成 8 位灰度图，为 Canny 边缘检测准备输入。
-    cv::Mat warpedGray;
-    cv::Mat targetGray;
-    if (!toGray8ForVisualization(warped, warpedGray) ||
-        !toGray8ForVisualization(target, targetGray)) {
-        return -1.0;
-    }
-
-    int low = std::clamp(cannyLowThreshold, 0, 255);
-    int high = std::clamp(cannyHighThreshold, 0, 255);
-    if (high < low) {
-        std::swap(high, low);
-    }
-    if (high == low) {
-        high = std::min(255, low + 1);
-    }
-
-    // 3. 分别提取 warped 和 target 的边缘。
-    cv::Mat warpedEdges;
-    cv::Mat targetEdges;
-    cv::Canny(warpedGray, warpedEdges, static_cast<double>(low), static_cast<double>(high));
-    cv::Canny(targetGray, targetEdges, static_cast<double>(low), static_cast<double>(high));
-
-    // 4. 只保留共同重叠区域内的边缘，并按需做少量膨胀，容忍像素级轻微偏移。
-    cv::bitwise_and(warpedEdges, overlapMask, warpedEdges);
-    cv::bitwise_and(targetEdges, overlapMask, targetEdges);
-    dilateMaskIfRequested(warpedEdges, dilateSize);
-    dilateMaskIfRequested(targetEdges, dilateSize);
-    cv::bitwise_and(warpedEdges, overlapMask, warpedEdges);
-    cv::bitwise_and(targetEdges, overlapMask, targetEdges);
-
-    // 5. 若重叠区域边缘过少，则认为该样本不适合用边缘 IoU 判定。
-    const int warpedEdgeCount = cv::countNonZero(warpedEdges);
-    const int targetEdgeCount = cv::countNonZero(targetEdges);
-    const int minPixels = std::max(0, minEdgePixels);
-    if (warpedEdgeCount < minPixels || targetEdgeCount < minPixels) {
-        return -1.0;
-    }
-
-    // 6. 最终使用边缘 mask 的 IoU 作为结构对齐度量。
-    return computeMaskIou(warpedEdges, targetEdges);
-}
-
 // 计算两个前景 mask 的交并比，主要用于结构重叠验证。
 double computeMaskIou(const cv::Mat& a, const cv::Mat& b) {
     if (a.empty() || b.empty() || a.size() != b.size()) {
@@ -322,6 +227,30 @@ double computeMaskLocalContainment(const cv::Mat& sourceMask,
     expandMaskForContainmentTolerance(targetMask, tolerancePixels, tolerantTargetMask);
     cv::Mat intersectionMask;
     cv::bitwise_and(warpedSourceMask, tolerantTargetMask, intersectionMask);
+    const double containment = static_cast<double>(cv::countNonZero(intersectionMask)) /
+                               static_cast<double>(denominator);
+    return std::min(containment, 1.0);
+}
+
+double computeMaskPairLocalContainment(const cv::Mat& firstMask,
+                                       const cv::Mat& secondMask,
+                                       int tolerancePixels) {
+    if (firstMask.empty() || secondMask.empty() ||
+        firstMask.size() != secondMask.size()) {
+        return -1.0;
+    }
+
+    const int firstCount = cv::countNonZero(firstMask);
+    const int secondCount = cv::countNonZero(secondMask);
+    const int denominator = std::min(firstCount, secondCount);
+    if (denominator <= 0) {
+        return -1.0;
+    }
+
+    cv::Mat expandedSecondMask;
+    expandMaskForContainmentTolerance(secondMask, tolerancePixels, expandedSecondMask);
+    cv::Mat intersectionMask;
+    cv::bitwise_and(firstMask, expandedSecondMask, intersectionMask);
     const double containment = static_cast<double>(cv::countNonZero(intersectionMask)) /
                                static_cast<double>(denominator);
     return std::min(containment, 1.0);

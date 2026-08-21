@@ -50,12 +50,14 @@ private:
     int _filteredMatchCandidateCount = 12;
     /// 生成候选点对时，两点之间要求的最小间距，避免退化小对。
     double _filteredMatchCandidateMinPairDistance = 20.0;
+    /// filtered seed 两点组合的调度策略，支持 COVERAGE_FIRST / LEGACY_LEXICOGRAPHIC。
+    std::string _filteredMatchCandidatePairStrategy = "COVERAGE_FIRST";
     /// 是否在候选选择阶段加入前景 mask 几何评分。
     bool _enableCandidateMaskScoring = false;
-    /// 候选 mask 评分时，将图像二值化为前景 mask 使用的阈值。
+    /// 候选 mask 与边缘 IoU 评分时，将图像二值化为前景 mask 使用的阈值。
     int _candidateMaskForegroundThreshold = 10;
-    /// 候选模型要求达到的最低局部包含率；小于 0 表示不启用。
-    double _candidateMinContainment = -1.0;
+    /// 与最高 containment 相差不超过该值的候选进入边缘 IoU 比较。
+    double _candidateContainmentTieMargin = 0.20;
     /// 候选去重时允许的最大旋转角差，单位度。
     double _candidateDedupRotationDiffDeg = 2.0;
     /// 候选去重时允许的最大平移差，单位像素。

@@ -10,6 +10,9 @@ namespace ir {
 
 /// 单张图像对应的结构特征数据。
 struct StructureImageData {
+    /// 边缘提取算子的直接输出，仅用于诊断和可视化。
+    cv::Mat edge_response;
+
     /// 用于配准估计和可视化的二值或灰度结构响应图。
     cv::Mat response;
 
@@ -19,11 +22,16 @@ struct StructureImageData {
     /// 轮廓提取器输出的轮廓点集。
     std::vector<std::vector<cv::Point>> contours;
 
+    /// true 时 response 是直接参与配准的边缘点集，而非由 lines / contours 派生的可视化图。
+    bool response_is_primary = false;
+
     /// 清空当前图像的结构特征数据。
     void clear() {
+        edge_response.release();
         response.release();
         lines.clear();
         contours.clear();
+        response_is_primary = false;
     }
 
     /// 判断当前图像是否没有任何有效结构特征。
@@ -31,6 +39,9 @@ struct StructureImageData {
 
     /// 按结构类型返回便于统计和摘要展示的数量。
     int primitiveCount(StructureType type) const {
+        if (response_is_primary) {
+            return response.empty() ? 0 : cv::countNonZero(response);
+        }
         switch (type) {
         case StructureType::LINE:
             return static_cast<int>(lines.size());

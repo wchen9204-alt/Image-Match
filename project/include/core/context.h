@@ -66,6 +66,14 @@ public:
 
     cv::Mat warped_image;
 
+    cv::Mat edge_structure_initial_source_line_segments;
+    cv::Mat edge_structure_initial_target_line_segments;
+    cv::Mat edge_structure_filtered_source_lines;
+    cv::Mat edge_structure_filtered_target_lines;
+    cv::Mat edge_structure_fitted_source_lines;
+    cv::Mat edge_structure_fitted_target_lines;
+    cv::Mat edge_structure_matched_line_overlay;
+
     /// 清空所有阶段缓存，保证批处理或多次运行时上下文互不污染。
     void reset() {
         images.clear();
@@ -81,6 +89,13 @@ public:
         transform_data.clear();
         evaluation.clear();
         warped_image.release();
+        edge_structure_initial_source_line_segments.release();
+        edge_structure_initial_target_line_segments.release();
+        edge_structure_filtered_source_lines.release();
+        edge_structure_filtered_target_lines.release();
+        edge_structure_fitted_source_lines.release();
+        edge_structure_fitted_target_lines.release();
+        edge_structure_matched_line_overlay.release();
         result = RegistrationResult{};
     }
 };

@@ -21,15 +21,24 @@ int normalizedBlurKernel(int kernel);
 // 根据灰度中位数估计一组 Canny 双阈值。
 std::pair<double, double> estimateAutoCannyThresholds(const cv::Mat& gray);
 
-// 对单张灰度图执行轮廓提取、过滤和响应图绘制。
+// 对单张灰度图执行边缘算子、轮廓提取、过滤和响应图绘制。
 bool extractContoursForImage(const cv::Mat& gray,
+                             cv::Mat& edgeResponse,
                              cv::Mat& response,
                              std::vector<std::vector<cv::Point>>& contours,
+                             bool& responseIsPrimary,
+                             const std::string& edgeOperator,
+                             bool useFindContours,
+                             bool filterContours,
                              int blurKernel,
+                             double gaussianSigma,
                              bool autoCanny,
                              double cannyThreshold1,
                              double cannyThreshold2,
                              int apertureSize,
+                             double edgeBinaryThreshold,
+                             double logSigma,
+                             double logZeroCrossingThreshold,
                              int retrievalMode,
                              int approxMode,
                              double minArea,

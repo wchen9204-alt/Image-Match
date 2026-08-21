@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <opencv2/core.hpp>
 
@@ -35,6 +35,8 @@ struct GeometryData {
     bool candidate_fallback_attempted = false;
     /// 候选流程状态；总开关与前置条件满足时为 enabled，否则为 not_available。
     std::string candidate_fallback_trigger_reason = "not_available";
+    /// 已去重且满足最少内点要求的刚体候选，供最终唯一性验证比较。
+    std::vector<cv::Mat> candidate_transforms;
 
     /// 几何估计对应点的内点掩码，与本次估计读取的 CorrespondenceView.filtered 对齐。
     std::vector<unsigned char> inlier_mask;
@@ -61,6 +63,7 @@ struct GeometryData {
         baseline_mean_reproj_error = -1.0;
         candidate_fallback_attempted = false;
         candidate_fallback_trigger_reason = "not_triggered";
+        candidate_transforms.clear();
         inlier_mask.clear();
         correspondence_source.clear();
         num_correspondences = 0;

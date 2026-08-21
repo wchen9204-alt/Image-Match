@@ -57,6 +57,53 @@ std::string pathStemUpper(const fs::path& path) {
     return string_utils::toUpperAscii(path.stem().string());
 }
 
+YAML::Node mergeYamlMaps(const YAML::Node& base, const YAML::Node& overrides) {
+    YAML::Node merged(YAML::NodeType::Map);
+    if (base && base.IsMap()) {
+        merged = YAML::Clone(base);
+    }
+    if (!overrides || !overrides.IsMap()) {
+        return merged;
+    }
+
+    for (const auto& item : overrides) {
+        const std::string key = item.first.as<std::string>();
+        if (key == "profile" || key == "preset") {
+            continue;
+        }
+        if (merged[key] && merged[key].IsMap() && item.second.IsMap()) {
+            merged[key] = mergeYamlMaps(merged[key], item.second);
+        } else {
+            merged[key] = YAML::Clone(item.second);
+        }
+    }
+    return merged;
+}
+
+YAML::Node resolveValidationProfile(const YAML::Node& validation, const fs::path& base) {
+    if (!validation || !validation.IsMap() || !validation["profile"]) {
+        return validation;
+    }
+
+    const std::string profileEntry = yaml_utils::getString(validation, "profile");
+    const std::string preset = yaml_utils::getString(validation, "preset");
+    if (profileEntry.empty() || preset.empty()) {
+        throw std::runtime_error(
+            "validation.profile requires both a profile path and a preset name");
+    }
+
+    const fs::path profilePath = Config::resolvePath(base, profileEntry);
+    const YAML::Node profileRoot = Config::load(profilePath);
+    const YAML::Node profiles = profileRoot["profiles"];
+    const YAML::Node selected = profiles ? profiles[preset] : YAML::Node();
+    if (!selected || !selected.IsMap()) {
+        throw std::runtime_error("Validation preset '" + preset + "' not found in " +
+                                 profilePath.string());
+    }
+    const YAML::Node shared = profileRoot["shared"];
+    return mergeYamlMaps(mergeYamlMaps(shared, selected), validation);
+}
+
 DirectValidationReferenceMode parseDirectValidationReferenceMode(const std::string& raw) {
     const std::string key = string_utils::toUpperAscii(raw);
     if (key == "BEST_OF_DIRECT_AND_INITIALIZER" || key == "BEST_OF_BOTH" ||
@@ -184,46 +231,29 @@ void parseFeatureInitializer(const YAML::Node& node, const fs::path& base, Pipel
                                    "containment_tolerance_pixels",
                                    overlapCfg.containment_tolerance_pixels);
         }
-        if (validation["photometric"] && validation["photometric"].IsMap()) {
-            const auto& photometric = validation["photometric"];
-            auto& photoCfg = cfg.feature_initializer.validation.photometric;
-            photoCfg.enabled =
-                yaml_utils::getBool(photometric,
-                                    "enabled",
-                                    photoCfg.enabled);
-            photoCfg.max_nmad =
-                yaml_utils::getDouble(photometric,
-                                      "max_nmad",
-                                      photoCfg.max_nmad);
+        if (validation["height_difference"] && validation["height_difference"].IsMap()) {
+            const auto& heightDifference = validation["height_difference"];
+            auto& heightCfg = cfg.feature_initializer.validation.height_difference;
+            heightCfg.enabled = yaml_utils::getBool(heightDifference, "enabled", heightCfg.enabled);
+            heightCfg.compensate_global_height_offset = yaml_utils::getBool(
+                heightDifference,
+                "compensate_global_height_offset",
+                heightCfg.compensate_global_height_offset);
+            heightCfg.percentile = yaml_utils::getInt(heightDifference, "percentile", heightCfg.percentile);
+            heightCfg.max_abs_error = yaml_utils::getDouble(
+                heightDifference, "max_abs_error", heightCfg.max_abs_error);
+            if (heightDifference["local_noise_fallback"] &&
+                heightDifference["local_noise_fallback"].IsMap()) {
+                const auto& localNoise = heightDifference["local_noise_fallback"];
+                heightCfg.local_noise_fallback_enabled = yaml_utils::getBool(
+                    localNoise, "enabled", heightCfg.local_noise_fallback_enabled);
+                heightCfg.local_noise_p75_max_abs_error = yaml_utils::getDouble(
+                    localNoise, "p75_max_abs_error", heightCfg.local_noise_p75_max_abs_error);
+                heightCfg.local_noise_min_containment = yaml_utils::getDouble(
+                    localNoise, "min_containment", heightCfg.local_noise_min_containment);
+            }
         }
-        if (validation["edge_alignment"] && validation["edge_alignment"].IsMap()) {
-            const auto& edgeAlignment = validation["edge_alignment"];
-            auto& edgeCfg = cfg.feature_initializer.validation.edge_alignment;
-            edgeCfg.enabled =
-                yaml_utils::getBool(edgeAlignment,
-                                    "enabled",
-                                    edgeCfg.enabled);
-            edgeCfg.min_iou =
-                yaml_utils::getDouble(edgeAlignment,
-                                      "min_iou",
-                                      edgeCfg.min_iou);
-            edgeCfg.canny_low_threshold =
-                yaml_utils::getInt(edgeAlignment,
-                                   "canny_low_threshold",
-                                   edgeCfg.canny_low_threshold);
-            edgeCfg.canny_high_threshold =
-                yaml_utils::getInt(edgeAlignment,
-                                   "canny_high_threshold",
-                                   edgeCfg.canny_high_threshold);
-            edgeCfg.dilate_size =
-                yaml_utils::getInt(edgeAlignment,
-                                   "dilate_size",
-                                   edgeCfg.dilate_size);
-            edgeCfg.min_edge_pixels =
-                yaml_utils::getInt(edgeAlignment,
-                                   "min_edge_pixels",
-                                   edgeCfg.min_edge_pixels);
-        }
+
     }
 }
 
@@ -395,7 +425,7 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
     }
 
     if (node["validation"] && node["validation"].IsMap()) {
-        const auto& validation = node["validation"];
+        const YAML::Node validation = resolveValidationProfile(node["validation"], base);
         if (validation["warp_overlap"] && validation["warp_overlap"].IsMap()) {
             const auto& overlap = validation["warp_overlap"];
             auto& overlapCfg = cfg.warp_quality.overlap;
@@ -415,33 +445,194 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
                                    "containment_tolerance_pixels",
                                    overlapCfg.containment_tolerance_pixels);
         }
-        if (validation["photometric"] && validation["photometric"].IsMap()) {
-            const auto& photometric = validation["photometric"];
-            auto& photoCfg = cfg.warp_quality.photometric;
-            photoCfg.enabled =
-                yaml_utils::getBool(photometric, "enabled", photoCfg.enabled);
-            photoCfg.max_nmad =
-                yaml_utils::getDouble(photometric, "max_nmad", photoCfg.max_nmad);
+        if (validation["height_difference"] && validation["height_difference"].IsMap()) {
+            const auto& heightDifference = validation["height_difference"];
+            auto& heightCfg = cfg.warp_quality.height_difference;
+            heightCfg.enabled = yaml_utils::getBool(heightDifference, "enabled", heightCfg.enabled);
+            heightCfg.compensate_global_height_offset = yaml_utils::getBool(
+                heightDifference,
+                "compensate_global_height_offset",
+                heightCfg.compensate_global_height_offset);
+            heightCfg.percentile = yaml_utils::getInt(heightDifference, "percentile", heightCfg.percentile);
+            heightCfg.max_abs_error = yaml_utils::getDouble(
+                heightDifference, "max_abs_error", heightCfg.max_abs_error);
+            if (heightDifference["local_noise_fallback"] &&
+                heightDifference["local_noise_fallback"].IsMap()) {
+                const auto& localNoise = heightDifference["local_noise_fallback"];
+                heightCfg.local_noise_fallback_enabled = yaml_utils::getBool(
+                    localNoise, "enabled", heightCfg.local_noise_fallback_enabled);
+                heightCfg.local_noise_p75_max_abs_error = yaml_utils::getDouble(
+                    localNoise, "p75_max_abs_error", heightCfg.local_noise_p75_max_abs_error);
+                heightCfg.local_noise_min_containment = yaml_utils::getDouble(
+                    localNoise, "min_containment", heightCfg.local_noise_min_containment);
+            }
         }
-        if (validation["edge_alignment"] && validation["edge_alignment"].IsMap()) {
-            const auto& edgeAlignment = validation["edge_alignment"];
-            auto& edgeCfg = cfg.warp_quality.edge_alignment;
-            edgeCfg.enabled =
-                yaml_utils::getBool(edgeAlignment, "enabled", edgeCfg.enabled);
-            edgeCfg.min_iou =
-                yaml_utils::getDouble(edgeAlignment, "min_iou", edgeCfg.min_iou);
-            edgeCfg.canny_low_threshold =
-                yaml_utils::getInt(edgeAlignment,
-                                   "canny_low_threshold",
-                                   edgeCfg.canny_low_threshold);
-            edgeCfg.canny_high_threshold =
-                yaml_utils::getInt(edgeAlignment,
-                                   "canny_high_threshold",
-                                   edgeCfg.canny_high_threshold);
-            edgeCfg.dilate_size =
-                yaml_utils::getInt(edgeAlignment, "dilate_size", edgeCfg.dilate_size);
-            edgeCfg.min_edge_pixels =
-                yaml_utils::getInt(edgeAlignment, "min_edge_pixels", edgeCfg.min_edge_pixels);
+
+        if (validation["edge_structure_diagnostic"] &&
+            validation["edge_structure_diagnostic"].IsMap()) {
+            const auto& diagnostic = validation["edge_structure_diagnostic"];
+            auto& edgeCfg = cfg.warp_quality.edge_structure_diagnostic;
+            edgeCfg.enabled = yaml_utils::getBool(diagnostic, "enabled", edgeCfg.enabled);
+            edgeCfg.visibility_threshold = yaml_utils::getInt(
+                diagnostic, "visibility_threshold", edgeCfg.visibility_threshold);
+            edgeCfg.min_foreground_elongation_ratio = yaml_utils::getDouble(
+                diagnostic,
+                "min_foreground_elongation_ratio",
+                edgeCfg.min_foreground_elongation_ratio);
+            edgeCfg.min_axis_occupancy = yaml_utils::getDouble(
+                diagnostic, "min_axis_occupancy", edgeCfg.min_axis_occupancy);
+            edgeCfg.max_centerline_deviation_ratio = yaml_utils::getDouble(
+                diagnostic,
+                "max_centerline_deviation_ratio",
+                edgeCfg.max_centerline_deviation_ratio);
+            edgeCfg.max_canvas_side_pixels = yaml_utils::getInt(
+                diagnostic, "max_canvas_side_pixels", edgeCfg.max_canvas_side_pixels);
+            edgeCfg.max_canvas_pixels = yaml_utils::getInt(
+                diagnostic, "max_canvas_pixels", edgeCfg.max_canvas_pixels);
+            edgeCfg.duplicate_line_normal_tolerance_pixels = yaml_utils::getDouble(
+                diagnostic,
+                "duplicate_line_normal_tolerance_pixels",
+                edgeCfg.duplicate_line_normal_tolerance_pixels);
+            edgeCfg.duplicate_line_min_span_overlap_ratio = yaml_utils::getDouble(
+                diagnostic,
+                "duplicate_line_min_span_overlap_ratio",
+                edgeCfg.duplicate_line_min_span_overlap_ratio);
+            edgeCfg.outer_longitudinal_edge_min_normal_separation_pixels =
+                yaml_utils::getDouble(
+                    diagnostic,
+                    "outer_longitudinal_edge_min_normal_separation_pixels",
+                    edgeCfg.outer_longitudinal_edge_min_normal_separation_pixels);
+            edgeCfg.outer_longitudinal_edge_max_normal_separation_pixels =
+                yaml_utils::getDouble(
+                    diagnostic,
+                    "outer_longitudinal_edge_max_normal_separation_pixels",
+                    edgeCfg.outer_longitudinal_edge_max_normal_separation_pixels);
+            edgeCfg.outer_longitudinal_edge_min_span_overlap_ratio = yaml_utils::getDouble(
+                diagnostic,
+                "outer_longitudinal_edge_min_span_overlap_ratio",
+                edgeCfg.outer_longitudinal_edge_min_span_overlap_ratio);
+            edgeCfg.min_fragment_length_pixels = yaml_utils::getDouble(
+                diagnostic,
+                "min_fragment_length_pixels",
+                edgeCfg.min_fragment_length_pixels);
+            edgeCfg.group_max_angle_difference_degrees = yaml_utils::getDouble(
+                diagnostic,
+                "group_max_angle_difference_degrees",
+                edgeCfg.group_max_angle_difference_degrees);
+            edgeCfg.group_max_normal_distance_pixels = yaml_utils::getDouble(
+                diagnostic,
+                "group_max_normal_distance_pixels",
+                edgeCfg.group_max_normal_distance_pixels);
+            edgeCfg.post_fit_group_normal_distance_pixels = yaml_utils::getDouble(
+                diagnostic,
+                "post_fit_group_normal_distance_pixels",
+                edgeCfg.post_fit_group_normal_distance_pixels);
+            edgeCfg.min_line_group_actual_length_pixels = yaml_utils::getDouble(
+                diagnostic,
+                "min_line_group_actual_length_pixels",
+                edgeCfg.min_line_group_actual_length_pixels);
+            edgeCfg.min_line_group_continuity_ratio = yaml_utils::getDouble(
+                diagnostic,
+                "min_line_group_continuity_ratio",
+                edgeCfg.min_line_group_continuity_ratio);
+            edgeCfg.max_line_group_gap_ratio = yaml_utils::getDouble(
+                diagnostic,
+                "max_line_group_gap_ratio",
+                edgeCfg.max_line_group_gap_ratio);
+            edgeCfg.max_fragment_direction_spread_degrees = yaml_utils::getDouble(
+                diagnostic,
+                "max_fragment_direction_spread_degrees",
+                edgeCfg.max_fragment_direction_spread_degrees);
+            edgeCfg.max_line_fit_residual_pixels = yaml_utils::getDouble(
+                diagnostic,
+                "max_line_fit_residual_pixels",
+                edgeCfg.max_line_fit_residual_pixels);
+
+            edgeCfg.min_main_line_actual_length_ratio = yaml_utils::getDouble(
+                diagnostic,
+                "min_main_line_actual_length_ratio",
+                edgeCfg.min_main_line_actual_length_ratio);
+            edgeCfg.direction_cluster_tolerance_degrees = yaml_utils::getDouble(
+                diagnostic,
+                "direction_cluster_tolerance_degrees",
+                edgeCfg.direction_cluster_tolerance_degrees);
+            edgeCfg.min_main_direction_support_ratio = yaml_utils::getDouble(
+                diagnostic,
+                "min_main_direction_support_ratio",
+                edgeCfg.min_main_direction_support_ratio);
+            edgeCfg.max_main_direction_spread_degrees = yaml_utils::getDouble(
+                diagnostic,
+                "max_main_direction_spread_degrees",
+                edgeCfg.max_main_direction_spread_degrees);
+            edgeCfg.min_main_direction_margin = yaml_utils::getDouble(
+                diagnostic,
+                "min_main_direction_margin",
+                edgeCfg.min_main_direction_margin);
+            edgeCfg.max_main_direction_difference_degrees = yaml_utils::getDouble(
+                diagnostic,
+                "max_main_direction_difference_degrees",
+                edgeCfg.max_main_direction_difference_degrees);
+            edgeCfg.max_axis_classification_error_degrees = yaml_utils::getDouble(
+                diagnostic,
+                "max_axis_classification_error_degrees",
+                edgeCfg.max_axis_classification_error_degrees);
+            edgeCfg.min_horizontal_actual_length_ratio = yaml_utils::getDouble(
+                diagnostic,
+                "min_horizontal_actual_length_ratio",
+                edgeCfg.min_horizontal_actual_length_ratio);
+            edgeCfg.min_vertical_actual_length_ratio = yaml_utils::getDouble(
+                diagnostic,
+                "min_vertical_actual_length_ratio",
+                edgeCfg.min_vertical_actual_length_ratio);
+            edgeCfg.max_vertical_unmatched_length_ratio = yaml_utils::getDouble(
+                diagnostic,
+                "max_vertical_unmatched_length_ratio",
+                edgeCfg.max_vertical_unmatched_length_ratio);
+
+            edgeCfg.profile_smoothing_sigma = yaml_utils::getDouble(
+                diagnostic, "profile_smoothing_sigma", edgeCfg.profile_smoothing_sigma);
+            edgeCfg.min_peak_prominence = yaml_utils::getDouble(
+                diagnostic, "min_peak_prominence", edgeCfg.min_peak_prominence);
+            edgeCfg.candidate_position_tolerance_pixels = yaml_utils::getDouble(
+                diagnostic,
+                "candidate_position_tolerance_pixels",
+                edgeCfg.candidate_position_tolerance_pixels);
+            edgeCfg.final_position_tolerance_pixels = yaml_utils::getDouble(
+                diagnostic,
+                "final_position_tolerance_pixels",
+                edgeCfg.final_position_tolerance_pixels);
+            edgeCfg.candidate_min_span_overlap_ratio = yaml_utils::getDouble(
+                diagnostic,
+                "candidate_min_span_overlap_ratio",
+                edgeCfg.candidate_min_span_overlap_ratio);
+            edgeCfg.min_shorter_line_overlap_ratio = yaml_utils::getDouble(
+                diagnostic,
+                "min_shorter_line_overlap_ratio",
+                edgeCfg.min_shorter_line_overlap_ratio);
+            edgeCfg.max_line_pair_angle_difference_degrees = yaml_utils::getDouble(
+                diagnostic,
+                "max_line_pair_angle_difference_degrees",
+                edgeCfg.max_line_pair_angle_difference_degrees);
+            edgeCfg.match_position_cost_weight = yaml_utils::getDouble(
+                diagnostic, "match_position_cost_weight", edgeCfg.match_position_cost_weight);
+            edgeCfg.match_overlap_cost_weight = yaml_utils::getDouble(
+                diagnostic, "match_overlap_cost_weight", edgeCfg.match_overlap_cost_weight);
+            edgeCfg.match_angle_cost_weight = yaml_utils::getDouble(
+                diagnostic, "match_angle_cost_weight", edgeCfg.match_angle_cost_weight);
+            edgeCfg.match_prominence_cost_weight = yaml_utils::getDouble(
+                diagnostic,
+                "match_prominence_cost_weight",
+                edgeCfg.match_prominence_cost_weight);
+            edgeCfg.min_strong_line_actual_length_pixels = yaml_utils::getDouble(
+                diagnostic,
+                "min_strong_line_actual_length_pixels",
+                edgeCfg.min_strong_line_actual_length_pixels);
+            edgeCfg.min_strong_peak_prominence = yaml_utils::getDouble(
+                diagnostic,
+                "min_strong_peak_prominence",
+                edgeCfg.min_strong_peak_prominence);
+            edgeCfg.ambiguity_score_margin = yaml_utils::getDouble(
+                diagnostic, "ambiguity_score_margin", edgeCfg.ambiguity_score_margin);
         }
         if (validation["match_quality"] && validation["match_quality"].IsMap()) {
             const auto& matchQuality = validation["match_quality"];
@@ -510,4 +701,3 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
 }
 
 } // namespace ir
-

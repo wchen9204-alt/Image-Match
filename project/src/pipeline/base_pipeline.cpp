@@ -10,8 +10,9 @@
 
 #include "core/config.h"
 #include "data/correspondence_view.h"
-#include "pipeline/base_pipeline_helpers.h"
+#include "evaluator/quality/height_difference_evaluator.h"
 #include "evaluator/quality/warp_quality_evaluator.h"
+#include "pipeline/base_pipeline_helpers.h"
 #include "transform/affine_warper.h"
 #include "transform/perspective_warper.h"
 #include "utils/logger.h"
@@ -29,46 +30,233 @@ void syncWarpQualityToResult(RegistrationResult& result,
     result.warp_overlap_containment = quality.overlap_containment;
     result.warp_source_coverage = quality.source_coverage;
     result.warp_target_coverage = quality.target_coverage;
-    result.warp_edge_alignment_iou = quality.edge_alignment_iou;
-    result.warp_photometric_error = quality.photometric_error;
+    const auto& edge = quality.edge_structure;
+    result.edge_structure_status = edge.status;
+    result.edge_structure_message = edge.message;
+    result.edge_structure_source_foreground_elongation_ratio =
+        edge.source_foreground_elongation_ratio;
+    result.edge_structure_target_foreground_elongation_ratio =
+        edge.target_foreground_elongation_ratio;
+    result.edge_structure_source_axis_occupancy = edge.source_axis_occupancy;
+    result.edge_structure_target_axis_occupancy = edge.target_axis_occupancy;
+    result.edge_structure_source_centerline_deviation_ratio =
+        edge.source_centerline_deviation_ratio;
+    result.edge_structure_target_centerline_deviation_ratio =
+        edge.target_centerline_deviation_ratio;
+    result.edge_structure_source_foreground_long_side = edge.source_foreground_long_side;
+    result.edge_structure_target_foreground_long_side = edge.target_foreground_long_side;
+    result.edge_structure_common_canvas_width = edge.common_canvas_width;
+    result.edge_structure_common_canvas_height = edge.common_canvas_height;
+    result.edge_structure_common_canvas_offset_x = edge.common_canvas_offset_x;
+    result.edge_structure_common_canvas_offset_y = edge.common_canvas_offset_y;
+    result.edge_structure_source_visibility_pixels = edge.source_visibility_pixels;
+    result.edge_structure_target_visibility_pixels = edge.target_visibility_pixels;
+    result.edge_structure_common_visibility_pixels = edge.common_visibility_pixels;
+    result.edge_structure_visibility_area_ratio = edge.visibility_area_ratio;
+    result.edge_structure_visibility_overlap_containment = edge.visibility_overlap_containment;
+    result.edge_structure_source_visibility_ratio = edge.source_visibility_ratio;
+    result.edge_structure_target_visibility_ratio = edge.target_visibility_ratio;
+    result.edge_structure_ps = edge.source_visibility_ratio;
+    result.edge_structure_pt = edge.target_visibility_ratio;
+    result.edge_structure_source_fragment_count = edge.source_fragment_count;
+    result.edge_structure_target_fragment_count = edge.target_fragment_count;
+    result.edge_structure_source_line_group_count = edge.source_line_group_count;
+    result.edge_structure_target_line_group_count = edge.target_line_group_count;
+    result.edge_structure_source_valid_line_group_count = edge.source_valid_line_group_count;
+    result.edge_structure_target_valid_line_group_count = edge.target_valid_line_group_count;
+    result.edge_structure_source_main_line_group_count = edge.source_main_line_group_count;
+    result.edge_structure_target_main_line_group_count = edge.target_main_line_group_count;
+    result.edge_structure_source_main_direction_reliable = edge.source_main_direction_reliable;
+    result.edge_structure_target_main_direction_reliable = edge.target_main_direction_reliable;
+    result.edge_structure_source_main_direction_degrees = edge.source_main_direction_degrees;
+    result.edge_structure_target_main_direction_degrees = edge.target_main_direction_degrees;
+    result.edge_structure_source_main_direction_support_ratio =
+        edge.source_main_direction_support_ratio;
+    result.edge_structure_target_main_direction_support_ratio =
+        edge.target_main_direction_support_ratio;
+    result.edge_structure_source_main_direction_spread_degrees =
+        edge.source_main_direction_spread_degrees;
+    result.edge_structure_target_main_direction_spread_degrees =
+        edge.target_main_direction_spread_degrees;
+    result.edge_structure_source_main_direction_margin = edge.source_main_direction_margin;
+    result.edge_structure_target_main_direction_margin = edge.target_main_direction_margin;
+    result.edge_structure_source_main_max_actual_length_ratio =
+        edge.source_main_max_actual_length_ratio;
+    result.edge_structure_target_main_max_actual_length_ratio =
+        edge.target_main_max_actual_length_ratio;
+    result.edge_structure_main_direction_difference_degrees =
+        edge.main_direction_difference_degrees;
+    result.edge_structure_reference_direction_degrees = edge.reference_direction_degrees;
+
+    const auto syncStrictRejections = [](const edge_structure_diagnostic::StrictRejectionStats& source,
+                                          EdgeStructureStrictRejectionStats& destination) {
+        destination.count = source.count;
+        destination.source_actual_length = source.source_actual_length;
+        destination.target_actual_length = source.target_actual_length;
+    };
+    const auto syncDirection = [&](const edge_structure_diagnostic::DirectionResult& direction,
+                                  const bool horizontal,
+                                  RegistrationResult& destination) {
+        if (horizontal) {
+            destination.edge_structure_horizontal_status = direction.status;
+            destination.edge_structure_source_horizontal_eligible_line_groups =
+                direction.source_eligible_line_groups;
+            destination.edge_structure_target_horizontal_eligible_line_groups =
+                direction.target_eligible_line_groups;
+            destination.edge_structure_horizontal_candidate_pairs = direction.candidate_pairs;
+            destination.edge_structure_horizontal_accepted_matches = direction.accepted_matches;
+            destination.edge_structure_source_horizontal_match_ratio =
+                direction.source_match_ratio;
+            destination.edge_structure_target_horizontal_match_ratio =
+                direction.target_match_ratio;
+            destination.edge_structure_source_horizontal_matched_actual_length =
+                direction.source_matched_actual_length;
+            destination.edge_structure_target_horizontal_matched_actual_length =
+                direction.target_matched_actual_length;
+            destination.edge_structure_horizontal_strong_conflict_count =
+                direction.strong_conflict_count;
+            destination.edge_structure_source_horizontal_strong_conflict_actual_length =
+                direction.source_strong_conflict_actual_length;
+            destination.edge_structure_target_horizontal_strong_conflict_actual_length =
+                direction.target_strong_conflict_actual_length;
+            destination.edge_structure_source_horizontal_strong_conflict_length_ratio =
+                direction.source_strong_conflict_length_ratio;
+            destination.edge_structure_target_horizontal_strong_conflict_length_ratio =
+                direction.target_strong_conflict_length_ratio;
+            syncStrictRejections(direction.strict_position_rejections,
+                                 destination.edge_structure_horizontal_position_rejections);
+            syncStrictRejections(direction.strict_overlap_rejections,
+                                 destination.edge_structure_horizontal_overlap_rejections);
+            syncStrictRejections(direction.strict_angle_rejections,
+                                 destination.edge_structure_horizontal_angle_rejections);
+            destination.edge_structure_source_horizontal_unmatched_actual_length =
+                direction.source_unmatched_actual_length;
+            destination.edge_structure_target_horizontal_unmatched_actual_length =
+                direction.target_unmatched_actual_length;
+            destination.edge_structure_source_horizontal_unmatched_length_ratio =
+                direction.source_unmatched_length_ratio;
+            destination.edge_structure_target_horizontal_unmatched_length_ratio =
+                direction.target_unmatched_length_ratio;
+            destination.edge_structure_horizontal_ambiguous_match_count =
+                direction.ambiguous_match_count;
+            destination.edge_structure_horizontal_ambiguous_actual_length_ratio =
+                direction.ambiguous_actual_length_ratio;
+            destination.edge_structure_horizontal_matched_angle_difference_mean_degrees =
+                direction.matched_angle_difference_mean_degrees;
+            destination.edge_structure_horizontal_matched_angle_difference_max_degrees =
+                direction.matched_angle_difference_max_degrees;
+        } else {
+            destination.edge_structure_vertical_status = direction.status;
+            destination.edge_structure_source_vertical_eligible_line_groups =
+                direction.source_eligible_line_groups;
+            destination.edge_structure_target_vertical_eligible_line_groups =
+                direction.target_eligible_line_groups;
+            destination.edge_structure_vertical_candidate_pairs = direction.candidate_pairs;
+            destination.edge_structure_vertical_accepted_matches = direction.accepted_matches;
+            destination.edge_structure_source_vertical_match_ratio = direction.source_match_ratio;
+            destination.edge_structure_target_vertical_match_ratio = direction.target_match_ratio;
+            destination.edge_structure_source_vertical_matched_actual_length =
+                direction.source_matched_actual_length;
+            destination.edge_structure_target_vertical_matched_actual_length =
+                direction.target_matched_actual_length;
+            destination.edge_structure_vertical_strong_conflict_count =
+                direction.strong_conflict_count;
+            destination.edge_structure_source_vertical_strong_conflict_actual_length =
+                direction.source_strong_conflict_actual_length;
+            destination.edge_structure_target_vertical_strong_conflict_actual_length =
+                direction.target_strong_conflict_actual_length;
+            destination.edge_structure_source_vertical_strong_conflict_length_ratio =
+                direction.source_strong_conflict_length_ratio;
+            destination.edge_structure_target_vertical_strong_conflict_length_ratio =
+                direction.target_strong_conflict_length_ratio;
+            syncStrictRejections(direction.strict_position_rejections,
+                                 destination.edge_structure_vertical_position_rejections);
+            syncStrictRejections(direction.strict_overlap_rejections,
+                                 destination.edge_structure_vertical_overlap_rejections);
+            syncStrictRejections(direction.strict_angle_rejections,
+                                 destination.edge_structure_vertical_angle_rejections);
+            destination.edge_structure_source_vertical_unmatched_actual_length =
+                direction.source_unmatched_actual_length;
+            destination.edge_structure_target_vertical_unmatched_actual_length =
+                direction.target_unmatched_actual_length;
+            destination.edge_structure_source_vertical_unmatched_length_ratio =
+                direction.source_unmatched_length_ratio;
+            destination.edge_structure_target_vertical_unmatched_length_ratio =
+                direction.target_unmatched_length_ratio;
+            destination.edge_structure_vertical_ambiguous_match_count =
+                direction.ambiguous_match_count;
+            destination.edge_structure_vertical_ambiguous_actual_length_ratio =
+                direction.ambiguous_actual_length_ratio;
+            destination.edge_structure_vertical_matched_angle_difference_mean_degrees =
+                direction.matched_angle_difference_mean_degrees;
+            destination.edge_structure_vertical_matched_angle_difference_max_degrees =
+                direction.matched_angle_difference_max_degrees;
+        }
+    };
+    syncDirection(edge.horizontal, true, result);
+    syncDirection(edge.vertical, false, result);
+    result.warp_height_diff_valid_count = quality.height_diff_valid_count;
+    result.warp_height_diff_overlap_ratio = quality.height_diff_overlap_ratio;
+    result.warp_height_diff_mean = quality.height_diff_mean;
+    result.warp_height_diff_p50 = quality.height_diff_p50;
+    result.warp_height_diff_p75 = quality.height_diff_p75;
+    result.warp_height_diff_p90 = quality.height_diff_p90;
+    result.warp_height_diff_p95 = quality.height_diff_p95;
+    result.warp_height_diff_max = quality.height_diff_max;
+    result.warp_height_diff_compensation_attempted = quality.height_diff_compensation_attempted;
+    result.warp_height_diff_global_offset = quality.height_diff_global_offset;
+    result.warp_height_diff_compensated_mean = quality.height_diff_compensated_mean;
+    result.warp_height_diff_compensated_p50 = quality.height_diff_compensated_p50;
+    result.warp_height_diff_compensated_p75 = quality.height_diff_compensated_p75;
+    result.warp_height_diff_compensated_p90 = quality.height_diff_compensated_p90;
+    result.warp_height_diff_compensated_p95 = quality.height_diff_compensated_p95;
+    result.warp_height_diff_compensated_max = quality.height_diff_compensated_max;
+    result.warp_height_diff_local_noise_candidate = quality.height_diff_local_noise_candidate;
+    result.warp_height_diff_p90_p75_gap = quality.height_diff_p90_p75_gap;
+    result.warp_height_diff_local_noise_containment = quality.height_diff_local_noise_containment;
 }
 
 /// 比较两个都已成功的 warp 质量结果。
-/// 两者已通过各自的质量门槛后，将 containment 和 NMAD 归一化为同向分数，
+/// 两者已通过各自门槛后，将 containment 和配置的高度差分位数归一化为同向分数，
 /// 用综合分选择最终结果；平分时保留直接法结果，避免无意义的来源切换。
 bool preferInitializerResult(const PipelineConfig& cfg,
                              const warp_quality::WarpQualityResult& directQuality,
                              const FeatureInitializerData& initializer) {
-    const double kEps = 1e-6;
-
     const auto& validation = cfg.warp_quality;
     const double minContainment = validation.overlap.min_containment;
-    const double maxPhotometricError = validation.photometric.max_nmad;
-    constexpr double kContainmentWeight = 0.35;
-    constexpr double kPhotometricWeight = 0.65;
+    const int percentile = validation.height_difference.percentile;
+    const double maxHeightDifferenceError = validation.height_difference.max_abs_error;
 
     // 两项门槛未启用或配置非法时，没有可比较的共同评分尺度，保留直接法结果。
-    if (!validation.overlap.containment_enabled || !validation.photometric.enabled ||
-        minContainment < 0.0 || minContainment >= 1.0 || maxPhotometricError <= 0.0) {
+    if (!validation.overlap.containment_enabled || !validation.height_difference.enabled ||
+        minContainment < 0.0 || minContainment >= 1.0 || maxHeightDifferenceError <= 0.0) {
         return false;
     }
 
-    const auto qualityScore = [&](const double containment, const double nmad) {
-        // containment 越接近 1 越好；低于验收线的值归零，验收后只比较剩余提升空间。
-        const double containmentScore =
-            std::clamp((containment - minContainment) / (1.0 - minContainment), 0.0, 1.0);
-        // NMAD 越小越好；达到上限时为零，零误差时为满分。
-        const double photometricScore =
-            std::clamp(1.0 - nmad / maxPhotometricError, 0.0, 1.0);
-        return kContainmentWeight * containmentScore +
-               kPhotometricWeight * photometricScore;
-    };
+    const double initializerHeightDifference =
+        height_difference_evaluator::selectPercentile(percentile,
+                                                      initializer.warp_height_diff_p50,
+                                                      initializer.warp_height_diff_p75,
+                                                      initializer.warp_height_diff_p90,
+                                                      initializer.warp_height_diff_p95);
+    const double directHeightDifference =
+        height_difference_evaluator::selectPercentile(percentile,
+                                                      directQuality.height_diff_p50,
+                                                      directQuality.height_diff_p75,
+                                                      directQuality.height_diff_p90,
+                                                      directQuality.height_diff_p95);
+    if (initializerHeightDifference < 0.0 || directHeightDifference < 0.0) {
+        return false;
+    }
 
-    const double initializerScore = qualityScore(initializer.warp_overlap_containment,
-                                                 initializer.warp_photometric_error);
-    const double directScore = qualityScore(directQuality.overlap_containment,
-                                            directQuality.photometric_error);
-    return initializerScore > directScore + kEps;
+    return height_difference_evaluator::preferByContainmentAndHeight(
+        percentile,
+        minContainment,
+        maxHeightDifferenceError,
+        initializer.warp_overlap_containment,
+        initializerHeightDifference,
+        directQuality.overlap_containment,
+        directHeightDifference);
 }
 
 /// 将 evaluator 中和通用结果字段同义的指标同步回 RegistrationResult。
@@ -118,10 +306,14 @@ bool resolveDirectFinalValidationReference(const PipelineConfig& cfg,
         ctx.result.warp_overlap_containment = ctx.feature_initializer_data.warp_overlap_containment;
         ctx.result.warp_source_coverage = ctx.feature_initializer_data.warp_source_coverage;
         ctx.result.warp_target_coverage = ctx.feature_initializer_data.warp_target_coverage;
-        ctx.result.warp_edge_alignment_iou =
-            ctx.feature_initializer_data.warp_edge_alignment_iou;
-        ctx.result.warp_photometric_error =
-            ctx.feature_initializer_data.warp_photometric_error;
+        ctx.result.warp_height_diff_valid_count = ctx.feature_initializer_data.warp_height_diff_valid_count;
+        ctx.result.warp_height_diff_overlap_ratio = ctx.feature_initializer_data.warp_height_diff_overlap_ratio;
+        ctx.result.warp_height_diff_mean = ctx.feature_initializer_data.warp_height_diff_mean;
+        ctx.result.warp_height_diff_p50 = ctx.feature_initializer_data.warp_height_diff_p50;
+        ctx.result.warp_height_diff_p75 = ctx.feature_initializer_data.warp_height_diff_p75;
+        ctx.result.warp_height_diff_p90 = ctx.feature_initializer_data.warp_height_diff_p90;
+        ctx.result.warp_height_diff_p95 = ctx.feature_initializer_data.warp_height_diff_p95;
+        ctx.result.warp_height_diff_max = ctx.feature_initializer_data.warp_height_diff_max;
         ctx.result.message = "OK";
         ctx.direct_data.addDiagnostic("final_validation_used_initializer",
                                       "final validation used initializer",
@@ -141,10 +333,14 @@ bool resolveDirectFinalValidationReference(const PipelineConfig& cfg,
         ctx.result.warp_overlap_containment = ctx.feature_initializer_data.warp_overlap_containment;
         ctx.result.warp_source_coverage = ctx.feature_initializer_data.warp_source_coverage;
         ctx.result.warp_target_coverage = ctx.feature_initializer_data.warp_target_coverage;
-        ctx.result.warp_edge_alignment_iou =
-            ctx.feature_initializer_data.warp_edge_alignment_iou;
-        ctx.result.warp_photometric_error =
-            ctx.feature_initializer_data.warp_photometric_error;
+        ctx.result.warp_height_diff_valid_count = ctx.feature_initializer_data.warp_height_diff_valid_count;
+        ctx.result.warp_height_diff_overlap_ratio = ctx.feature_initializer_data.warp_height_diff_overlap_ratio;
+        ctx.result.warp_height_diff_mean = ctx.feature_initializer_data.warp_height_diff_mean;
+        ctx.result.warp_height_diff_p50 = ctx.feature_initializer_data.warp_height_diff_p50;
+        ctx.result.warp_height_diff_p75 = ctx.feature_initializer_data.warp_height_diff_p75;
+        ctx.result.warp_height_diff_p90 = ctx.feature_initializer_data.warp_height_diff_p90;
+        ctx.result.warp_height_diff_p95 = ctx.feature_initializer_data.warp_height_diff_p95;
+        ctx.result.warp_height_diff_max = ctx.feature_initializer_data.warp_height_diff_max;
         ctx.result.message = "OK";
         ctx.direct_data.addDiagnostic("final_validation_used_initializer",
                                       "final validation used initializer",
@@ -357,7 +553,7 @@ bool BasePipeline::validateMethodFeatureQuality(RegistrationContext& ctx) {
 }
 
 bool BasePipeline::validateSharedFinalQuality(RegistrationContext& ctx) {
-    // 当前共享最终判定统一落在 warp 质量上，覆盖几何重叠、光度一致性和边缘对齐。
+    // 当前共享最终判定统一落在 warp 质量上，覆盖几何重叠和高度差。
     return validateWarpQuality(ctx);
 }
 
@@ -461,7 +657,7 @@ bool BasePipeline::validateMatchQuality(RegistrationContext& ctx) {
     }
 
     // 条件4：计算最终内点在前景中的空间覆盖率，写入结果用于后续综合判断。
-    // 这里先不提前判失败，避免把 warp 几何和光度都已经对齐的局部包含场景误杀。
+    // 这里先不提前判失败，避免把 warp 几何和高度都已经对齐的局部包含场景误杀。
     if (_config.min_inlier_spatial_coverage >= 0.0) {
         cv::Mat sourceMask;
         cv::Mat targetMask;
@@ -614,11 +810,37 @@ bool BasePipeline::validateStructureOverlap(RegistrationContext& ctx) {
 
 bool BasePipeline::validateWarpQuality(RegistrationContext& ctx) {
     ctx.result.final_validation_source.clear();
+    ctx.result.edge_structure_status = "NOT_RUN";
+    ctx.result.edge_structure_message.clear();
+    ctx.edge_structure_initial_source_line_segments.release();
+    ctx.edge_structure_initial_target_line_segments.release();
+    ctx.edge_structure_filtered_source_lines.release();
+    ctx.edge_structure_filtered_target_lines.release();
+    ctx.edge_structure_fitted_source_lines.release();
+    ctx.edge_structure_fitted_target_lines.release();
+    ctx.edge_structure_matched_line_overlay.release();
     ctx.result.warp_overlap_containment = -1.0;
     ctx.result.warp_source_coverage = -1.0;
     ctx.result.warp_target_coverage = -1.0;
-    ctx.result.warp_edge_alignment_iou = -1.0;
-    ctx.result.warp_photometric_error = -1.0;
+    ctx.result.warp_height_diff_valid_count = 0;
+    ctx.result.warp_height_diff_overlap_ratio = -1.0;
+    ctx.result.warp_height_diff_mean = -1.0;
+    ctx.result.warp_height_diff_p50 = -1.0;
+    ctx.result.warp_height_diff_p75 = -1.0;
+    ctx.result.warp_height_diff_p90 = -1.0;
+    ctx.result.warp_height_diff_p95 = -1.0;
+    ctx.result.warp_height_diff_max = -1.0;
+    ctx.result.warp_height_diff_compensation_attempted = false;
+    ctx.result.warp_height_diff_global_offset = -1.0;
+    ctx.result.warp_height_diff_compensated_mean = -1.0;
+    ctx.result.warp_height_diff_compensated_p50 = -1.0;
+    ctx.result.warp_height_diff_compensated_p75 = -1.0;
+    ctx.result.warp_height_diff_compensated_p90 = -1.0;
+    ctx.result.warp_height_diff_compensated_p95 = -1.0;
+    ctx.result.warp_height_diff_compensated_max = -1.0;
+    ctx.result.warp_height_diff_local_noise_candidate = false;
+    ctx.result.warp_height_diff_p90_p75_gap = -1.0;
+    ctx.result.warp_height_diff_local_noise_containment = -1.0;
 
     const auto options = warp_quality::makeFinalWarpQualityOptions(_config);
 
@@ -643,8 +865,8 @@ bool BasePipeline::validateWarpQuality(RegistrationContext& ctx) {
     }
 
     cv::Mat matrix;
-    const bool needsTransformMatrix =
-        options.validate_containment;
+    const bool needsTransformMatrix = options.validate_containment ||
+                                      options.edge_structure.enabled;
     if (needsTransformMatrix && !base_pipeline_helpers::activeTransformMatrix(ctx, matrix)) {
         ctx.result.message = "warp mask validation failed: no transform matrix";
         IR_LOG_WARN(ctx.result.message);
@@ -652,13 +874,25 @@ bool BasePipeline::validateWarpQuality(RegistrationContext& ctx) {
     }
 
     warp_quality::WarpQualityResult quality;
-    const bool ok = warp_quality::evaluateWarpQuality(options,
-                                                      ctx.images.first,
-                                                      ctx.images.second,
-                                                      matrix,
-                                                      ctx.warped_image,
-                                                      quality);
+    bool ok = warp_quality::evaluateWarpQuality(options,
+                                                 ctx.images.first,
+                                                 ctx.images.second,
+                                                 matrix,
+                                                 ctx.warped_image,
+                                                 quality);
+    if (ok) {
+        ok = quality.pass;
+    }
     syncWarpQualityToResult(ctx.result, quality);
+    ctx.edge_structure_initial_source_line_segments =
+        quality.edge_structure.initial_source_line_segments;
+    ctx.edge_structure_initial_target_line_segments =
+        quality.edge_structure.initial_target_line_segments;
+    ctx.edge_structure_filtered_source_lines = quality.edge_structure.filtered_source_lines;
+    ctx.edge_structure_filtered_target_lines = quality.edge_structure.filtered_target_lines;
+    ctx.edge_structure_fitted_source_lines = quality.edge_structure.fitted_source_lines;
+    ctx.edge_structure_fitted_target_lines = quality.edge_structure.fitted_target_lines;
+    ctx.edge_structure_matched_line_overlay = quality.edge_structure.matched_line_overlay;
     const bool finalOk = resolveDirectFinalValidationReference(_config, ctx, ok, quality);
     if (!finalOk) {
         IR_LOG_WARN(ctx.result.message);
@@ -673,10 +907,32 @@ bool BasePipeline::validateWarpQuality(RegistrationContext& ctx) {
                 ctx.result.warp_source_coverage,
                 ", target_coverage=",
                 ctx.result.warp_target_coverage,
-                ", edge_iou=",
-                ctx.result.warp_edge_alignment_iou,
-                ", nmad=",
-                ctx.result.warp_photometric_error);
+                ", height_diff_count=",
+                ctx.result.warp_height_diff_valid_count,
+                ", height_diff_overlap_ratio=",
+                ctx.result.warp_height_diff_overlap_ratio,
+                ", height_diff_mean=",
+                ctx.result.warp_height_diff_mean,
+                ", height_diff_p50=",
+                ctx.result.warp_height_diff_p50,
+                ", height_diff_p75=",
+                ctx.result.warp_height_diff_p75,
+                ", height_diff_p90=",
+                ctx.result.warp_height_diff_p90,
+                ", height_diff_p95=",
+                ctx.result.warp_height_diff_p95,
+                ", height_diff_max=",
+                ctx.result.warp_height_diff_max,
+                ", edge_structure_status=",
+                ctx.result.edge_structure_status,
+                ", edge_structure_horizontal_Hs=",
+                ctx.result.edge_structure_source_horizontal_match_ratio,
+                ", edge_structure_horizontal_Ht=",
+                ctx.result.edge_structure_target_horizontal_match_ratio,
+                ", edge_structure_vertical_Vs=",
+                ctx.result.edge_structure_source_vertical_match_ratio,
+                ", edge_structure_vertical_Vt=",
+                ctx.result.edge_structure_target_vertical_match_ratio);
     return true;
 }
 
@@ -695,12 +951,14 @@ bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
     const fs::path blend_dir = ctx.output_dir / "blend";
     const fs::path false_color_overlay_dir = ctx.output_dir / "false_color_overlay";
     const fs::path foreground_masks_dir = ctx.output_dir / "foreground_masks";
+    const fs::path edge_structure_dir = ctx.output_dir / "edge_structure_diagnostic";
     std::error_code ec;
     fs::create_directories(originals_dir, ec);
     fs::create_directories(warped_dir, ec);
     fs::create_directories(blend_dir, ec);
     fs::create_directories(false_color_overlay_dir, ec);
     fs::create_directories(foreground_masks_dir, ec);
+    fs::create_directories(edge_structure_dir, ec);
 
     const std::string stem = buildOutputStem(ctx);
     const std::string sampleStem = ctx.image1_path.stem().string() + "_" +
@@ -758,6 +1016,63 @@ bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
             }
         }
 
+    }
+
+    if (_config.warp_quality.edge_structure_diagnostic.enabled) {
+        const auto saveDiagnostic = [&](const cv::Mat& image, const std::string& suffix) {
+            if (image.empty()) {
+                return;
+            }
+            const fs::path out = edge_structure_dir / (stem + suffix);
+            if (cv::imwrite(out.string(), image)) {
+                IR_LOG_INFO("Wrote edge structure diagnostic image: ", out.string());
+            } else {
+                IR_LOG_WARN("Failed to write edge structure diagnostic image: ", out.string());
+            }
+        };
+        // 四张线组视图之外，启用边缘提取时额外输出 source/target 的并排边缘支撑图。
+        // 边缘支撑为空时 savePair 会跳过，因此灰度直线检测模式不会生成伪边缘图。
+        const auto savePair = [&](const cv::Mat& source,
+                                  const cv::Mat& target,
+                                  const std::string& suffix) {
+            if (source.empty() || target.empty()) {
+                return;
+            }
+            cv::Mat sourceView = source;
+            cv::Mat targetView = target;
+            if (sourceView.size() != targetView.size() ||
+                sourceView.type() != targetView.type()) {
+                return;
+            }
+            cv::Mat pair;
+            cv::hconcat(sourceView, targetView, pair);
+            saveDiagnostic(pair, suffix);
+        };
+        // Remove names from the pre-four-view layout so reruns cannot leave
+        // stale diagnostics that contradict the documented output contract.
+        for (const std::string& staleSuffix : {
+                  "_initial_source_line_segments.png",
+                  "_initial_target_line_segments.png",
+                  "_filtered_source_lines.png",
+                 "_filtered_target_lines.png",
+                 "_fitted_source_lines.png",
+                 "_fitted_target_lines.png",
+                 "_common_visibility_mask.png",
+                 "_edge_match_overlay.png"}) {
+            fs::remove(edge_structure_dir / (stem + staleSuffix), ec);
+            ec.clear();
+        }
+        savePair(ctx.edge_structure_initial_source_line_segments,
+                 ctx.edge_structure_initial_target_line_segments,
+                 "_initial_lines.png");
+        savePair(ctx.edge_structure_filtered_source_lines,
+                 ctx.edge_structure_filtered_target_lines,
+                 "_filtered_lines.png");
+        savePair(ctx.edge_structure_fitted_source_lines,
+                 ctx.edge_structure_fitted_target_lines,
+                 "_fitted_lines.png");
+        saveDiagnostic(ctx.edge_structure_matched_line_overlay,
+                       "_matched_line_overlay.png");
     }
 
     if (_config.save_foreground_masks &&

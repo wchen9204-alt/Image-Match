@@ -6,6 +6,11 @@ name: compare_direct_methods
 # 默认模板；组合项可以用 pipeline 字段覆盖到 global/frequency/sparse/dense。
 base_pipeline: ../direct/dense_direct_pipeline.yaml
 
+# direct 对比任务统一使用的点特征初始化器；修改此处即可切换六种直接法的初值。
+feature_initializer:
+  name: KAZE
+  keypoint: ../../keypoint/kaze.yaml
+
 # 待对比的直接法小方法。
 # pipeline 决定使用哪一类直接法公共参数，direct 决定具体算法配置。
 combinations:

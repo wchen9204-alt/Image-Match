@@ -7,7 +7,8 @@ type: LINE
 extractor:
   # 直线检测方法。
   # 当前支持：HOUGH_LINES_P / HOUGH_LINES / LSD / FLD。
-  method: HOUGH_LINES
+  # 默认使用有限端点的概率霍夫线段；HOUGH_LINES 会返回整幅画布范围的直线。
+  method: FLD
 
   params:
     # HOUGH_LINES / HOUGH_LINES_P 会先用 Canny 提取边缘。

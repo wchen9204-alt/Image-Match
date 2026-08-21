@@ -376,7 +376,20 @@ bool StructurePipeline::saveOutputs(RegistrationContext& ctx) {
     const std::string structureStem =
         sampleStem + "_" + (_extractor ? _extractor->outputLabel() : std::string("STRUCTURE"));
 
-    // 2. 按结构响应图开关保存 source / target 响应图。
+    // 2. 原始边缘算子响应与筛选后的结构响应分别保存。前者用于诊断边缘提取，
+    //    即使没有轮廓通过后续筛选也会保留。
+    if (_config.save_structure_responses && !ctx.structure_data.first.edge_response.empty()) {
+        const fs::path out = structureDir / (structureStem + "_source_edge_response.png");
+        cv::imwrite(out.string(), ctx.structure_data.first.edge_response);
+        IR_LOG_INFO("Wrote source edge response: ", out.string());
+    }
+    if (_config.save_structure_responses && !ctx.structure_data.second.edge_response.empty()) {
+        const fs::path out = structureDir / (structureStem + "_target_edge_response.png");
+        cv::imwrite(out.string(), ctx.structure_data.second.edge_response);
+        IR_LOG_INFO("Wrote target edge response: ", out.string());
+    }
+
+    // 3. 按结构响应图开关保存 source / target 轮廓响应图。
     if (_config.save_structure_responses && !ctx.structure_data.first.response.empty()) {
         const fs::path out = structureDir / (structureStem + "_source_structure.png");
         cv::imwrite(out.string(), ctx.structure_data.first.response);
@@ -388,7 +401,7 @@ bool StructurePipeline::saveOutputs(RegistrationContext& ctx) {
         IR_LOG_INFO("Wrote target structure visualization: ", out.string());
     }
 
-    // 3. 按配置保存结构匹配连线图，便于和点特征 matches 输出对照。
+    // 4. 按配置保存结构匹配连线图，便于和点特征 matches 输出对照。
     if (_config.draw_matches) {
         cv::Mat vis;
         const bool preferInliers =
@@ -419,7 +432,7 @@ bool StructurePipeline::saveOutputs(RegistrationContext& ctx) {
         }
     }
 
-    // 4. 委托基类保存 originals / warped / blend 等通用输出。
+    // 5. 委托基类保存 originals / warped / blend 等通用输出。
     return BasePipeline::saveOutputs(ctx);
 }
 

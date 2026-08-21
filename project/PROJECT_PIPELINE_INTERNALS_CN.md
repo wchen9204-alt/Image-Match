@@ -270,25 +270,30 @@ validation:
     foreground_threshold: 10
 ```
 
-### 7.2 NMAD 检查
+### 7.2 高度差分位数检查
 
-NMAD 用于衡量重叠区域的归一化平均绝对灰度差。
+高度差用于衡量重叠前景区域内逐像素的归一化绝对灰度差。当前正式判定不使用裁尾均值，而是导出 P50、P75、P90、P95、mean 和 max，并按配置选择一个分位数。
 
 ```text
-NMAD = mean(abs(warped - target)) / 255
+heightDifference = abs(warped - target) / 255
+selectedHeightDifference = P(percentile)
+pass = selectedHeightDifference <= max_abs_error
 ```
 
-配置项：
+默认配置：
 
 ```yaml
 validation:
-  photometric:
+  height_difference:
     enabled: true
-    max_nmad: 0.15
+    compensate_global_height_offset: false
+    percentile: 90
+    max_abs_error: 0.10
 ```
 
-任一启用的质量检查不达标，本次配准会被判定为失败。两项都关闭时，该阶段直接通过。
+全局高度偏移补偿使用有效重叠区域有符号高度差的 90% 截尾均值估计统一偏移，再重新计算差值。通过 `compensate_global_height_offset: true` 显式启用；默认 `false` 时仅使用未补偿高度差，设为 `true` 时仅在原始高度差未通过后执行补偿复检。最终条件为：`原始 Pxx <= 阈值 OR (补偿后 Pxx <= 阈值)`。
 
+任一启用的质量检查不达标，本次配准会被判定为失败。所有检查都关闭时，该阶段直接通过。
 ## 8. saveOutputs：输出保存
 
 输出分为两层：Pipeline 负责保存图像类结果，`RegistrationApp` 负责保存运行摘要和 CSV 统计表。
@@ -325,7 +330,7 @@ validation:
 直接法的 `summary.csv` 由 `apps/summary_csv_writer.cpp` 写出。当前表头这一行改为中文，
 并且不再输出 `feature_initializer_attempted`、`feature_initializer_used`、
 `feature_initializer_method`、`num_correspondences` 和
-`feature_initializer_warp_edge_alignment_iou`；这些字段要么偏流程诊断，要么不再属于当前
+这些字段要么偏流程诊断，要么不再属于当前
 直接法汇总表的核心判读信息。
 
 | 字段 | 作用 |
@@ -338,12 +343,11 @@ validation:
 | `feature_initializer_inliers` / `初始值内点数` | 已接受点特征初始值的内点数；没有可用初始值时通常为 `0`。 |
 | `feature_initializer_inlier_ratio` / `初始值内点率` | 已接受点特征初始值的内点率；不可用时为 `-1`。 |
 | `feature_initializer_spatial_coverage` / `初始值空间覆盖率` | 已接受点特征初始值的内点空间覆盖率，用于判断初值点分布是否足够分散；不可用时为 `-1`。 |
-| `feature_initializer_warp_photometric_error` / `初始值光度误差` | 已接受点特征初始值临时 warp 后的 NMAD 灰度误差；越小越好，不可用时为 `-1`。 |
+| `feature_initializer_warp_height_diff_p90` / `初始值高度差 P90` | 已接受点特征初始值临时 warp 后的高度差 P90；越小越好，不可用时为 `-1`。 |
 | `warp_overlap_containment` / `重叠包含率` | 最终 warped source 与 target 的局部包含率，用于局部图场景下判断较小前景是否被覆盖。 |
 | `warp_source_coverage` / `源图覆盖率` | source 前景经最终变换后仍落在 target 画布内的比例。 |
 | `warp_target_coverage` / `目标图覆盖率` | target 前景经逆变换后仍落在 source 画布内的比例。 |
-| `warp_edge_alignment_iou` / `边缘对齐IoU` | 最终 warped source 与 target 在重叠区域内的边缘对齐 IoU；越大表示边缘越一致。 |
-| `warp_photometric_error` / `光度误差` | 最终 warped source 与 target 重叠区域的 NMAD 灰度误差；越小表示光度越一致。 |
+| `warp_height_diff_p90` / `高度差 P90` | 最终 warped source 与 target 重叠区域的高度差 P90；越小表示高度越一致。 |
 | `t_load_ms` / `加载耗时_ms` | 图像读取和预处理耗时，单位毫秒。 |
 | `t_geometry_ms` / `几何阶段耗时_ms` | 直接法估计、几何同步和相关估计阶段耗时，单位毫秒。 |
 | `t_warp_ms` / `变换耗时_ms` | 最终图像 warp 阶段耗时，单位毫秒。 |
@@ -359,7 +363,6 @@ validation:
 | `num_correspondences` | 旧版记录的直接法对应点数量；稀疏/稠密直接法中更有意义，当前新表已删除。 |
 | `mean_reproj_error` | 旧版沿用通用几何重投影误差；对多数直接法没有稳定通用语义，当前直接法新表不再输出。 |
 | `inlier_spatial_coverage` | 旧版沿用通用内点空间覆盖率；当前直接法主判定以 warp 质量为主，新表不再输出该列。 |
-| `feature_initializer_warp_edge_alignment_iou` | 旧版记录初始值临时 warp 的边缘对齐 IoU；当前新表已删除。 |
 | `t_align_ms` | 旧版直接法对齐耗时列；历史实现中实际写入的是 `t_match_ms`，含义不够准确，当前新表不再输出。 |
 
 批量输出路径形式：
@@ -530,4 +533,3 @@ output:
 ```
 
 `include` 为空时会扫描数据集根目录下全部样本；填写样本名时只运行指定样本。
-

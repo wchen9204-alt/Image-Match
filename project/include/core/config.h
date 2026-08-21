@@ -94,35 +94,92 @@ struct PipelineConfig {
         int containment_tolerance_pixels = 0;
     };
 
-    /// warp 光度验证参数，负责重叠区域 NMAD 判定。
-    struct PhotometricValidationConfig {
-        /// 是否启用 warped source 与 target 重叠区域的光度误差验证。
+    /// warp 高度差验证参数，使用有效重叠前景内绝对差的指定分位数。
+    struct HeightDifferenceValidationConfig {
+        /// 是否启用 warped source 与 target 重叠区域的高度差 P90 验证。
         bool enabled = false;
-        /// 常规光度误差验证的最大 NMAD 阈值。
-        double max_nmad = 0.15;
+        /// 是否先估计并补偿全局高度偏移；默认关闭。
+        bool compensate_global_height_offset = true;
+        /// 用于成功判定的分位数；支持 50、75、90、95，默认 90。
+        int percentile = 90;
+        /// 所选分位数允许的最大绝对高度差；当前单位为归一化灰度，默认 0.10。
+        double max_abs_error = 0.10;
+        /// 是否启用局部噪声尾部例外判定。
+        bool local_noise_fallback_enabled = false;
+        /// 局部噪声例外要求原始 P75 不超过该阈值。
+        double local_noise_p75_max_abs_error = 0.10;
+        /// 局部噪声例外要求较小前景的包含率不低于该值。
+        double local_noise_min_containment = 0.90;
     };
 
-    /// warp 边缘对齐验证参数，负责拦截“覆盖了但内容没对上”的误判。
-    struct EdgeAlignmentValidationConfig {
-        /// 是否启用 warped source 与 target 重叠区域的边缘对齐 IoU 验证。
+    /// 基于最终变换矩阵的长条线组结构验证；明确冲突会参与最终成功判定。
+    struct EdgeStructureDiagnosticConfig {
         bool enabled = false;
-        /// 边缘对齐 IoU 最低阈值。
-        double min_iou = 0.08;
-        /// Canny 低阈值。
-        int canny_low_threshold = 50;
-        /// Canny 高阈值。
-        int canny_high_threshold = 150;
-        /// 边缘 mask 膨胀核尺寸，用于容忍少量像素级偏移；小于等于 1 表示不膨胀。
-        int dilate_size = 3;
-        /// 参与验证的最低边缘像素数；低纹理图像低于该值时判为无效。
-        int min_edge_pixels = 20;
+        int visibility_threshold = 0;
+        double min_foreground_elongation_ratio = 4.00;
+        /// 全部前景沿 PCA 主轴的最低连续占用率。
+        double min_axis_occupancy = 0.75;
+        /// 主轴截面中心相对 PCA 中心线的 P90 偏差 / 长边上限。
+        double max_centerline_deviation_ratio = 0.03;
+        int max_canvas_side_pixels = 16384;
+        int max_canvas_pixels = 100000000;
+
+        /// 同一物理边缘重复线组的法向去重容差；较远的两条边界仍分别保留。
+        double duplicate_line_normal_tolerance_pixels = 2.0;
+        /// 重复线组去重要求其切向包络区间的最小重叠比例。
+        double duplicate_line_min_span_overlap_ratio = 0.80;
+        /// 同一粗长边双侧边界的最小/最大法向间距，单位为像素。
+        double outer_longitudinal_edge_min_normal_separation_pixels = 1.0;
+        double outer_longitudinal_edge_max_normal_separation_pixels = 12.0;
+        /// 判定为同一粗长边的双侧边界时，切向包络最小重叠比例。
+        double outer_longitudinal_edge_min_span_overlap_ratio = 0.75;
+        /// 初始片段固定由 EDLines 在共同可见区域的灰度图上检测。
+        double min_fragment_length_pixels = 6.0;
+
+        double group_max_angle_difference_degrees = 12.0;
+        double group_max_normal_distance_pixels = 3.0;
+        /// 首次拟合后，切向不重叠的同轴线组允许重新分配的法向距离。
+        double post_fit_group_normal_distance_pixels = 3.0;
+        double min_line_group_actual_length_pixels = 6.0;
+        double min_line_group_continuity_ratio = 0.10;
+        double max_line_group_gap_ratio = 0.45;
+        double max_fragment_direction_spread_degrees = 10.0;
+        double max_line_fit_residual_pixels = 5.0;
+
+        double min_main_line_actual_length_ratio = 0.30;
+        double direction_cluster_tolerance_degrees = 6.0;
+        double min_main_direction_support_ratio = 0.60;
+        double max_main_direction_spread_degrees = 4.0;
+        double min_main_direction_margin = 0.15;
+        double max_main_direction_difference_degrees = 5.0;
+        double max_axis_classification_error_degrees = 8.0;
+        // 按各自完整前景在参考主轴/法线方向的跨度过滤短线组。
+        double min_horizontal_actual_length_ratio = 0.65;
+        double min_vertical_actual_length_ratio = 0.45;
+        /// 竖直方向双方未解释支撑均超过此比例时，判为系统性结构冲突。
+        double max_vertical_unmatched_length_ratio = 0.70;
+
+        double profile_smoothing_sigma = 1.0;
+        double min_peak_prominence = 0.03;
+        double candidate_position_tolerance_pixels = 15.0;
+        double final_position_tolerance_pixels = 3.0;
+        double candidate_min_span_overlap_ratio = 0.05;
+        double min_shorter_line_overlap_ratio = 0.90;
+        double max_line_pair_angle_difference_degrees = 0.3;
+        double match_position_cost_weight = 0.45;
+        double match_overlap_cost_weight = 0.30;
+        double match_angle_cost_weight = 0.20;
+        double match_prominence_cost_weight = 0.05;
+        double min_strong_line_actual_length_pixels = 12.0;
+        double min_strong_peak_prominence = 0.05;
+        double ambiguity_score_margin = 0.05;
     };
 
     /// warp 质量验证参数集合，供最终验证和初始化候选验证复用。
     struct WarpQualityValidationConfig {
         WarpOverlapValidationConfig overlap;
-        PhotometricValidationConfig photometric;
-        EdgeAlignmentValidationConfig edge_alignment;
+        HeightDifferenceValidationConfig height_difference;
+        EdgeStructureDiagnosticConfig edge_structure_diagnostic;
     };
 
     /// 点特征初始化候选接受条件。
@@ -275,4 +332,3 @@ public:
 };
 
 } // namespace ir
-

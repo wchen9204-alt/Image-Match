@@ -164,8 +164,14 @@ bool validateCandidate(const PipelineConfig& cfg,
     data.warp_overlap_containment = quality.overlap_containment;
     data.warp_source_coverage = quality.source_coverage;
     data.warp_target_coverage = quality.target_coverage;
-    data.warp_edge_alignment_iou = quality.edge_alignment_iou;
-    data.warp_photometric_error = quality.photometric_error;
+    data.warp_height_diff_valid_count = quality.height_diff_valid_count;
+    data.warp_height_diff_overlap_ratio = quality.height_diff_overlap_ratio;
+    data.warp_height_diff_mean = quality.height_diff_mean;
+    data.warp_height_diff_p50 = quality.height_diff_p50;
+    data.warp_height_diff_p75 = quality.height_diff_p75;
+    data.warp_height_diff_p90 = quality.height_diff_p90;
+    data.warp_height_diff_p95 = quality.height_diff_p95;
+    data.warp_height_diff_max = quality.height_diff_max;
     return true;
 }
 
@@ -326,10 +332,22 @@ bool DirectFeatureInitializer::run(RegistrationContext& ctx) {
                     candidateData.inlier_ratio,
                     ", spatial=",
                     candidateData.inlier_spatial_coverage,
-                    ", nmad=",
-                    candidateData.warp_photometric_error,
-                    ", edge_iou=",
-                    candidateData.warp_edge_alignment_iou);
+                    ", height_diff_count=",
+                    candidateData.warp_height_diff_valid_count,
+                    ", height_diff_overlap_ratio=",
+                    candidateData.warp_height_diff_overlap_ratio,
+                    ", height_diff_mean=",
+                    candidateData.warp_height_diff_mean,
+                    ", height_diff_p50=",
+                    candidateData.warp_height_diff_p50,
+                    ", height_diff_p75=",
+                    candidateData.warp_height_diff_p75,
+                    ", height_diff_p90=",
+                    candidateData.warp_height_diff_p90,
+                    ", height_diff_p95=",
+                    candidateData.warp_height_diff_p95,
+                    ", height_diff_max=",
+                     candidateData.warp_height_diff_max);
     } else {
         rejectMessages.push_back(_candidate.name + ":" + rejectReason);
         IR_LOG_INFO("DirectFeatureInitializer rejected ", _candidate.name, ": ", rejectReason);

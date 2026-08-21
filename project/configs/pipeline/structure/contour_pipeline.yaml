@@ -22,8 +22,8 @@ filters:
 
 io:
   # image1 / image2 默认值：空
-  image1: ../../../datasets/test124/source.png
-  image2: ../../../datasets/test124/target.png
+  image1: ../../../datasets/test120/source.png
+  image2: ../../../datasets/test120/target.png
   # output_dir 默认值：outputs
   output_dir: ../../../outputs
 
@@ -44,26 +44,17 @@ visualization:
   wait_key: 0
 
 validation:
+  # 共享质量阈值文件，集中维护各验证器参数。
+  profile: ../../validation/quality_profiles.yaml
+  # 当前方法使用的验证参数预设；下面各验证器只覆盖 enabled 开关。
+  preset: structure_contour
   method_quality:
-    # 方法特征判定：只检查轮廓法自身产物是否充足；最终仍必须通过下面的通用判定。
     enabled: true
-    fail_on_violation: true
-    min_structures: 1
-    min_structure_matches: 1
-  warp_overlap:
-    # 是否启用 warp 后的前景局部包含率验证；默认值：false。
-    enabled: true
-    # 最低局部包含率；默认值 0.20。
-    min_containment: 0.70
-    foreground_threshold: 20
-    # 局部包含率的像素匹配容差；0 表示严格像素重叠。
-    containment_tolerance_pixels: 0
   structure_overlap:
     enabled: true
-    min_iou: 0.12
-    foreground_threshold: 0
-    dilate_size: 7
-  photometric:
-    # 默认值：false / 0.15
+  warp_overlap:
     enabled: true
-    max_nmad: 0.15
+  edge_structure_diagnostic:
+    enabled: true
+  height_difference:
+    enabled: true

@@ -17,20 +17,6 @@ bool loadImageForPipeline(const std::filesystem::path& path, cv::Mat& color, cv:
 /// 根据灰度阈值生成前景 mask；黑色背景不会计入后续覆盖率统计。
 bool buildForegroundMask(const cv::Mat& image, int thresholdValue, cv::Mat& mask);
 
-/// 计算 warped 与 target 在 overlapMask 区域内的归一化平均绝对灰度差。
-double computePhotometricError(const cv::Mat& warped,
-                               const cv::Mat& target,
-                               const cv::Mat& overlapMask);
-
-/// 计算重叠区域内 warped source 与 target 的边缘 IoU，用于发现覆盖充分但内容错位的结果。
-double computeEdgeAlignmentIou(const cv::Mat& warped,
-                               const cv::Mat& target,
-                               const cv::Mat& overlapMask,
-                               int cannyLowThreshold,
-                               int cannyHighThreshold,
-                               int dilateSize,
-                               int minEdgePixels);
-
 /// 计算两个前景 mask 的交并比，主要用于结构重叠验证。
 double computeMaskIou(const cv::Mat& a, const cv::Mat& b);
 
@@ -44,6 +30,11 @@ double computeMaskLocalContainment(const cv::Mat& sourceMask,
                                    const cv::Mat& warpedSourceMask,
                                    const cv::Mat& targetMask,
                                    int tolerancePixels = 0);
+
+/// 计算两个同尺寸 mask 的局部包含率，分母为两者前景面积的较小值。
+double computeMaskPairLocalContainment(const cv::Mat& firstMask,
+                                       const cv::Mat& secondMask,
+                                       int tolerancePixels = 0);
 
 /// 计算前景 mask 经过 warp 后仍落在目标画布内的比例。
 double computeMaskCoverage(const cv::Mat& originalMask, const cv::Mat& warpedMask);

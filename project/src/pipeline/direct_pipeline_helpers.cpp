@@ -194,8 +194,14 @@ void syncFeatureInitializerDiagnostics(RegistrationContext& ctx) {
     result.feature_initializer_inliers = init.num_inliers;
     result.feature_initializer_inlier_ratio = init.inlier_ratio;
     result.feature_initializer_spatial_coverage = init.inlier_spatial_coverage;
-    result.feature_initializer_warp_photometric_error = init.warp_photometric_error;
-    result.feature_initializer_warp_edge_alignment_iou = init.warp_edge_alignment_iou;
+    result.feature_initializer_warp_height_diff_valid_count = init.warp_height_diff_valid_count;
+    result.feature_initializer_warp_height_diff_overlap_ratio = init.warp_height_diff_overlap_ratio;
+    result.feature_initializer_warp_height_diff_mean = init.warp_height_diff_mean;
+    result.feature_initializer_warp_height_diff_p50 = init.warp_height_diff_p50;
+    result.feature_initializer_warp_height_diff_p75 = init.warp_height_diff_p75;
+    result.feature_initializer_warp_height_diff_p90 = init.warp_height_diff_p90;
+    result.feature_initializer_warp_height_diff_p95 = init.warp_height_diff_p95;
+    result.feature_initializer_warp_height_diff_max = init.warp_height_diff_max;
 }
 
 /// 对尚未内建“初值消费”逻辑的直接法，通用地完成一次 source 预 warp。

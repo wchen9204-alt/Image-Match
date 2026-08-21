@@ -1,4 +1,4 @@
-# ---------------------------------------------------------------------------
+﻿# ---------------------------------------------------------------------------
 # 2D 刚体变换几何估计器
 #
 # 当前实现先使用 OpenCV estimateAffinePartial2D 做 RANSAC 初筛。
@@ -64,34 +64,34 @@ params:
   # 开启且候选前置条件满足时始终执行，不受 baseline 是否成功影响。
   enableFilteredMatchCandidates: true
 
-  # 先按描述子距离取前 K 个 filtered 匹配，再从中组合候选对，默认24个。
-  filteredMatchCandidateTopK: 24
-
-  # 候选 seed 的距离池大小。
-  # 当前实现不是只从前 topK 取，而是先从前 poolSize 个距离较好的匹配里，
-  # 混合做“空间分散选点 + 距离优先补点 + 主旋转峰补点”，再得到最终 seed。
+  # 候选 seed 的描述子距离池大小，默认 64。
+  # 先从全部 filtered 匹配中取前 poolSize 个描述子距离较小的匹配，作为后续混合选点范围。
   filteredMatchCandidatePoolSize: 64
 
-  # 最多生成多少个额外候选，默认12个。
+  # 最终用于两点组合的候选 seed 数量上限，默认 24。
+  # 从上述距离池中混合做“空间分散选点 + 距离优先补点 + 主旋转峰补点”后得到。
+  filteredMatchCandidateTopK: 24
+
+  # 额外 rigid 候选的两点组合调度策略；可选 COVERAGE_FIRST / LEGACY_LEXICOGRAPHIC，默认 COVERAGE_FIRST。
+  # COVERAGE_FIRST 按成功建模的 seed 使用次数优先覆盖未使用 seed，再比较描述子质量和两图空间间距。
+  # LEGACY_LEXICOGRAPHIC 保留历史 i/j 嵌套顺序，便于新旧策略做 A/B 回归对照。
+  filteredMatchCandidatePairStrategy: LEGACY_LEXICOGRAPHIC
+
+  # 最多生成多少个额外候选模型，默认 12 个。
   filteredMatchCandidateCount: 12
 
   # 生成候选时，两点之间最小空间间距，避免退化样本，默认20.0。
   filteredMatchCandidateMinPairDistance: 20.0
 
   # 是否在多候选 rigid 选模时加入前景 mask 几何评分。
-  # 开启后，每个候选都会额外计算 containment / source coverage /
+  # 开启后，每个候选都会额外计算局部包含率，并优先选择包含率更高的候选。
   enableCandidateMaskScoring: true
 
-  # 候选 mask 评分时的前景二值化阈值。
+  # 候选 mask 评分使用的前景二值化阈值。
   candidateMaskForegroundThreshold: 10
 
-  # 候选选择阶段的最低局部包含率阈值。
-  # 若候选不满足该阈值，则优先级低于满足阈值的候选；
-  # 若所有候选都不满足，则自动回退到旧的候选比较规则。
-  candidateMinContainment: 0.90
-
-  # 若所有候选都不满足，也会自动回退到旧规则。
-
+  # 与最高 containment 相差不超过该值的候选进入重投影误差比较；默认 0.20。
+  candidateContainmentTieMargin: 0
   # 轻量候选去重时允许的最大旋转角差，默认2.0，单位为度。
   # 若两个 rigid 候选的旋转差和平移差都很小，则视为重复候选。
   candidateDedupRotationDiffDeg: 2.0

@@ -45,32 +45,15 @@ visualization:
   wait_key: 0
 
 validation:
-  warp_overlap:
-    # 是否启用 warp 后的前景局部包含率验证。
-    enabled: true
-    # 最低局部包含率；默认值 0.20，本点特征主线设置为 0.90。
-    # 计算方式：intersection / min(source 原始前景面积, target 前景面积)。
-    # 适用于一张图可能是另一张图局部的点特征配准场景。
-    min_containment: 0.90
-    # 前景二值化阈值。
-    foreground_threshold: 20
-    # 局部包含率的像素匹配容差；0 表示严格像素重叠。
-    containment_tolerance_pixels: 0
-  photometric:
-    # 是否启用重叠前景区域的光度误差 NMAD 验证。
-    enabled: true
-    # 最大 NMAD 阈值；0.15 表示允许的最大归一化中位绝对偏差。
-    max_nmad: 0.15
+  # 共享质量阈值文件，集中维护各验证器参数。
+  profile: ../../validation/quality_profiles.yaml
+  # 当前方法使用的验证参数预设；下面各验证器只覆盖 enabled 开关。
+  preset: keypoint
   match_quality:
-    # 是否检查点特征对应关系的基础质量。
     enabled: true
-    # 阈值不满足时是否直接判为失败。
-    fail_on_violation: true
-    # 最少内点数；2 是刚体变换的最低对应点数量。
-    min_inliers: 2
-    # 最低内点率；-1 表示不作为最终判定条件。
-    min_inlier_ratio: -1
-    # 最大重投影误差；-1 表示不作为最终判定条件。
-    max_reproj_error: -1
-    # 内点空间覆盖率；-1 表示不作为最终判定条件。
-    min_inlier_spatial_coverage: -1
+  warp_overlap:
+    enabled: true
+  edge_structure_diagnostic:
+    enabled: false
+  height_difference:
+    enabled: true

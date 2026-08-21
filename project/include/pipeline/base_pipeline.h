@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <string>
 
@@ -55,7 +55,7 @@ protected:
     /// 验证方法自身产物是否充足，例如点特征数量、结构数量和结构候选匹配数量。
     virtual bool validateMethodFeatureQuality(RegistrationContext& ctx);
 
-    /// 7.2 执行各方法族共享的最终图像级验证，例如 overlap / photometric / edge。
+    /// 7.2 执行各方法族共享的最终图像级验证，例如 overlap / height difference / edge。
     virtual bool validateSharedFinalQuality(RegistrationContext& ctx);
 
     /// 验证匹配/关联质量，例如内点数、内点比例和重投影误差。
@@ -67,7 +67,7 @@ protected:
     /// 验证结构响应图在 warp 后是否与目标结构响应图足够重合。
     virtual bool validateStructureOverlap(RegistrationContext& ctx);
 
-    /// 验证 warped source 与 target 的前景重叠和光度误差。
+    /// 验证 warped source 与 target 的前景重叠和高度差。
     virtual bool validateWarpQuality(RegistrationContext& ctx);
 
     /// 8.保存通用输出图像；子类可扩展保存专属可视化。
