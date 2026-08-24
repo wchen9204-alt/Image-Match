@@ -17,7 +17,7 @@ namespace {
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kEpsilon = 1e-9;
-// OpenCV 使用 BGR：source 绿色、target 红色、双方严格重叠的实际支撑为黄色。
+// OpenCV 浣跨�?BGR锛歴ource 缁胯壊銆乼arget 绾㈣壊銆佸弻鏂逛弗鏍奸噸鍙犵殑瀹為檯鏀拺涓洪粍鑹层€?
 const cv::Scalar kSourceLineColor(0, 255, 0);
 const cv::Scalar kTargetLineColor(0, 0, 255);
 const cv::Scalar kMatchedOverlapColor(0, 255, 255);
@@ -120,7 +120,7 @@ bool buildForegroundMasks(const cv::Mat& gray,
         return false;
     }
 
-    // 用凸包表示可见前景范围，内部空腔不会把可比较视野切碎。
+    // 鐢ㄥ嚫鍖呰〃绀哄彲瑙佸墠鏅寖鍥达紝鍐呴儴绌鸿厰涓嶄細鎶婂彲姣旇緝瑙嗛噹鍒囩�?
     std::vector<cv::Point> points;
     cv::findNonZero(binaryMask, points);
     visibilityMask = binaryMask.clone();
@@ -165,7 +165,7 @@ ForegroundMetrics measureForeground(const cv::Mat& rawMask) {
     metrics.longSide = std::max(width, height);
     metrics.elongation = shortSide > kEpsilon ? metrics.longSide / shortSide : -1.0;
 
-    // PCA 和中心线描述前景的外轮廓，避免内部横线、孔洞和强弱纹理使中心线偏移。
+    // PCA 鍜屼腑蹇冪嚎鎻忚堪鍓嶆櫙鐨勫杞粨锛岄伩鍏嶅唴閮ㄦí绾裤€佸瓟娲炲拰寮哄急绾圭悊浣夸腑蹇冪嚎鍋忕Щ�?
     std::vector<cv::Point> hull;
     cv::convexHull(points, hull);
     cv::Mat hullMask = cv::Mat::zeros(rawMask.size(), CV_8U);
@@ -197,7 +197,7 @@ ForegroundMetrics measureForeground(const cv::Mat& rawMask) {
         return metrics;
     }
 
-    // 两像素宽的主轴区间可容忍栅格化造成的亚像素空隙，同时仍能暴露明显断裂。
+    // 涓ゅ儚绱犲鐨勪富杞村尯闂村彲瀹瑰繊鏍呮牸鍖栭€犳垚鐨勪簹鍍忕礌绌洪殭锛屽悓鏃朵粛鑳芥毚闇叉槑鏄炬柇瑁傘€?
     constexpr double kAxisBinWidth = 2.0;
     const int binCount = std::max(
         1, static_cast<int>(std::floor((maximumPosition - minimumPosition) /
@@ -254,8 +254,8 @@ struct CommonCanvas {
     cv::Point2d offset;
 };
 
-// 输入 source 已由调用方 warp 到 target 坐标系。这里仅为双方增加相同边距，
-// 后续再用同一个参考旋转建立水平/竖直坐标，而不单独修正任一图像。
+// 杈撳�?source 宸茬敱璋冪敤�?warp �?target 鍧愭爣绯汇€傝繖閲屼粎涓哄弻鏂瑰鍔犵浉鍚岃竟璺濓紝
+// 鍚庣画鍐嶇敤鍚屼竴涓弬鑰冩棆杞缓绔嬫按�?绔栫洿鍧愭爣锛岃€屼笉鍗曠嫭淇浠讳竴鍥惧儚銆?
 bool buildOriginalCoordinateCanvas(const cv::Size& sourceSize,
                                    const cv::Size& targetSize,
                                    const Options& options,
@@ -324,7 +324,7 @@ struct ReferenceRotationCanvas {
     cv::Mat transform;
 };
 
-// 在共同画布中用同一个旋转把参考主方向放到水平轴，并为旋转后边界预留安全区域。
+// 鍦ㄥ叡鍚岀敾甯冧腑鐢ㄥ悓涓€涓棆杞妸鍙傝€冧富鏂瑰悜鏀惧埌姘村钩杞达紝骞朵负鏃嬭浆鍚庤竟鐣岄鐣欏畨鍏ㄥ尯鍩熴�?
 bool buildReferenceRotationCanvas(const cv::Size& inputSize,
                                   double referenceAngle,
                                   const Options& options,
@@ -334,7 +334,7 @@ bool buildReferenceRotationCanvas(const cv::Size& inputSize,
         error = "reference rotation canvas has invalid input size";
         return false;
     }
-    // 线方向以 180 度为周期。取最小等价旋转，避免 179 度被不必要地翻转整张图。
+    // 绾挎柟鍚戜互 180 搴︿负鍛ㄦ湡銆傚彇鏈€灏忕瓑浠锋棆杞紝閬垮�?179 搴﹁涓嶅繀瑕佸湴缈昏浆鏁村紶鍥俱€?
     const double rotationDegrees = referenceAngle > 90.0 ? referenceAngle - 180.0
                                                           : referenceAngle;
     cv::Mat transform = cv::getRotationMatrix2D(cv::Point2f(0.0F, 0.0F),
@@ -385,7 +385,7 @@ cv::Point2d transformPoint(const cv::Mat& transform, const cv::Point2d& point) {
                 transform.at<double>(1, 2)};
 }
 
-// 初始检测保持在旋转前完成；这里仅将原始输出同步映射到共同参考坐标。
+// 鍒濆妫€娴嬩繚鎸佸湪鏃嬭浆鍓嶅畬鎴愶紱杩欓噷浠呭皢鍘熷杈撳嚭鍚屾鏄犲皠鍒板叡鍚屽弬鑰冨潗鏍囥€?
 std::vector<cv::Vec4f> transformLineSegments(const std::vector<cv::Vec4f>& segments,
                                               const cv::Mat& transform) {
     std::vector<cv::Vec4f> output;
@@ -482,7 +482,7 @@ struct LineGroup {
 };
 
 struct GroupBuildResult {
-    // 检测器直接返回的片段，用于区分“检测不到”和“后续被过滤”。
+    // 妫€娴嬪櫒鐩存帴杩斿洖鐨勭墖娈碉紝鐢ㄤ簬鍖哄垎鈥滄娴嬩笉鍒扳€濆拰鈥滃悗缁杩囨护鈥濄€?
     std::vector<cv::Vec4f> initialSegments;
     std::vector<LineGroup> groups;
     int fragmentCount = 0;
@@ -499,7 +499,7 @@ struct FragmentCluster {
     std::vector<Fragment> fragments;
 };
 
-// 共同参考方向下的正式线组候选。均值随片段加入而更新，避免首片段固定为锚点。
+// 鍏卞悓鍙傝€冩柟鍚戜笅鐨勬寮忕嚎缁勫€欓€夈€傚潎鍊奸殢鐗囨鍔犲叆鑰屾洿鏂帮紝閬垮厤棣栫墖娈靛浐瀹氫负閿氱偣�?
 struct ReferenceFragmentCluster {
     int axis = -1;
     std::vector<Fragment> fragments;
@@ -594,7 +594,7 @@ double intervalOverlap(const std::vector<Interval>& first,
     return overlap;
 }
 
-// EDLines 直接从共同可见区域内的灰度图提取初始二维片段。
+// EDLines 鐩存帴浠庡叡鍚屽彲瑙佸尯鍩熷唴鐨勭伆搴﹀浘鎻愬彇鍒濆浜岀淮鐗囨�?
 std::vector<cv::Vec4f> detectInitialLineSegments(const cv::Mat& lineInput,
                                                   const Options& options) {
     std::vector<cv::Vec4f> lines;
@@ -609,7 +609,7 @@ std::vector<cv::Vec4f> detectInitialLineSegments(const cv::Mat& lineInput,
     return lines;
 }
 
-// 删除退化/过短检测结果，并保留片段在当前共同画布中的真实角度。
+// 鍒犻櫎閫€鍖?杩囩煭妫€娴嬬粨鏋滐紝骞朵繚鐣欑墖娈靛湪褰撳墠鍏卞悓鐢诲竷涓殑鐪熷疄瑙掑害�?
 std::vector<Fragment> makeFragments(const std::vector<cv::Vec4f>& rawLines,
                                     const Options& options) {
     std::vector<Fragment> fragments;
@@ -640,7 +640,7 @@ double signedAngleOffset180(double angle, double referenceAngle) {
     return offset;
 }
 
-// 将检测片段拟合成逻辑线组；真实断裂保留在 fragments 中。
+// 灏嗘娴嬬墖娈垫嫙鍚堟垚閫昏緫绾跨粍锛涚湡瀹炴柇瑁備繚鐣欏�?fragments 涓�?
 LineGroup finalizeLineGroup(const std::vector<Fragment>& component, const Options& options) {
     std::vector<cv::Point2f> points;
     points.reserve(component.size() * 2);
@@ -762,8 +762,8 @@ GroupBuildResult buildLineGroups(const cv::Mat& lineInput, const Options& option
     return output;
 }
 
-// 在主方向门控通过后，按双方共用的参考方向重新组织正式线组。
-// 片段始终保留在原共同画布中，只有分类和分组使用参考主轴，不对两张图独立旋正。
+// 鍦ㄤ富鏂瑰悜闂ㄦ帶閫氳繃鍚庯紝鎸夊弻鏂瑰叡鐢ㄧ殑鍙傝€冩柟鍚戦噸鏂扮粍缁囨寮忕嚎缁勩€?
+// 鐗囨濮嬬粓淇濈暀鍦ㄥ師鍏卞悓鐢诲竷涓紝鍙湁鍒嗙被鍜屽垎缁勪娇鐢ㄥ弬鑰冧富杞达紝涓嶅涓ゅ紶鍥剧嫭绔嬫棆姝ｃ€?
 GroupBuildResult buildReferenceLineGroups(const std::vector<cv::Vec4f>& rawLines,
                                            double referenceAngle,
                                            const Options& options) {
@@ -807,9 +807,9 @@ GroupBuildResult buildReferenceLineGroups(const std::vector<cv::Vec4f>& rawLines
         }
     }
 
-    // 分组不依赖片段长度或检测器输出顺序。片段加入线组前必须和组内所有
-    // 已有片段兼容，不能通过共同片段的传递关系间接合并。线组总长度、断裂
-    // 和覆盖率在 finalizeLineGroup() 中再独立统计。
+    // 鍒嗙粍涓嶄緷璧栫墖娈甸暱搴︽垨妫€娴嬪櫒杈撳嚭椤哄簭銆傜墖娈靛姞鍏ョ嚎缁勫墠蹇呴』鍜岀粍鍐呮墍�?
+    // 宸叉湁鐗囨鍏煎锛屼笉鑳介€氳繃鍏卞悓鐗囨鐨勪紶閫掑叧绯婚棿鎺ュ悎骞躲€傜嚎缁勬€婚暱搴︺€佹柇�?
+    // 鍜岃鐩栫巼�?finalizeLineGroup() 涓啀鐙珛缁熻�?
     const auto normalAt = [](const Fragment& fragment,
                              const cv::Point2d& tangent,
                              const cv::Point2d& normal,
@@ -875,8 +875,8 @@ GroupBuildResult buildReferenceLineGroups(const std::vector<cv::Vec4f>& rawLines
                                                       dot(existing.second, tangent));
                 const double existingEnd = std::max(dot(existing.first, tangent),
                                                     dot(existing.second, tangent));
-                // 同一线组内的真实片段不能具有切向重叠。检测器在共享端点
-                // 处可能留下亚像素交叉，1px 以内视为端点量化误差而非真实重叠。
+                // 鍚屼竴绾跨粍鍐呯殑鐪熷疄鐗囨涓嶈兘鍏锋湁鍒囧悜閲嶅彔銆傛娴嬪櫒鍦ㄥ叡浜鐐?
+                // 澶勫彲鑳界暀涓嬩簹鍍忕礌浜ゅ弶锛?px 浠ュ唴瑙嗕负绔偣閲忓寲璇樊鑰岄潪鐪熷疄閲嶅彔�?
                 constexpr double kEndpointOverlapTolerancePixels = 1.0;
                 const double overlapBegin = std::max(itemBegin, existingBegin);
                 const double overlapEnd = std::min(itemEnd, existingEnd);
@@ -915,8 +915,8 @@ GroupBuildResult buildReferenceLineGroups(const std::vector<cv::Vec4f>& rawLines
     return output;
 }
 
-// 首次按原始片段分组后，仍可能有同一断裂边因局部法向偏移而拆成多个线组。
-// 仅重分配切向包络互不重叠的拟合组，避免将同一位置的相邻物理边界合并。
+// 棣栨鎸夊師濮嬬墖娈靛垎缁勫悗锛屼粛鍙兘鏈夊悓涓€鏂杈瑰洜灞€閮ㄦ硶鍚戝亸绉昏€屾媶鎴愬涓嚎缁勩€?
+// 浠呴噸鍒嗛厤鍒囧悜鍖呯粶浜掍笉閲嶅彔鐨勬嫙鍚堢粍锛岄伩鍏嶅皢鍚屼竴浣嶇疆鐨勭浉閭荤墿鐞嗚竟鐣屽悎骞躲�?
 std::vector<LineGroup> refitSeparatedLineGroups(std::vector<LineGroup> groups,
                                                  double referenceAngle,
                                                  bool repairLargeGapGroupsOnly,
@@ -1053,8 +1053,8 @@ std::vector<LineGroup> refitSeparatedLineGroups(std::vector<LineGroup> groups,
                          groups[secondBest].fragments.begin(),
                          groups[secondBest].fragments.end());
         LineGroup merged = finalizeLineGroup(fragments, options);
-        // 二次归组的目的就是保留真实断裂片段；断裂比例只记录为诊断值，
-        // 不再阻止已经通过几何重拟合的线组进入后续证据筛选。
+        // 浜屾褰掔粍鐨勭洰鐨勫氨鏄繚鐣欑湡瀹炴柇瑁傜墖娈碉紱鏂姣斾緥鍙褰曚负璇婃柇鍊硷�?
+        // 涓嶅啀闃绘宸茬粡閫氳繃鍑犱綍閲嶆嫙鍚堢殑绾跨粍杩涘叆鍚庣画璇佹嵁绛涢€夈�?
         merged.valid = merged.actualEdgeLength >= options.min_line_group_actual_length_pixels &&
                       merged.fragmentSpread <= options.max_fragment_direction_spread_degrees &&
                       merged.fitResidual <= options.max_line_fit_residual_pixels;
@@ -1359,7 +1359,7 @@ struct EvidenceGroup {
     double angle = 0.0;
     double prominence = 0.0;
     std::vector<Interval> tangentIntervals;
-    // 单条拟合线在共同坐标系切向上的完整包络；不包含真实断裂间隙。
+    // 鍗曟潯鎷熷悎绾垮湪鍏卞悓鍧愭爣绯诲垏鍚戜笂鐨勫畬鏁村寘缁滐紱涓嶅寘鍚湡瀹炴柇瑁傞棿闅欍�?
     Interval fittedTangentInterval;
 };
 
@@ -1384,7 +1384,7 @@ Interval fittedTangentInterval(const LineGroup& group,
             std::max(dot(first, tangentDirection), dot(second, tangentDirection))};
 }
 
-// 两条线组若在切向上覆盖同一段长边，且法向间距符合粗线宽度，视为同一物理长边的双侧边界。
+// 涓ゆ潯绾跨粍鑻ュ湪鍒囧悜涓婅鐩栧悓涓€娈甸暱杈癸紝涓旀硶鍚戦棿璺濈鍚堢矖绾垮搴︼紝瑙嗕负鍚屼竴鐗╃悊闀胯竟鐨勫弻渚ц竟鐣屻€?
 double envelopeOverlapRatio(const EvidenceGroup& first, const EvidenceGroup& second) {
     const double firstBegin = first.fittedTangentInterval.begin;
     const double firstEnd = first.fittedTangentInterval.end;
@@ -1395,8 +1395,8 @@ double envelopeOverlapRatio(const EvidenceGroup& first, const EvidenceGroup& sec
     return ratioOrInvalid(overlap, std::min(firstEnd - firstBegin, secondEnd - secondBegin));
 }
 
-// 粗长边的内侧边容易被横向结构打断。它仍作为可视化和辅助证据保留；
-// 最终匹配在水平双边组中选外侧边，在竖直双边组中选共同参考系右侧边。
+// 绮楅暱杈圭殑鍐呬晶杈瑰鏄撹妯悜缁撴瀯鎵撴柇銆傚畠浠嶄綔涓哄彲瑙嗗寲鍜岃緟鍔╄瘉鎹繚鐣欙紱
+// 鏈€缁堝尮閰嶅湪姘村钩鍙岃竟缁勪腑閫夊渚ц竟锛屽湪绔栫洿鍙岃竟缁勪腑閫夊叡鍚屽弬鑰冪郴鍙充晶杈广�?
 void retainOuterLongitudinalEvidence(std::vector<EvidenceGroup>& evidence,
                                      double foregroundNormalCenter,
                                      const Options& options) {
@@ -1493,7 +1493,7 @@ std::vector<Interval> projectIntervals(const LineGroup& group,
     return mergeIntervals(std::move(intervals), total, maxGap);
 }
 
-// 主方向确定后，辅助竖线的方向固定为其法线；横向位置用真实片段端点的中位数稳健估计。
+// 涓绘柟鍚戠‘瀹氬悗锛岃緟鍔╃珫绾跨殑鏂瑰悜鍥哄畾涓哄叾娉曠嚎锛涙í鍚戜綅缃敤鐪熷疄鐗囨绔偣鐨勪腑浣嶆暟绋冲仴浼拌銆?
 double constrainedNormalPosition(const LineGroup& group, const cv::Point2d& normalDirection) {
     std::vector<double> positions;
     positions.reserve(group.fragments.size() * 2);
@@ -1543,7 +1543,7 @@ std::vector<EvidenceGroup> buildEvidence(const std::vector<LineGroup>& groups,
         if (horizontalError <= options.max_axis_classification_error_degrees &&
             horizontalError <= verticalError) {
             item.axis = Axis::HORIZONTAL;
-            // 主方向的匹配几何全部来自拟合线；真实片段区间另存于 tangentIntervals。
+            // 涓绘柟鍚戠殑鍖归厤鍑犱綍鍏ㄩ儴鏉ヨ嚜鎷熷悎绾匡紱鐪熷疄鐗囨鍖洪棿鍙﹀瓨浜?tangentIntervals�?
             item.angle = group.angle;
             item.normalPosition = dot(group.center, verticalDirection);
             item.tangentCenter = dot(group.center, horizontalDirection);
@@ -1551,7 +1551,7 @@ std::vector<EvidenceGroup> buildEvidence(const std::vector<LineGroup>& groups,
             item.fittedTangentInterval = fittedTangentInterval(group, horizontalDirection);
         } else if (verticalError <= options.max_axis_classification_error_degrees) {
             item.axis = Axis::VERTICAL;
-            // 竖直辅助线按主方向法线受约束重拟合，不继承检测器产生的微小倾斜。
+            // 绔栫洿杈呭姪绾挎寜涓绘柟鍚戞硶绾垮彈绾︽潫閲嶆嫙鍚堬紝涓嶇户鎵挎娴嬪櫒浜х敓鐨勫井灏忓€炬枩�?
             item.angle = angle180(referenceAngle + 90.0);
             item.normalPosition = constrainedNormalPosition(group, horizontalDirection);
             item.tangentIntervals = projectIntervals(group, verticalDirection);
@@ -1566,8 +1566,8 @@ std::vector<EvidenceGroup> buildEvidence(const std::vector<LineGroup>& groups,
         candidates.push_back(std::move(item));
     }
 
-    // 先在本图、本方向的有效候选中找到最长实际线长，再用它作为相对长度分母。
-    // 这样前景中的大块区域不会把可用线组误判为过短。
+    // 鍏堝湪鏈浘銆佹湰鏂瑰悜鐨勬湁鏁堝€欓€変腑鎵惧埌鏈€闀垮疄闄呯嚎闀匡紝鍐嶇敤瀹冧綔涓虹浉瀵归暱搴﹀垎姣嶃€?
+    // 杩欐牱鍓嶆櫙涓殑澶у潡鍖哄煙涓嶄細鎶婂彲鐢ㄧ嚎缁勮鍒や负杩囩煭�?
     double longestHorizontal = 0.0;
     double longestVertical = 0.0;
     for (const auto& item : candidates) {
@@ -1593,7 +1593,7 @@ std::vector<EvidenceGroup> buildEvidence(const std::vector<LineGroup>& groups,
         evidence.push_back(std::move(item));
     }
 
-    // 去掉同一物理边缘被检测器重复输出的近重合线组；法向位置明显不同的两条边界保留。
+    // 鍘绘帀鍚屼竴鐗╃悊杈圭紭琚娴嬪櫒閲嶅杈撳嚭鐨勮繎閲嶅悎绾跨粍锛涙硶鍚戜綅缃槑鏄句笉鍚岀殑涓ゆ潯杈圭晫淇濈暀�?
     std::vector<EvidenceGroup> deduplicated;
     deduplicated.reserve(evidence.size());
     for (auto& item : evidence) {
@@ -1637,7 +1637,7 @@ std::vector<EvidenceGroup> buildEvidence(const std::vector<LineGroup>& groups,
     return deduplicated;
 }
 
-// 将最终证据筛选的结果物化为唯一线组集合，供过滤图、拟合图和匹配共同使用。
+// 灏嗘渶缁堣瘉鎹瓫閫夌殑缁撴灉鐗╁寲涓哄敮涓€绾跨粍闆嗗悎锛屼緵杩囨护鍥俱€佹嫙鍚堝浘鍜屽尮閰嶅叡鍚屼娇鐢ㄣ�?
 void retainEvidenceGroups(std::vector<LineGroup>& groups,
                           const std::vector<EvidenceGroup>& evidence) {
     std::vector<bool> retained(groups.size(), false);
@@ -1664,10 +1664,19 @@ struct CandidatePair {
     double normalDifference = 0.0;
     double fittedOverlap = 0.0;
     double actualOverlap = 0.0;
+    double sourceOverlapRatio = 0.0;
+    double targetOverlapRatio = 0.0;
     double angleDifference = 0.0;
     bool strict = false;
     bool strong = false;
 };
+
+double positionToleranceForDirection(bool mainDirection, const Options& options) {
+    // 绔栫洿杈归€氬父杈冪煭涓斿彧淇濈暀鍙充晶杈圭晫锛屽厑璁哥害涓ゅ€嶇殑灞€閮ㄤ綅缃宸紱
+    // 鏁翠綋鍋忕Щ浠嶇敱澶氭潯绾跨殑涓€鑷存畫宸崟鐙瘖鏂€?
+    return mainDirection ? options.final_position_tolerance_pixels
+                         : options.final_position_tolerance_pixels * 2.0;
+}
 
 double spanOverlap(const EvidenceGroup& source, const EvidenceGroup& target) {
     const double sourceBegin = source.fittedTangentInterval.begin;
@@ -1694,56 +1703,65 @@ std::vector<CandidatePair> buildCandidates(const std::vector<EvidenceGroup>& sou
             const auto& targetGroup = target[targetIndex];
             const double normalDifference =
                 std::abs(sourceGroup.normalPosition - targetGroup.normalPosition);
-            if (normalDifference > options.candidate_position_tolerance_pixels) {
-                continue;
-            }
             const double actualOverlap =
                 intervalOverlap(sourceGroup.tangentIntervals, targetGroup.tangentIntervals);
             const double fittedOverlap = spanOverlap(sourceGroup, targetGroup);
-            const double minFittedSpan = std::min(sourceGroup.fittedTangentInterval.end -
-                                                       sourceGroup.fittedTangentInterval.begin,
-                                                   targetGroup.fittedTangentInterval.end -
-                                                       targetGroup.fittedTangentInterval.begin);
-            const double fittedOverlapRatio = ratioOrInvalid(fittedOverlap, minFittedSpan);
-            if (mainDirection) {
-                if (fittedOverlapRatio < options.candidate_min_span_overlap_ratio) {
-                    continue;
-                }
-            } else if (fittedOverlap <= kEpsilon) {
-                // 辅助竖线使用主方向约束后的完整支撑包络；断裂片段本身无需直接相交。
+            const double sourceFittedSpan = sourceGroup.fittedTangentInterval.end -
+                                            sourceGroup.fittedTangentInterval.begin;
+            const double targetFittedSpan = targetGroup.fittedTangentInterval.end -
+                                            targetGroup.fittedTangentInterval.begin;
+            const double sourceOverlapRatio = ratioOrInvalid(fittedOverlap, sourceFittedSpan);
+            const double targetOverlapRatio = ratioOrInvalid(fittedOverlap, targetFittedSpan);
+
+            // 涓€渚х嚎娈靛彲鑳藉彧鏄彁鍙栦笉瀹屾暣锛涘彧鏈夊弻鍚戦噸鍙犵巼閮戒綆鏃舵墠涓㈠純鍊欓€夈�?
+            if (fittedOverlap <= kEpsilon ||
+                (sourceOverlapRatio < options.candidate_min_span_overlap_ratio &&
+                 targetOverlapRatio < options.candidate_min_span_overlap_ratio)) {
                 continue;
             }
-            const double positionCost =
-                clamp01(normalDifference / std::max(kEpsilon, options.candidate_position_tolerance_pixels));
-            const double overlapCost = mainDirection ? 1.0 - clamp01(fittedOverlapRatio) : 0.0;
+
             const double angleDifference =
                 angleDifference180(sourceGroup.angle, targetGroup.angle);
-            const double angleCost = mainDirection
-                                         ? clamp01(angleDifference / std::max(
-                                                       kEpsilon,
-                                                       options.max_line_pair_angle_difference_degrees))
-                                         : 0.0;
+            // 姘村钩涓绘柟鍚戠殑瑙掑害鏄‖绾︽潫锛涚珫鐩存柟鍚戜粎灏嗚搴︿綔涓鸿緟鍔╀唬浠枫€?
+            if (mainDirection &&
+                angleDifference > options.max_line_pair_angle_difference_degrees) {
+                continue;
+            }
+
+            const double positionCost =
+                clamp01(normalDifference / std::max(
+                    kEpsilon, options.candidate_position_tolerance_pixels));
+            const double overlapCost = 1.0 -
+                                       clamp01(std::min(sourceOverlapRatio,
+                                                        targetOverlapRatio));
+            const double angleCost = clamp01(angleDifference / std::max(
+                kEpsilon, options.max_line_pair_angle_difference_degrees));
             const double prominenceCost =
                 std::abs(sourceGroup.prominence - targetGroup.prominence);
             const double cost = options.match_position_cost_weight * positionCost +
                                 options.match_overlap_cost_weight * overlapCost +
                                 options.match_angle_cost_weight * angleCost +
                                 options.match_prominence_cost_weight * prominenceCost;
+
             CandidatePair candidate;
             candidate.source = sourceIndex;
             candidate.target = targetIndex;
-            candidate.score = std::max(0.001, 1.0 - cost);
+            const double supportScore = clamp01(
+                actualOverlap / std::max(kEpsilon,
+                                         std::max(sourceGroup.actualLength,
+                                                  targetGroup.actualLength)));
+            // 鏈夋晥鍏叡鏀拺闀垮害涓轰富锛屼綅�?瑙掑�?鏄捐憲鎬т綔涓鸿緟鍔╅」銆?
+            candidate.score = 0.70 * supportScore + 0.30 * std::max(0.001, 1.0 - cost);
             candidate.normalDifference = normalDifference;
             candidate.fittedOverlap = fittedOverlap;
             candidate.actualOverlap = actualOverlap;
+            candidate.sourceOverlapRatio = sourceOverlapRatio;
+            candidate.targetOverlapRatio = targetOverlapRatio;
             candidate.angleDifference = angleDifference;
-            candidate.strict = normalDifference <= options.final_position_tolerance_pixels &&
-                               (mainDirection
-                                    ? (fittedOverlapRatio >=
-                                           options.min_shorter_line_overlap_ratio &&
-                                       angleDifference <=
-                                           options.max_line_pair_angle_difference_degrees)
-                                    : true);
+            // 鍙屽悜閲嶅彔鐜囬兘浣庢墠鏄棤鏁堝€欓€夛紱鍗曚晶杈冧綆鏃朵繚鐣欎絾闄嶄綆璇勫垎�?
+            candidate.strict = normalDifference <= positionToleranceForDirection(mainDirection, options) &&
+                              !(sourceOverlapRatio < options.min_shorter_line_overlap_ratio &&
+                                targetOverlapRatio < options.min_shorter_line_overlap_ratio);
             candidate.strong = sourceGroup.actualLength >= options.min_strong_line_actual_length_pixels &&
                                targetGroup.actualLength >= options.min_strong_line_actual_length_pixels &&
                                sourceGroup.prominence >= options.min_strong_peak_prominence &&
@@ -1783,10 +1801,10 @@ MatchPath orderedPartialMatch(const std::vector<EvidenceGroup>& source,
     for (int sourceIndex = 1; sourceIndex <= sourceCount; ++sourceIndex) {
         for (int targetIndex = 1; targetIndex <= targetCount; ++targetIndex) {
             double best = dp[sourceIndex - 1][targetIndex];
-            unsigned char bestChoice = 1; // 跳过 source 线组
+            unsigned char bestChoice = 1; // 璺宠�?source 绾跨�?
             if (dp[sourceIndex][targetIndex - 1] > best + kEpsilon) {
                 best = dp[sourceIndex][targetIndex - 1];
-                bestChoice = 2; // 跳过 target 线组
+                bestChoice = 2; // 璺宠�?target 绾跨�?
             }
             const CandidatePair* candidate = lookup[sourceIndex - 1][targetIndex - 1];
             if (candidate != nullptr &&
@@ -1820,162 +1838,158 @@ MatchPath orderedPartialMatch(const std::vector<EvidenceGroup>& source,
     return output;
 }
 
-// 竖直线组当前坐标下可能完全错开，无法进入普通候选集合。这里不改变坐标，
-// 仅检验是否存在一个共同的法向平移，能够解释双方多组真实支撑；若存在，
-// 说明是系统性错位，应判为 FAIL，而不是把它降级为证据不足。
-bool hasSystematicVerticalNormalOffset(const std::vector<EvidenceGroup>& source,
-                                        const std::vector<EvidenceGroup>& target,
-                                        const Options& options) {
-    if (source.size() < 2 || target.size() < 2) {
-        return false;
-    }
+// 绔栫洿绾跨粍褰撳墠鍧愭爣涓嬪彲鑳藉畬鍏ㄩ敊寮€锛屾棤娉曡繘鍏ユ櫘閫氬€欓€夐泦鍚堛€傝繖閲屼笉鏀瑰彉鍧愭爣锛?
+// 浠呮楠屾槸鍚﹀瓨鍦ㄤ竴涓叡鍚岀殑娉曞悜骞崇Щ锛岃兘澶熻В閲婂弻鏂瑰缁勭湡瀹炴敮鎾戯紱鑻ュ瓨鍦紝
+// 璇存槑鏄郴缁熸€ч敊浣嶏紝搴斿垽�?FAIL锛岃€屼笉鏄妸瀹冮檷绾т负璇佹嵁涓嶈冻銆?
+struct OffsetMatchEvidence {
+    double offset = 0.0;
+    double supportedLength = 0.0;
+    double sourceSupportedLength = 0.0;
+    double targetSupportedLength = 0.0;
+    double residualMax = 0.0;
+    int matchedCount = 0;
+};
 
-    double sourceTotalLength = 0.0;
-    double targetTotalLength = 0.0;
-    for (const auto& group : source) {
-        sourceTotalLength += group.actualLength;
-    }
-    for (const auto& group : target) {
-        targetTotalLength += group.actualLength;
-    }
-    if (sourceTotalLength <= kEpsilon || targetTotalLength <= kEpsilon) {
-        return false;
+OffsetMatchEvidence matchWithOffset(const std::vector<EvidenceGroup>& source,
+                                     const std::vector<EvidenceGroup>& target,
+                                     bool mainDirection,
+                                     const Options& options,
+                                     double offset) {
+    OffsetMatchEvidence result;
+    result.offset = offset;
+    const auto candidates = buildCandidates(source, target, mainDirection, options);
+    if (source.empty() || target.empty() || candidates.empty()) {
+        return result;
     }
 
     std::vector<int> sourceOrder(source.size());
     std::vector<int> targetOrder(target.size());
     std::iota(sourceOrder.begin(), sourceOrder.end(), 0);
     std::iota(targetOrder.begin(), targetOrder.end(), 0);
-    const auto normalSort = [&](int left, int right) {
+    std::sort(sourceOrder.begin(), sourceOrder.end(), [&](int left, int right) {
         return source[left].normalPosition < source[right].normalPosition;
-    };
-    std::sort(sourceOrder.begin(), sourceOrder.end(), normalSort);
+    });
     std::sort(targetOrder.begin(), targetOrder.end(), [&](int left, int right) {
         return target[left].normalPosition < target[right].normalPosition;
     });
 
-    std::vector<double> offsetSeeds;
-    for (const int sourceIndex : sourceOrder) {
-        for (const int targetIndex : targetOrder) {
-            if (spanOverlap(source[sourceIndex], target[targetIndex]) > kEpsilon) {
-                offsetSeeds.push_back(target[targetIndex].normalPosition -
-                                     source[sourceIndex].normalPosition);
-            }
-        }
-    }
-    if (offsetSeeds.empty()) {
-        return false;
+    std::vector<std::vector<const CandidatePair*>> lookup(
+        source.size(), std::vector<const CandidatePair*>(target.size(), nullptr));
+    for (const auto& candidate : candidates) {
+        lookup[candidate.source][candidate.target] = &candidate;
     }
 
-    const double residualTolerance = options.final_position_tolerance_pixels;
-    const double minimumSupportRatio =
-        std::max(0.0, 1.0 - options.max_vertical_unmatched_length_ratio);
-    for (const double offset : offsetSeeds) {
-        const int sourceCount = static_cast<int>(sourceOrder.size());
-        const int targetCount = static_cast<int>(targetOrder.size());
-        std::vector<std::vector<double>> dp(
-            sourceCount + 1, std::vector<double>(targetCount + 1, 0.0));
-        std::vector<std::vector<unsigned char>> choice(
-            sourceCount + 1, std::vector<unsigned char>(targetCount + 1, 0));
-        for (int sourcePosition = 1; sourcePosition <= sourceCount; ++sourcePosition) {
-            for (int targetPosition = 1; targetPosition <= targetCount; ++targetPosition) {
-                double best = dp[sourcePosition - 1][targetPosition];
-                unsigned char bestChoice = 1;
-                if (dp[sourcePosition][targetPosition - 1] > best + kEpsilon) {
-                    best = dp[sourcePosition][targetPosition - 1];
-                    bestChoice = 2;
-                }
-                const auto& sourceGroup = source[sourceOrder[sourcePosition - 1]];
-                const auto& targetGroup = target[targetOrder[targetPosition - 1]];
+    const int sourceCount = static_cast<int>(sourceOrder.size());
+    const int targetCount = static_cast<int>(targetOrder.size());
+    std::vector<std::vector<double>> dp(
+        sourceCount + 1, std::vector<double>(targetCount + 1, 0.0));
+    std::vector<std::vector<unsigned char>> choice(
+        sourceCount + 1, std::vector<unsigned char>(targetCount + 1, 0));
+
+    for (int sourcePosition = 1; sourcePosition <= sourceCount; ++sourcePosition) {
+        for (int targetPosition = 1; targetPosition <= targetCount; ++targetPosition) {
+            double best = dp[sourcePosition - 1][targetPosition];
+            unsigned char bestChoice = 1;
+            if (dp[sourcePosition][targetPosition - 1] > best + kEpsilon) {
+                best = dp[sourcePosition][targetPosition - 1];
+                bestChoice = 2;
+            }
+            const int sourceIndex = sourceOrder[sourcePosition - 1];
+            const int targetIndex = targetOrder[targetPosition - 1];
+            const CandidatePair* candidate = lookup[sourceIndex][targetIndex];
+            if (candidate != nullptr) {
                 const double residual = std::abs(
-                    (targetGroup.normalPosition - sourceGroup.normalPosition) - offset);
-                if (residual <= residualTolerance &&
-                    spanOverlap(sourceGroup, targetGroup) > kEpsilon) {
-                    const double support = std::min(sourceGroup.actualLength,
-                                                     targetGroup.actualLength);
-                    if (dp[sourcePosition - 1][targetPosition - 1] + support >
+                    (target[targetIndex].normalPosition - source[sourceIndex].normalPosition) -
+                    offset);
+                if (residual <= positionToleranceForDirection(mainDirection, options) &&
+                    dp[sourcePosition - 1][targetPosition - 1] + candidate->actualOverlap >
                         best + kEpsilon) {
-                        best = dp[sourcePosition - 1][targetPosition - 1] + support;
-                        bestChoice = 3;
-                    }
+                    best = dp[sourcePosition - 1][targetPosition - 1] +
+                           candidate->actualOverlap;
+                    bestChoice = 3;
                 }
-                dp[sourcePosition][targetPosition] = best;
-                choice[sourcePosition][targetPosition] = bestChoice;
             }
-        }
-
-        double sourceSupportedLength = 0.0;
-        double targetSupportedLength = 0.0;
-        int matchedCount = 0;
-        int sourcePosition = sourceCount;
-        int targetPosition = targetCount;
-        while (sourcePosition > 0 && targetPosition > 0) {
-            const unsigned char selected = choice[sourcePosition][targetPosition];
-            if (selected == 3) {
-                const auto& sourceGroup = source[sourceOrder[sourcePosition - 1]];
-                const auto& targetGroup = target[targetOrder[targetPosition - 1]];
-                sourceSupportedLength += sourceGroup.actualLength;
-                targetSupportedLength += targetGroup.actualLength;
-                ++matchedCount;
-                --sourcePosition;
-                --targetPosition;
-            } else if (selected == 2) {
-                --targetPosition;
-            } else {
-                --sourcePosition;
-            }
-        }
-
-        const double sourceSupportRatio = sourceSupportedLength / sourceTotalLength;
-        const double targetSupportRatio = targetSupportedLength / targetTotalLength;
-        if (matchedCount >= 2 &&
-            std::abs(offset) > residualTolerance &&
-            sourceSupportRatio >= minimumSupportRatio &&
-            targetSupportRatio >= minimumSupportRatio) {
-            return true;
+            dp[sourcePosition][targetPosition] = best;
+            choice[sourcePosition][targetPosition] = bestChoice;
         }
     }
-    return false;
+
+    std::vector<double> residuals;
+    int sourcePosition = sourceCount;
+    int targetPosition = targetCount;
+    while (sourcePosition > 0 && targetPosition > 0) {
+        const unsigned char selected = choice[sourcePosition][targetPosition];
+        if (selected == 3) {
+            const int sourceIndex = sourceOrder[sourcePosition - 1];
+            const int targetIndex = targetOrder[targetPosition - 1];
+            const CandidatePair* candidate = lookup[sourceIndex][targetIndex];
+            if (candidate != nullptr) {
+                result.supportedLength += candidate->actualOverlap;
+                result.sourceSupportedLength +=
+                    std::min(source[sourceIndex].actualLength, candidate->actualOverlap);
+                result.targetSupportedLength +=
+                    std::min(target[targetIndex].actualLength, candidate->actualOverlap);
+                residuals.push_back(std::abs(
+                    (target[targetIndex].normalPosition - source[sourceIndex].normalPosition) -
+                    offset));
+                ++result.matchedCount;
+            }
+            --sourcePosition;
+            --targetPosition;
+        } else if (selected == 2) {
+            --targetPosition;
+        } else {
+            --sourcePosition;
+        }
+    }
+    result.residualMax = residuals.empty() ? 0.0 : percentile(residuals, 1.0);
+    return result;
 }
 
-// 水平主线允许用有序候选的中位法向偏移消除整图平移，再检查每条线自己的峰位残差。
-// 竖直辅助线已按主方向法线受约束拟合，只检查共同参考坐标中的法向位置。
+OffsetMatchEvidence bestNonZeroOffsetMatch(const std::vector<EvidenceGroup>& source,
+                                           const std::vector<EvidenceGroup>& target,
+                                           bool mainDirection,
+                                           const Options& options) {
+    OffsetMatchEvidence best;
+    const auto candidates = buildCandidates(source, target, mainDirection, options);
+    for (const auto& candidate : candidates) {
+        const double offset = target[candidate.target].normalPosition -
+                              source[candidate.source].normalPosition;
+        if (std::abs(offset) <= positionToleranceForDirection(mainDirection, options)) {
+            continue;
+        }
+        const OffsetMatchEvidence evidence =
+            matchWithOffset(source, target, mainDirection, options, offset);
+        if (evidence.supportedLength > best.supportedLength + kEpsilon ||
+            (std::abs(evidence.supportedLength - best.supportedLength) <= kEpsilon &&
+             evidence.matchedCount > best.matchedCount)) {
+            best = evidence;
+        }
+    }
+    return best;
+}
+
 void applyStrictPairValidation(MatchPath& path,
                                const std::vector<EvidenceGroup>& source,
                                const std::vector<EvidenceGroup>& target,
                                bool mainDirection,
                                const Options& options) {
-    if (path.selected.empty()) {
-        return;
-    }
-
-    double normalOffset = 0.0;
-    if (mainDirection) {
-        std::vector<double> normalOffsets;
-        normalOffsets.reserve(path.selected.size());
-        for (const auto& pair : path.selected) {
-            normalOffsets.push_back(
-                target[pair.target].normalPosition - source[pair.source].normalPosition);
-        }
-        normalOffset = percentile(normalOffsets, 0.50);
-    }
-
     for (auto& pair : path.selected) {
         const auto& sourceGroup = source[pair.source];
         const auto& targetGroup = target[pair.target];
         pair.normalDifference = std::abs(
-            (targetGroup.normalPosition - sourceGroup.normalPosition) - normalOffset);
-        const double minFittedSpan = std::min(
-            sourceGroup.fittedTangentInterval.end - sourceGroup.fittedTangentInterval.begin,
-            targetGroup.fittedTangentInterval.end - targetGroup.fittedTangentInterval.begin);
-        pair.strict = pair.normalDifference <= options.final_position_tolerance_pixels &&
-                      (mainDirection
-                           ? (ratioOrInvalid(pair.fittedOverlap, minFittedSpan) >=
-                                  options.min_shorter_line_overlap_ratio &&
-                              pair.angleDifference <= options.max_line_pair_angle_difference_degrees)
-                           : true);
+            targetGroup.normalPosition - sourceGroup.normalPosition);
+        pair.strict = pair.normalDifference <= positionToleranceForDirection(mainDirection, options) &&
+                      !(pair.sourceOverlapRatio < options.min_shorter_line_overlap_ratio &&
+                        pair.targetOverlapRatio < options.min_shorter_line_overlap_ratio);
+        if (mainDirection) {
+            pair.strict = pair.strict &&
+                          pair.angleDifference <=
+                              options.max_line_pair_angle_difference_degrees;
+        }
     }
 }
+
 DirectionResult evaluateDirection(const std::vector<EvidenceGroup>& source,
                                    const std::vector<EvidenceGroup>& target,
                                    bool mainDirection,
@@ -1986,6 +2000,18 @@ DirectionResult evaluateDirection(const std::vector<EvidenceGroup>& source,
     MatchPath path = orderedPartialMatch(source, target, mainDirection, options);
     applyStrictPairValidation(path, source, target, mainDirection, options);
     result.candidate_pairs = static_cast<int>(path.allCandidates.size());
+    const OffsetMatchEvidence absoluteEvidence =
+        matchWithOffset(source, target, mainDirection, options, 0.0);
+    const OffsetMatchEvidence shiftedEvidence =
+        bestNonZeroOffsetMatch(source, target, mainDirection, options);
+    const double shiftedSupportMargin =
+        std::max(1.0, absoluteEvidence.supportedLength * 0.10);
+    const bool hasSystematicOffset =
+        shiftedEvidence.matchedCount >= 2 &&
+        std::abs(shiftedEvidence.offset) > positionToleranceForDirection(mainDirection, options) &&
+        shiftedEvidence.residualMax <= positionToleranceForDirection(mainDirection, options) &&
+        shiftedEvidence.supportedLength >
+            absoluteEvidence.supportedLength + shiftedSupportMargin;
 
     double sourceTotalLength = 0.0;
     double targetTotalLength = 0.0;
@@ -2025,11 +2051,11 @@ DirectionResult evaluateDirection(const std::vector<EvidenceGroup>& source,
                 statistics.source_actual_length += sourceLength;
                 statistics.target_actual_length += targetLength;
             };
-            if (selected.normalDifference > options.final_position_tolerance_pixels) {
+            if (selected.normalDifference > positionToleranceForDirection(mainDirection, options)) {
                 recordRejection(result.strict_position_rejections);
             }
-            if (mainDirection && ratioOrInvalid(selected.fittedOverlap, shorterFittedSpan) <
-                options.min_shorter_line_overlap_ratio) {
+            if (selected.sourceOverlapRatio < options.min_shorter_line_overlap_ratio &&
+                selected.targetOverlapRatio < options.min_shorter_line_overlap_ratio) {
                 recordRejection(result.strict_overlap_rejections);
             }
             if (mainDirection &&
@@ -2082,15 +2108,30 @@ DirectionResult evaluateDirection(const std::vector<EvidenceGroup>& source,
         percentile(angleDifferences, 1.0);
 
     if (source.empty() || target.empty()) {
-        // 没有双方有效线组时无法建立几何比较，不把缺失证据误报为结构冲突。
         result.status = "INSUFFICIENT";
         return result;
     }
 
-    // 双方都有最终有效线组后，已经具备可比较证据。候选为空或候选全部
-    // 被严格条件拒绝，都是明确的几何不匹配，不再受线组数量门槛影响。
-    if (path.allCandidates.empty() || result.accepted_matches == 0) {
+    // Non-zero offset is diagnostic evidence only and can never create a PASS match.
+    if (hasSystematicOffset) {
         result.status = "FAIL";
+        return result;
+    }
+
+    // A fully supported non-strict pair is an explicit absolute-position conflict.
+    const bool hasExplicitPositionConflict =
+        result.accepted_matches == 0 &&
+        result.strong_conflict_count > 0 &&
+        result.source_strong_conflict_length_ratio > 0.0 &&
+        result.target_strong_conflict_length_ratio > 0.0;
+    if (hasExplicitPositionConflict) {
+        result.status = "FAIL";
+        return result;
+    }
+
+    // No geometrically comparable pair means insufficient evidence, not a direct failure.
+    if (path.allCandidates.empty() || result.accepted_matches == 0) {
+        result.status = "INSUFFICIENT";
         return result;
     }
 
@@ -2101,22 +2142,7 @@ DirectionResult evaluateDirection(const std::vector<EvidenceGroup>& source,
             options.max_vertical_unmatched_length_ratio &&
         result.target_unmatched_length_ratio >=
             options.max_vertical_unmatched_length_ratio;
-    if (hasBroadVerticalUnmatchedSupport &&
-        hasSystematicVerticalNormalOffset(source, target, options)) {
-        result.status = "FAIL";
-        return result;
-    }
-
-    // 主方向以可靠线对为锚点；竖直方向允许局部缺失，但若双方都有大段
-    // 未解释支撑，说明通过的单个法向线对不能代表整体结构，应判为冲突。
-    if (!mainDirection &&
-        options.max_vertical_unmatched_length_ratio > 0.0 &&
-        result.source_unmatched_length_ratio >=
-            options.max_vertical_unmatched_length_ratio &&
-        result.target_unmatched_length_ratio >=
-            options.max_vertical_unmatched_length_ratio) {
-        // 双方都有少量线组，但可比较的竖直证据不足；交由高度差等后续
-        // 质量指标继续判断，不能把这种情况直接当成结构冲突失败。
+    if (hasBroadVerticalUnmatchedSupport) {
         result.status = "INSUFFICIENT";
         return result;
     }
@@ -2139,7 +2165,7 @@ void drawGroup(cv::Mat& image,
     }
 }
 
-// 绘制线组拟合后的完整支撑跨度；它用于诊断逻辑合并结果，不修改真实边缘像素。
+// 缁樺埗绾跨粍鎷熷悎鍚庣殑瀹屾暣鏀拺璺ㄥ害锛涘畠鐢ㄤ簬璇婃柇閫昏緫鍚堝苟缁撴灉锛屼笉淇敼鐪熷疄杈圭紭鍍忕礌�?
 void drawFittedGroup(cv::Mat& image,
                      const LineGroup& group,
                      const cv::Scalar& color,
@@ -2205,7 +2231,7 @@ cv::Mat renderGroups(const cv::Size& size,
     return image;
 }
 
-// 绘制线段检测器的直接输出，不包含最小长度、线组合并或结构证据筛选。
+// 缁樺埗绾挎妫€娴嬪櫒鐨勭洿鎺ヨ緭鍑猴紝涓嶅寘鍚渶灏忛暱搴︺€佺嚎缁勫悎骞舵垨缁撴瀯璇佹嵁绛涢€夈�?
 cv::Mat renderInitialSegments(const cv::Size& size,
                               const std::vector<cv::Vec4f>& segments,
                               const cv::Scalar& color) {
@@ -2250,23 +2276,13 @@ void renderOverlay(const cv::Size& size,
     const cv::Point2d horizontalDirection(std::cos(radians(referenceAngle)),
                                            std::sin(radians(referenceAngle)));
     const cv::Point2d verticalDirection(-horizontalDirection.y, horizontalDirection.x);
-    // matched 是诊断视图而非仅成功线对视图：保留所有合格拟合线，
-    // 使未匹配和冲突线仍可见；黄色表示主线的真实重叠或竖线的受约束拟合包络重叠。
+    // matched 鏄瘖鏂鍥捐€岄潪浠呮垚鍔熺嚎瀵硅鍥撅細淇濈暀鎵€鏈夊悎鏍兼嫙鍚堢嚎锛?
+    // 浣挎湭鍖归厤鍜屽啿绐佺嚎浠嶅彲瑙侊紱榛勮壊琛ㄧず涓荤嚎鐨勭湡瀹為噸鍙犳垨绔栫嚎鐨勫彈绾︽潫鎷熷悎鍖呯粶閲嶅彔�?
     for (const auto& item : sourceEvidence) {
-        drawFittedEvidenceGroup(overlay,
-                                sourceGroups[item.index],
-                                item,
-                                referenceAngle,
-                                kSourceLineColor,
-                                1);
+        drawGroup(overlay, sourceGroups[item.index], kSourceLineColor, 1);
     }
     for (const auto& item : targetEvidence) {
-        drawFittedEvidenceGroup(overlay,
-                                targetGroups[item.index],
-                                item,
-                                referenceAngle,
-                                kTargetLineColor,
-                                1);
+        drawGroup(overlay, targetGroups[item.index], kTargetLineColor, 1);
     }
     const auto drawAccepted = [&](const std::vector<EvidenceGroup>& source,
                                   const std::vector<EvidenceGroup>& target,
@@ -2310,26 +2326,42 @@ void renderOverlay(const cv::Size& size,
             const auto& sourceItem = sourceAxis[pair.source];
             const auto& targetItem = targetAxis[pair.target];
 
-            // 黄色段表示最终用于判定的两条拟合线包络交集，不受中间真实断裂影响。
+            // 榛勮壊娈佃〃绀烘渶缁堢敤浜庡垽瀹氱殑涓ゆ潯鎷熷悎绾垮寘缁滀氦闆嗭紝涓嶅彈涓棿鐪熷疄鏂褰卞搷銆?
             const cv::Point2d tangent = axis == Axis::HORIZONTAL ? horizontalDirection
                                                                      : verticalDirection;
             const cv::Point2d normal = axis == Axis::HORIZONTAL ? verticalDirection
                                                                    : horizontalDirection;
-            const double normalPosition =
-                0.5 * (sourceItem.normalPosition + targetItem.normalPosition);
-            const double begin = std::max(sourceItem.fittedTangentInterval.begin,
-                                          targetItem.fittedTangentInterval.begin);
-            const double end = std::min(sourceItem.fittedTangentInterval.end,
-                                        targetItem.fittedTangentInterval.end);
-            if (end > begin) {
-                const cv::Point2d first = tangent * begin + normal * normalPosition;
-                const cv::Point2d second = tangent * end + normal * normalPosition;
-                cv::line(overlay,
-                         cv::Point(cvRound(first.x), cvRound(first.y)),
-                         cv::Point(cvRound(second.x), cvRound(second.y)),
-                         kMatchedOverlapColor,
-                         1,
-                         cv::LINE_AA);
+            if (std::abs(sourceItem.normalPosition - targetItem.normalPosition) > 0.5) {
+                continue;
+            }
+            // Use the intersection of real fragment support; fitted envelopes may span gaps.
+            size_t sourceInterval = 0;
+            size_t targetInterval = 0;
+            while (sourceInterval < sourceItem.tangentIntervals.size() &&
+                   targetInterval < targetItem.tangentIntervals.size()) {
+                const double begin = std::max(
+                    sourceItem.tangentIntervals[sourceInterval].begin,
+                    targetItem.tangentIntervals[targetInterval].begin);
+                const double end = std::min(
+                    sourceItem.tangentIntervals[sourceInterval].end,
+                    targetItem.tangentIntervals[targetInterval].end);
+                if (end > begin) {
+                    const cv::Point2d normalPosition = normal * sourceItem.normalPosition;
+                    const cv::Point2d first = tangent * begin + normalPosition;
+                    const cv::Point2d second = tangent * end + normalPosition;
+                    cv::line(overlay,
+                             cv::Point(cvRound(first.x), cvRound(first.y)),
+                             cv::Point(cvRound(second.x), cvRound(second.y)),
+                             kMatchedOverlapColor,
+                             1,
+                             cv::LINE_AA);
+                }
+                if (sourceItem.tangentIntervals[sourceInterval].end <
+                    targetItem.tangentIntervals[targetInterval].end) {
+                    ++sourceInterval;
+                } else {
+                    ++targetInterval;
+                }
             }
         }
     };
@@ -2350,7 +2382,7 @@ bool evaluate(const Options& options,
         return true;
     }
 
-    // 阶段 1：构建灰度图和前景，并先筛选长条形适用性。
+    // 闃舵�?1锛氭瀯寤虹伆搴﹀浘鍜屽墠鏅紝骞跺厛绛涢€夐暱鏉″舰閫傜敤鎬с�?
     cv::Mat sourceGray;
     cv::Mat targetGray;
     if (!toGray8(sourceImage, sourceGray) || !toGray8(targetImage, targetGray)) {
@@ -2384,7 +2416,7 @@ bool evaluate(const Options& options,
     result.target_centerline_deviation_ratio = targetMetrics.centerlineDeviationRatio;
     result.source_foreground_long_side = sourceMetrics.longSide;
     result.target_foreground_long_side = targetMetrics.longSide;
-    // 局部视野可只包含长条的一段，因此 source/target 任一侧细长即可进入结构验证。
+    // 灞€閮ㄨ閲庡彲鍙寘鍚暱鏉＄殑涓€娈碉紝鍥犳�?source/target 浠讳竴渚х粏闀垮嵆鍙繘鍏ョ粨鏋勯獙璇併€?
     if (sourceMetrics.elongation < options.min_foreground_elongation_ratio &&
         targetMetrics.elongation < options.min_foreground_elongation_ratio) {
         result.status = "INSUFFICIENT";
@@ -2406,7 +2438,7 @@ bool evaluate(const Options& options,
         return true;
     }
 
-    // 阶段 2：以原始坐标建立共同画布。双方共享参考方向，但不做相对旋正或平移补偿。
+    // 闃舵�?2锛氫互鍘熷鍧愭爣寤虹珛鍏卞悓鐢诲竷銆傚弻鏂瑰叡浜弬鑰冩柟鍚戯紝浣嗕笉鍋氱浉瀵规棆姝ｆ垨骞崇Щ琛ュ伩銆?
     CommonCanvas canvas;
     std::string canvasError;
     if (!buildOriginalCoordinateCanvas(sourceGray.size(),
@@ -2466,13 +2498,13 @@ bool evaluate(const Options& options,
         return true;
     }
 
-    // 阶段 3：EDLines 直接在共同可见区域内的灰度图上检测初始片段。
+    // 闃舵�?3锛欵DLines 鐩存帴鍦ㄥ叡鍚屽彲瑙佸尯鍩熷唴鐨勭伆搴﹀浘涓婃娴嬪垵濮嬬墖娈点�?
     cv::Mat sourceLineInput = warpedSourceGray.clone();
     cv::Mat targetLineInput = canvasTargetGray.clone();
     sourceLineInput.setTo(0, warpedSourceVisibility == 0);
     targetLineInput.setTo(0, canvasTargetVisibility == 0);
 
-    // 阶段 4：初步分组只负责从全方向片段估计双方可信主方向。
+    // 闃舵�?4锛氬垵姝ュ垎缁勫彧璐熻矗浠庡叏鏂瑰悜鐗囨浼拌鍙屾柟鍙俊涓绘柟鍚戙€?
     const ForegroundMetrics warpedSourceMetrics = measureForeground(warpedSourceVisibility);
     const ForegroundMetrics canvasTargetMetrics = measureForeground(canvasTargetVisibility);
     result.source_foreground_long_side = warpedSourceMetrics.longSide;
@@ -2548,8 +2580,8 @@ bool evaluate(const Options& options,
         result.reference_direction_degrees = targetMain.angle;
         return true;
     }
-    // 阶段 5：主方向一致后，对已配准 source 与 target 施加同一个参考旋转。
-    // 这会把共同主方向放到水平轴，但不会消除两图已有的相对旋转、法向偏移或切向错位。
+    // 闃舵�?5锛氫富鏂瑰悜涓€鑷村悗锛屽宸查厤鍑?source �?target 鏂藉姞鍚屼竴涓弬鑰冩棆杞�?
+    // 杩欎細鎶婂叡鍚屼富鏂瑰悜鏀惧埌姘村钩杞达紝浣嗕笉浼氭秷闄や袱鍥惧凡鏈夌殑鐩稿鏃嬭浆銆佹硶鍚戝亸绉绘垨鍒囧悜閿欎綅�?
     result.reference_direction_degrees = targetMain.angle;
     ReferenceRotationCanvas referenceCanvas;
     std::string referenceCanvasError;
@@ -2609,7 +2641,7 @@ bool evaluate(const Options& options,
         transformLineSegments(sourceBuild.initialSegments, referenceCanvas.transform);
     const std::vector<cv::Vec4f> targetInitialSegments =
         transformLineSegments(targetBuild.initialSegments, referenceCanvas.transform);
-    // initial 仍是检测器原始片段，只是同步显示在双方共用的旋转坐标系。
+    // initial 浠嶆槸妫€娴嬪櫒鍘熷鐗囨锛屽彧鏄悓姝ユ樉绀哄湪鍙屾柟鍏辩敤鐨勬棆杞潗鏍囩郴�?
     result.initial_source_line_segments = renderInitialSegments(referenceCanvas.size,
                                                                  sourceInitialSegments,
                                                                  kSourceLineColor);
@@ -2618,9 +2650,9 @@ bool evaluate(const Options& options,
                                                                  kTargetLineColor);
     sourceBuild = buildReferenceLineGroups(sourceInitialSegments, 0.0, options);
     targetBuild = buildReferenceLineGroups(targetInitialSegments, 0.0, options);
-    // 只有初次分组已经产生“断裂比例超限”的无效组时，才在证据筛选前
-    // 尝试合并相邻断裂组。正常样本继续沿用筛选后的二次重分组，避免把
-    // 本来独立的平行边提前合并。
+    // 鍙湁鍒濇鍒嗙粍宸茬粡浜х敓鈥滄柇瑁傛瘮渚嬭秴闄愨€濈殑鏃犳晥缁勬椂锛屾墠鍦ㄨ瘉鎹瓫閫夊墠
+    // 灏濊瘯鍚堝苟鐩搁偦鏂缁勩€傛甯告牱鏈户缁部鐢ㄧ瓫閫夊悗鐨勪簩娆￠噸鍒嗙粍锛岄伩鍏嶆�?
+    // 鏈潵鐙珛鐨勫钩琛岃竟鎻愬墠鍚堝苟�?
     const auto hasLargeGapGroup = [&](const std::vector<LineGroup>& groups) {
         return std::any_of(groups.begin(), groups.end(), [&](const LineGroup& group) {
             return !group.valid && group.gapRatio > options.max_line_group_gap_ratio;
@@ -2663,7 +2695,7 @@ bool evaluate(const Options& options,
     markReferenceMainDirectionGroups(targetBuild.groups,
                                      canvasTargetMetrics.longSide,
                                      options);
-    // 共同参考系已令长边沿水平轴，故前景质心的 y 坐标可判别成对粗长边的内外侧。
+    // 鍏卞悓鍙傝€冪郴宸蹭护闀胯竟娌挎按骞宠酱锛屾晠鍓嶆櫙璐ㄥ績鐨?y 鍧愭爣鍙垽鍒垚瀵圭矖闀胯竟鐨勫唴澶栦晶�?
     const cv::Moments sourceVisibilityMoments = cv::moments(referenceSourceVisibility, true);
     const cv::Moments targetVisibilityMoments = cv::moments(referenceTargetVisibility, true);
     const double sourceLongitudinalNormalCenter = sourceVisibilityMoments.m00 > kEpsilon
@@ -2682,8 +2714,8 @@ bool evaluate(const Options& options,
                                              0.0,
                                              targetLongitudinalNormalCenter,
                                              options);
-    // filtered 图是进入二次分组前的筛选结果：保留真实检测片段及其断裂，
-    // 不能使用随后重新拟合的线组，否则会与 fitted 图表达同一条完整线。
+    // filtered 鍥炬槸杩涘叆浜屾鍒嗙粍鍓嶇殑绛涢€夌粨鏋滐細淇濈暀鐪熷疄妫€娴嬬墖娈靛強鍏舵柇瑁傦�?
+    // 涓嶈兘浣跨敤闅忓悗閲嶆柊鎷熷悎鐨勭嚎缁勶紝鍚﹀垯浼氫笌 fitted 鍥捐〃杈惧悓涓€鏉″畬鏁寸嚎銆?
     result.filtered_source_lines = renderGroups(referenceCanvas.size,
                                                 sourceBuild.groups,
                                                 sourceEvidenceAll,
@@ -2694,7 +2726,7 @@ bool evaluate(const Options& options,
                                                 kTargetLineColor);
     retainEvidenceGroups(sourceBuild.groups, sourceEvidenceAll);
     retainEvidenceGroups(targetBuild.groups, targetEvidenceAll);
-    // 先完成内侧长边和竖直左侧边过滤，再对剩余的拟合线组做一次宽松重分配。
+    // 鍏堝畬鎴愬唴渚ч暱杈瑰拰绔栫洿宸︿晶杈硅繃婊わ紝鍐嶅鍓╀綑鐨勬嫙鍚堢嚎缁勫仛涓€娆″鏉鹃噸鍒嗛厤�?
     sourceBuild.groups = refitSeparatedLineGroups(std::move(sourceBuild.groups),
                                                    0.0,
                                                    false,
@@ -2717,7 +2749,7 @@ bool evaluate(const Options& options,
     markReferenceMainDirectionGroups(targetBuild.groups,
                                      canvasTargetMetrics.longSide,
                                      options);
-    // 重建索引，使最终图、匹配和结果计数共同引用 final_groups。
+    // 閲嶅缓绱㈠紩锛屼娇鏈€缁堝浘銆佸尮閰嶅拰缁撴灉璁℃暟鍏卞悓寮曠敤 final_groups�?
     sourceEvidenceAll = buildEvidence(sourceBuild.groups,
                                       0.0,
                                       sourceLongitudinalNormalCenter,
@@ -2759,7 +2791,7 @@ bool evaluate(const Options& options,
     std::sort(targetHorizontal.begin(), targetHorizontal.end(), normalSort);
     std::sort(sourceVertical.begin(), sourceVertical.end(), normalSort);
     std::sort(targetVertical.begin(), targetVertical.end(), normalSort);
-    // 阶段 6：按法向位置进行允许跳过的有序匹配，并汇总水平/竖直三态结果。
+    // 闃舵�?6锛氭寜娉曞悜浣嶇疆杩涜鍏佽璺宠繃鐨勬湁搴忓尮閰嶏紝骞舵眹鎬绘按骞?绔栫洿涓夋€佺粨鏋溿�?
     result.horizontal = evaluateDirection(sourceHorizontal,
                                           targetHorizontal,
                                           true,

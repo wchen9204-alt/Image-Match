@@ -1,5 +1,8 @@
 #include "registration_app.h"
 
+#include <chrono>
+#include <ctime>
+
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -25,6 +28,28 @@ namespace ir {
 namespace app_helpers = registration_app_helpers;
 
 namespace {
+
+// 为每次批处理创建独立的时间目录，避免新结果覆盖上一轮实验输出。
+fs::path makeTimestampedRunRoot(const fs::path& pipeline_root) {
+    const auto now = std::chrono::system_clock::now();
+    const std::time_t time_now = std::chrono::system_clock::to_time_t(now);
+    std::tm local_time{};
+#ifdef _WIN32
+    localtime_s(&local_time, &time_now);
+#else
+    localtime_r(&time_now, &local_time);
+#endif
+
+    std::ostringstream name;
+    name << std::put_time(&local_time, "%Y%m%d_%H%M%S");
+    fs::path candidate = pipeline_root / name.str();
+    std::error_code ec;
+    for (int suffix = 1; fs::exists(candidate, ec); ++suffix) {
+        candidate = pipeline_root / (name.str() + "_" + std::to_string(suffix));
+        ec.clear();
+    }
+    return candidate;
+}
 
 fs::path findGlobalConfig(const fs::path& pipeline_yaml, const fs::path& filename) {
     fs::path current = pipeline_yaml.parent_path();
@@ -270,6 +295,7 @@ int RegistrationApp::runCompare(const std::filesystem::path& compare_yaml) {
                             evaluations);
         }
 
+        app_helpers::writeBatchHtmlReport(pipelineCfg.output_dir, sampleNames, results);
         IR_LOG_INFO(label, ": ", okCount, " / ", samples.size(), " succeeded");
     };
 
@@ -455,8 +481,9 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
     const BatchConfig batch = loadBatchConfig(batch_yaml);
     const PipelineConfig base_cfg = Config::loadPipeline(batch.pipeline_yaml);
     const std::filesystem::path output_root = resolveBatchOutputRoot(batch, base_cfg);
-    const std::filesystem::path pipeline_root =
+    const std::filesystem::path pipeline_base_root =
         output_root / "batch" / methodFamilyDir(base_cfg.methodFamily()) / base_cfg.name;
+    const std::filesystem::path pipeline_root = makeTimestampedRunRoot(pipeline_base_root);
 
     // 2. 数据集扫描与输出根目录准备是批处理前置条件。
     DatasetLoader loader(batch.dataset);
@@ -511,7 +538,7 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
         const PipelineRunOptions runOptions{
             sample.source_path,
             sample.target_path,
-            buildOutputDir(OutputMode::BATCH, output_root, configured_cfg, sample.name)};
+            pipeline_root / sample.name};
         RegistrationContext ctx;
         const bool ok = pipeline.run(ctx, runOptions);
         app_helpers::writeRunSummaryFiles(ctx, configured_cfg, sample.name);
@@ -529,6 +556,7 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
     if (batch.summary_csv) {
         const auto csv_path = pipeline_root / "summary.csv";
         writeSummaryCsv(csv_path, base_cfg.methodFamily(), sample_names, results, evaluations);
+        app_helpers::writeBatchHtmlReport(pipeline_root, sample_names, results);
         IR_LOG_INFO("Wrote summary CSV: ", csv_path.string());
     }
 

@@ -17,8 +17,8 @@ matcher: ../../matcher/bf.yaml
 # ratio_test / cross_check / distance_distribution /
 # distance_threshold / gms / min_distance
 filters:
-  - ../../filter/ratio_test.yaml
-  - ../../filter/cross_check.yaml
+  # - ../../filter/ratio_test.yaml
+  # - ../../filter/cross_check.yaml
   - ../../filter/pairwise_rigid_consistency.yaml
 
 # 支持的几何模型：
@@ -30,20 +30,6 @@ io:
   image1: ../../../datasets/test50/source.png
   image2: ../../../datasets/test50/target.png
   output_dir: ../../../outputs
-
-visualization:
-  # false 图前景阈值；仅影响可视化。0 表示显示所有非黑像素。
-  false_color_foreground_threshold: 0
-  # 是否保存 source/target 原图前景 mask，以及 warped source/target 前景重叠图。
-  save_foreground_masks: true
-  draw_keypoints: true
-  draw_matches: true
-  max_matches_drawn: 100
-  warp: true
-  show_source_window: false
-  show_target_window: false
-  show_warped_window: false
-  wait_key: 0
 
 validation:
   # 共享质量阈值文件，集中维护各验证器参数。

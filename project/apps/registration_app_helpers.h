@@ -1,12 +1,14 @@
-﻿#pragma once
+#pragma once
 
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include <yaml-cpp/yaml.h>
 
 #include "core/config.h"
 #include "core/context.h"
+#include "core/result.h"
 #include "dataset/dataset_loader.h"
 
 namespace ir::registration_app_helpers {
@@ -30,6 +32,10 @@ void applyCompareOverrides(PipelineConfig& pipeline_cfg,
 void writeRunSummaryFiles(const RegistrationContext& ctx,
                           const PipelineConfig& cfg,
                           const std::string& sample_name);
+
+void writeBatchHtmlReport(const std::filesystem::path& pipeline_root,
+                          const std::vector<std::string>& sample_names,
+                          const std::vector<RegistrationResult>& results);
 
 } // namespace ir::registration_app_helpers
 

@@ -1,5 +1,7 @@
 #include "registration_app_helpers.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <iomanip>
@@ -878,4 +880,141 @@ void writeRunSummaryFiles(const RegistrationContext& ctx,
     }
 }
 
-} // namespace ir::registration_app_helpers
+
+namespace {
+
+std::string htmlEscape(const std::string& value) {
+    std::string escaped;
+    escaped.reserve(value.size());
+    for (const char character : value) {
+        switch (character) {
+        case '&': escaped += "&amp;"; break;
+        case '<': escaped += "&lt;"; break;
+        case '>': escaped += "&gt;"; break;
+        case '"': escaped += "&quot;"; break;
+        case '\'': escaped += "&#39;"; break;
+        default: escaped.push_back(character); break;
+        }
+    }
+    return escaped;
+}
+
+fs::path findFalseColorImage(const fs::path& caseRoot) {
+    const std::vector<fs::path> directories = {
+        caseRoot / "overlay",
+        caseRoot / "false_color_overlay",
+        caseRoot / "final_false_color_overlay"};
+    for (const auto& directory : directories) {
+        if (!fs::is_directory(directory)) {
+            continue;
+        }
+        std::vector<fs::path> images;
+        std::error_code ec;
+        for (const auto& entry : fs::directory_iterator(directory, ec)) {
+            if (!entry.is_regular_file()) {
+                continue;
+            }
+            const std::string extension = entry.path().extension().string();
+            const std::string filename = entry.path().filename().string();
+            std::string lowerExtension = extension;
+            std::string lowerFilename = filename;
+            std::transform(lowerExtension.begin(), lowerExtension.end(), lowerExtension.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            std::transform(lowerFilename.begin(), lowerFilename.end(), lowerFilename.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if ((lowerExtension == ".png" || lowerExtension == ".jpg" ||
+                 lowerExtension == ".jpeg") &&
+                lowerFilename.find("false_color_overlay") != std::string::npos) {
+                images.push_back(entry.path());
+            }
+        }
+        if (!images.empty()) {
+            std::sort(images.begin(), images.end());
+            return images.front();
+        }
+    }
+    return {};
+}
+
+} // namespace
+
+void writeBatchHtmlReport(const std::filesystem::path& pipeline_root,
+                          const std::vector<std::string>& sample_names,
+                          const std::vector<RegistrationResult>& results) {
+    if (pipeline_root.empty() || sample_names.empty()) {
+        return;
+    }
+
+    const int total = static_cast<int>(sample_names.size());
+    const int passed = static_cast<int>(std::count_if(
+        results.begin(), results.end(), [](const RegistrationResult& result) {
+            return result.success;
+        }));
+    const int missing = std::max(0, total - static_cast<int>(results.size()));
+    const int failed = std::max(0, total - passed - missing);
+    const double passRate = total > 0 ? 100.0 * static_cast<double>(passed) / total : 0.0;
+
+    std::ostringstream html;
+    html << "<!doctype html><html><head><meta charset=\"utf-8\"><title>"
+         << htmlEscape(pipeline_root.filename().string())
+         << " false color report</title><style>"
+         << "*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#14213d;background:#f7f9fc;"
+            "margin:0;padding:18px}h1{font-size:22px;margin:0 0 16px}.summary{display:grid;"
+            "grid-template-columns:repeat(5,minmax(140px,1fr));gap:12px;margin-bottom:22px}.card{"
+            "background:#fff;border:1px solid #d5ddea;border-radius:8px;padding:16px}.value{font-size:24px;"
+            "font-weight:700}.label{color:#52627a;font-size:12px;margin-top:8px}.case{background:#fff;"
+            "border:1px solid #d5ddea;border-radius:8px;margin:0 0 12px;overflow:hidden}.case-head{"
+            "display:flex;justify-content:space-between;align-items:center;padding:14px 18px;"
+            "border-bottom:1px solid #d5ddea}.case h2{font-size:17px;margin:0}.status{border-radius:16px;"
+            "padding:6px 12px;font-size:12px;font-weight:700;color:#fff}.passed{background:#087f3f}.failed{"
+            "background:#b3261e}.missing{background:#7a5c00}.case-body{padding:12px 18px}.case img{display:block;"
+            "width:100%;max-height:360px;object-fit:contain;background:#000}.notice{color:#b3261e;"
+            "padding:12px 0;font-size:13px}@media(max-width:800px){.summary{grid-template-columns:repeat(2,1fr)}}"
+            "</style></head><body>";
+    html << "<h1>False-color registration report</h1><div class=\"summary\">";
+    html << "<div class=\"card\"><div class=\"value\">" << total
+         << "</div><div class=\"label\">total</div></div>";
+    html << "<div class=\"card\"><div class=\"value\">" << passed
+         << "</div><div class=\"label\">passed</div></div>";
+    html << "<div class=\"card\"><div class=\"value\">" << failed
+         << "</div><div class=\"label\">failed</div></div>";
+    html << "<div class=\"card\"><div class=\"value\">" << missing
+         << "</div><div class=\"label\">missing input</div></div>";
+    html << "<div class=\"card\"><div class=\"value\">" << std::fixed << std::setprecision(1)
+         << passRate << "%</div><div class=\"label\">pass rate</div></div></div>";
+
+    for (size_t index = 0; index < sample_names.size(); ++index) {
+        const bool isPassed = index < results.size() && results[index].success;
+        const std::string status = isPassed ? "PASSED" : "FAILED";
+        const std::string statusClass = isPassed ? "passed" : "failed";
+        const std::string name = htmlEscape(sample_names[index]);
+        html << "<section class=\"case\"><div class=\"case-head\"><h2>" << name
+             << "</h2><span class=\"status " << statusClass << "\">" << status
+             << "</span></div><div class=\"case-body\">";
+        const fs::path image = findFalseColorImage(pipeline_root / sample_names[index]);
+        if (!image.empty()) {
+            const fs::path relative = fs::relative(image, pipeline_root);
+            html << "<img src=\"" << htmlEscape(relative.generic_string()) << "\" alt=\""
+                 << name << " false color overlay\">";
+        } else {
+            html << "<div class=\"notice\">No false-color overlay was generated.</div>";
+        }
+        html << "</div></section>";
+    }
+    html << "</body></html>";
+
+    const fs::path reportPath = pipeline_root / "false_color_report.html";
+    // 让报告源文件也保持可读，便于直接检查生成的统计和用例条目。
+    const std::string compactHtml = html.str();
+    std::string formattedHtml;
+    formattedHtml.reserve(compactHtml.size() + compactHtml.size() / 20);
+    for (const char character : compactHtml) {
+        formattedHtml.push_back(character);
+        if (character == '>') {
+            formattedHtml.push_back('\n');
+        }
+    }
+    if (file_utils::writeWholeFile(reportPath, formattedHtml)) {
+        IR_LOG_INFO("Wrote batch HTML report: ", reportPath.string());
+    }
+}} // namespace ir::registration_app_helpers

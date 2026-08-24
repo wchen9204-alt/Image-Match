@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <opencv2/features2d.hpp>
 #include <yaml-cpp/yaml.h>

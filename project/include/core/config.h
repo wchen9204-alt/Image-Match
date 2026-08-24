@@ -235,6 +235,12 @@ struct PipelineConfig {
     std::filesystem::path image2_path;
     std::filesystem::path output_dir;
 
+    // 所有方法共享的算法灰度图预处理；原始彩色图不受影响。
+    bool preprocess_enabled = false;
+    int preprocess_median_kernel = 0;
+    int preprocess_gaussian_kernel = 0;
+    double preprocess_gaussian_sigma = 0.0;
+
     /// 图片输出总开关；false 时跳过所有 PNG 编码和写盘。
     bool save_visuals = true;
     bool draw_keypoints = false;

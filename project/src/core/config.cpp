@@ -257,6 +257,35 @@ void parseFeatureInitializer(const YAML::Node& node, const fs::path& base, Pipel
     }
 }
 
+
+void applyPreprocessConfig(PipelineConfig& cfg, const YAML::Node& preprocess) {
+    if (!preprocess || !preprocess.IsMap()) {
+        return;
+    }
+    cfg.preprocess_enabled = yaml_utils::getBool(preprocess, "enabled", cfg.preprocess_enabled);
+    cfg.preprocess_median_kernel = yaml_utils::getInt(
+        preprocess, "median_kernel", cfg.preprocess_median_kernel);
+    cfg.preprocess_gaussian_kernel = yaml_utils::getInt(
+        preprocess, "gaussian_kernel", cfg.preprocess_gaussian_kernel);
+    cfg.preprocess_gaussian_sigma = yaml_utils::getDouble(
+        preprocess, "gaussian_sigma", cfg.preprocess_gaussian_sigma);
+}
+
+fs::path findSharedPreprocessConfig(const fs::path& pipelinePath) {
+    fs::path current = fs::absolute(pipelinePath).parent_path();
+    while (!current.empty()) {
+        if (current.filename() == "configs") {
+            const fs::path candidate = current / "preprocess.yaml";
+            return fs::exists(candidate) ? candidate : fs::path{};
+        }
+        const fs::path parent = current.parent_path();
+        if (parent == current) {
+            break;
+        }
+        current = parent;
+    }
+    return {};
+}
 } // namespace
 
 YAML::Node Config::load(const fs::path& path) {
@@ -418,6 +447,21 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
         cfg.image1_path = resolvePath(base, yaml_utils::getString(io, "image1"));
         cfg.image2_path = resolvePath(base, yaml_utils::getString(io, "image2"));
         cfg.output_dir = resolvePath(base, yaml_utils::getString(io, "output_dir", "outputs"));
+    }
+
+    // 先加载 configs/preprocess.yaml，pipeline 中同名字段可按需覆盖。
+    const fs::path sharedPreprocessPath = findSharedPreprocessConfig(path);
+    if (!sharedPreprocessPath.empty()) {
+        applyPreprocessConfig(cfg, load(sharedPreprocessPath));
+        IR_LOG_INFO("Loaded shared preprocessing: ",
+                    sharedPreprocessPath.string(),
+                    " (enabled=", cfg.preprocess_enabled ? "true" : "false",
+                    ", median_kernel=", cfg.preprocess_median_kernel,
+                    ", gaussian_kernel=", cfg.preprocess_gaussian_kernel,
+                    ", gaussian_sigma=", cfg.preprocess_gaussian_sigma, ")");
+    }
+    if (node["preprocess"] && node["preprocess"].IsMap()) {
+        applyPreprocessConfig(cfg, node["preprocess"]);
     }
 
     if (node["visualization"] && node["visualization"].IsMap()) {

@@ -24,15 +24,15 @@ params:
   # - 直接在无缩放 rigid 模型下做项目内自定义 RANSAC
   # - 输出本身就是严格刚体
   # - 此时 method / rigidRefineMode 仅保留为兼容字段，不参与求解
-  estimatorBackend: opencv_partial_affine
+  estimatorBackend: CUSTOM_RIGID_RANSAC
 
   # 鲁棒估计方法；可选 RANSAC / LMEDS；默认 RANSAC。
   # 仅在 estimatorBackend=OPENCV_PARTIAL_AFFINE 时生效。
   # 注意：OpenCV estimateAffinePartial2D 不支持 USAC_MAGSAC，若配置会自动回退 RANSAC。
   method: RANSAC
 
-  # RANSAC 内点重投影误差阈值，单位像素；OpenCV 默认 3.0。
-  ransacReprojThreshold: 3
+  # RANSAC 内点重投影误差阈值，单位像素；OpenCV 默认 5.0。
+  ransacReprojThreshold: 5
 
   # RANSAC 最大迭代次数；OpenCV 默认 2000。
   maxIters: 2000

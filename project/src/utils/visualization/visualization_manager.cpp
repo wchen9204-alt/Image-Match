@@ -49,7 +49,7 @@ bool VisualizationManager::saveAll(const RegistrationContext& ctx,
         DrawMatches::Options match_opt;
         match_opt.max_matches = opt.max_matches;
         const cv::Mat img = DrawMatches::render(ctx, match_opt);
-        const fs::path path = output_root / "all_match" / (stem + "_all_match.png");
+        const fs::path path = output_root / "match" / (stem + "_all_match.png");
         if (writeImage(path, img)) {
             IR_LOG_DEBUG("Saved ", path.string());
         }
@@ -62,7 +62,7 @@ bool VisualizationManager::saveAll(const RegistrationContext& ctx,
         DrawInliers::Options inlier_opt;
         inlier_opt.max_inliers = opt.max_inliers;
         const cv::Mat img = DrawInliers::render(ctx, inlier_opt);
-        const fs::path path = output_root / "inlier_match" / (stem + "_inlier_match.png");
+        const fs::path path = output_root / "match" / (stem + "_inlier_match.png");
         if (writeImage(path, img)) {
             IR_LOG_DEBUG("Saved ", path.string());
         }

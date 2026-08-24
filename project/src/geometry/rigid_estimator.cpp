@@ -1,4 +1,4 @@
-#include "geometry/rigid_estimator.h"
+﻿#include "geometry/rigid_estimator.h"
 
 #include <limits>
 #include <vector>
@@ -235,10 +235,10 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
                         " / ",
                         view.filtered.size());
         } else {
-            // SVD 模式使用 OpenCV RANSAC 内点，再迭代回归严格刚体。
+            // 使用参考实现的一次性质心/叉点积拟合，将 OpenCV RANSAC 内点压回严格刚体。
             refined = partial_affine_utils::refineRigidFromMask(
                 pts1, pts2, _ransacReprojThreshold, mask, A, true);
-            IR_LOG_INFO("RigidEstimator SVD refined=",
+            IR_LOG_INFO("RigidEstimator reference rigid refined=",
                         refined,
                         ", refined_inliers=",
                         refined ? partial_affine_utils::countInliers(mask) : 0,

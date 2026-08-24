@@ -83,7 +83,7 @@ inline void collectMaskedPoints(const std::vector<cv::Point2f>& src,
     }
 }
 
-/// 用 SVD 在二维点集上估计无缩放刚体变换，只保留旋转和平移。
+/// 用参考实现的质心、叉积和点积估计无缩放刚体变换。
 /// 这是纯 rigid 约束的最小二乘回归步骤，不包含 RANSAC。
 inline bool estimateRigidNoScale2D(const std::vector<cv::Point2f>& src,
                                    const std::vector<cv::Point2f>& dst,
@@ -100,41 +100,38 @@ inline bool estimateRigidNoScale2D(const std::vector<cv::Point2f>& src,
         c2.x += dst[i].x;
         c2.y += dst[i].y;
     }
-    c1.x /= static_cast<double>(src.size());
-    c1.y /= static_cast<double>(src.size());
-    c2.x /= static_cast<double>(dst.size());
-    c2.y /= static_cast<double>(dst.size());
+    const double count = static_cast<double>(src.size());
+    c1.x /= count;
+    c1.y /= count;
+    c2.x /= count;
+    c2.y /= count;
 
-    cv::Mat H = cv::Mat::zeros(2, 2, CV_64F);
+    double sumCross = 0.0;
+    double sumDot = 0.0;
     for (size_t i = 0; i < src.size(); ++i) {
-        const cv::Point2d p(src[i].x - c1.x, src[i].y - c1.y);
-        const cv::Point2d q(dst[i].x - c2.x, dst[i].y - c2.y);
-        H.at<double>(0, 0) += p.x * q.x;
-        H.at<double>(0, 1) += p.x * q.y;
-        H.at<double>(1, 0) += p.y * q.x;
-        H.at<double>(1, 1) += p.y * q.y;
+        const double sx = static_cast<double>(src[i].x) - c1.x;
+        const double sy = static_cast<double>(src[i].y) - c1.y;
+        const double tx = static_cast<double>(dst[i].x) - c2.x;
+        const double ty = static_cast<double>(dst[i].y) - c2.y;
+        sumCross += sx * ty - sy * tx;
+        sumDot += sx * tx + sy * ty;
     }
 
-    // SVD 求最接近当前点集关系的旋转矩阵；若 det<0 则修正反射，保证结果仍是旋转。
-    cv::SVD svd(H, cv::SVD::FULL_UV);
-    cv::Mat R = svd.vt.t() * svd.u.t();
-    if (cv::determinant(R) < 0.0) {
-        cv::Mat V = svd.vt.t();
-        V.col(1) *= -1.0;
-        R = V * svd.u.t();
+    if (std::abs(sumCross) < 1e-12 && std::abs(sumDot) < 1e-12) {
+        return false;
     }
 
-    const cv::Mat c1m = (cv::Mat_<double>(2, 1) << c1.x, c1.y);
-    const cv::Mat c2m = (cv::Mat_<double>(2, 1) << c2.x, c2.y);
-    const cv::Mat t = c2m - R * c1m;
+    const double angle = std::atan2(sumCross, sumDot);
+    const double cosAngle = std::cos(angle);
+    const double sinAngle = std::sin(angle);
+    const double tx = c2.x - (cosAngle * c1.x - sinAngle * c1.y);
+    const double ty = c2.y - (sinAngle * c1.x + cosAngle * c1.y);
 
-    A = cv::Mat::zeros(2, 3, CV_64F);
-    R.copyTo(A(cv::Rect(0, 0, 2, 2)));
-    A.at<double>(0, 2) = t.at<double>(0, 0);
-    A.at<double>(1, 2) = t.at<double>(1, 0);
+    A = (cv::Mat_<double>(2, 3) <<
+         cosAngle, -sinAngle, tx,
+         sinAngle, cosAngle, ty);
     return true;
 }
-
 /// 按给定模型做重投影筛选，生成新的内点掩码。
 /// 该函数用于把初始模型或精修模型重新投影回全部候选点。
 inline std::vector<unsigned char> maskByReprojection(const std::vector<cv::Point2f>& src,
@@ -324,8 +321,8 @@ inline bool estimateRigidRansacNoScale2D(const std::vector<cv::Point2f>& src,
     return true;
 }
 
-/// 基于 OpenCV RANSAC 筛出的内点，迭代回归严格刚体模型，并重新筛选内点。
-/// 这是“先用 partial affine 找内点，再用最小二乘压回 s=1”的主路径。
+/// 基于已有内点掩码回归一次严格刚体模型，不迭代更新内点掩码。
+/// 这是参考实现的最终精修路径。
 inline bool refineRigidFromMask(const std::vector<cv::Point2f>& src,
                                 const std::vector<cv::Point2f>& dst,
                                 double threshold,
@@ -337,8 +334,7 @@ inline bool refineRigidFromMask(const std::vector<cv::Point2f>& src,
         return false;
     }
 
-    // 1. 归一化初始 mask：正常情况下它来自 OpenCV partial affine RANSAC。
-    //    若 mask 长度异常，则先用当前 A 重新筛一次；仍不可用时退化为全量候选。
+    // 归一化已有掩码；若没有可用掩码，则按当前模型重新分类一次。
     std::vector<unsigned char> currentMask = mask;
     if (currentMask.size() != n) {
         currentMask = maskByReprojection(src, dst, A, threshold);
@@ -347,72 +343,19 @@ inline bool refineRigidFromMask(const std::vector<cv::Point2f>& src,
         currentMask.assign(n, 1);
     }
 
-    cv::Mat bestA;
-    std::vector<unsigned char> bestMask;
-    int bestInliers = 0;
-    double bestError = std::numeric_limits<double>::infinity();
-
-    constexpr int kMaxRefineIters = 10;
-    for (int iter = 0; iter < kMaxRefineIters; ++iter) {
-        std::vector<cv::Point2f> inlierSrc;
-        std::vector<cv::Point2f> inlierDst;
-        // 2. 用当前内点回归 s=1 的刚体模型。
-        collectMaskedPoints(src, dst, currentMask, inlierSrc, inlierDst);
-        if (inlierSrc.size() < 2) {
-            break;
-        }
-
-        cv::Mat candidateA;
-        if (!estimateRigidNoScale2D(inlierSrc, inlierDst, candidateA)) {
-            break;
-        }
-
-        // 3. 用新的刚体模型重新投影全部候选点，得到下一轮 mask。
-        std::vector<unsigned char> candidateMask =
-            maskByReprojection(src, dst, candidateA, threshold);
-        const int candidateInliers = countInliers(candidateMask);
-        const double candidateError =
-            reprojectionErrorSum(src, dst, candidateMask, candidateA);
-
-        if (logIterations) {
-            IR_LOG_TRACE("Rigid SVD refine iter=",
-                        iter,
-                        ", input_inliers=",
-                        inlierSrc.size(),
-                        ", candidate_inliers=",
-                        candidateInliers,
-                        ", candidate_error=",
-                        candidateError,
-                        ", best_inliers=",
-                        bestInliers,
-                        ", best_error=",
-                        bestError);
-        }
-
-        // 4. 保留内点更多的结果；内点相同则选择重投影误差更小的一轮。
-        if (candidateInliers > bestInliers ||
-            (candidateInliers == bestInliers && candidateError < bestError)) {
-            bestInliers = candidateInliers;
-            bestError = candidateError;
-            bestA = candidateA;
-            bestMask = candidateMask;
-        }
-
-        if (candidateMask == currentMask) {
-            break;
-        }
-        currentMask = std::move(candidateMask);
-    }
-
-    if (bestInliers < 2 || bestA.empty()) {
+    std::vector<cv::Point2f> inlierSrc;
+    std::vector<cv::Point2f> inlierDst;
+    collectMaskedPoints(src, dst, currentMask, inlierSrc, inlierDst);
+    if (inlierSrc.size() < 2 || !estimateRigidNoScale2D(inlierSrc, inlierDst, A)) {
         return false;
     }
 
-    A = bestA;
-    mask = bestMask;
+    if (logIterations) {
+        IR_LOG_TRACE("Rigid reference refine inliers=", inlierSrc.size());
+    }
+    mask = currentMask;
     return true;
 }
-
 /// 统一生成“内点数不足”的拒绝信息，便于不同几何估计器复用。
 inline std::string rejectMessage(const std::string& kind, int inliers, int minInliers) {
     return "estimated " + kind + " with " + std::to_string(inliers) +

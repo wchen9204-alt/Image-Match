@@ -273,14 +273,10 @@ bool KeypointPipeline::saveOutputs(RegistrationContext& ctx) {
 
     // 1. 准备点特征专属输出目录。
     const fs::path keypoints_dir = ctx.output_dir / "keypoints";
-    const fs::path all_match_dir = ctx.output_dir / "all_match";
-    const fs::path filter_match_dir = ctx.output_dir / "filter_match";
-    const fs::path inlier_match_dir = ctx.output_dir / "inlier_match";
+    const fs::path match_dir = ctx.output_dir / "match";
     std::error_code ec;
     fs::create_directories(keypoints_dir, ec);
-    fs::create_directories(all_match_dir, ec);
-    fs::create_directories(filter_match_dir, ec);
-    fs::create_directories(inlier_match_dir, ec);
+    fs::create_directories(match_dir, ec);
 
     const std::string stem = buildOutputStem(ctx);
     const std::string keypoint_stem =
@@ -339,9 +335,9 @@ bool KeypointPipeline::saveOutputs(RegistrationContext& ctx) {
         };
 
         const std::vector<MatchViewOutput> outputs = {
-            {MatchView::RAW, all_match_dir, "_all_match.png", "all matches"},
-            {MatchView::FILTERED, filter_match_dir, "_filter_match.png", "filtered matches"},
-            {MatchView::INLIERS, inlier_match_dir, "_inlier_match.png", "inlier matches"}
+            {MatchView::RAW, match_dir, "_all_match.png", "all matches"},
+            {MatchView::FILTERED, match_dir, "_filter_match.png", "filtered matches"},
+            {MatchView::INLIERS, match_dir, "_inlier_match.png", "inlier matches"}
         };
 
         for (const MatchView view : _config.match_views) {

@@ -13,6 +13,7 @@
 #include "evaluator/quality/height_difference_evaluator.h"
 #include "evaluator/quality/warp_quality_evaluator.h"
 #include "pipeline/base_pipeline_helpers.h"
+#include "utils/image_utils.h"
 #include "transform/affine_warper.h"
 #include "transform/perspective_warper.h"
 #include "utils/logger.h"
@@ -406,6 +407,26 @@ bool BasePipeline::loadImages(RegistrationContext& ctx) {
                                                      ctx.images.second_gray)) {
         IR_LOG_ERROR("loadImages: cv::imread failed or image format is unsupported.");
         return false;
+    }
+
+    // 3. 所有方法共用同一份算法灰度图预处理，原始彩色图保持不变。
+    if (_config.preprocess_enabled) {
+        const int median_kernel =
+            image_utils::normalizedOddKernelOrZero(_config.preprocess_median_kernel);
+        const int gaussian_kernel =
+            image_utils::normalizedOddKernelOrZero(_config.preprocess_gaussian_kernel);
+        const double gaussian_sigma = std::max(0.0, _config.preprocess_gaussian_sigma);
+        auto preprocessGray = [&](cv::Mat& gray) {
+            if (median_kernel > 0) {
+                cv::medianBlur(gray, gray, median_kernel);
+            }
+            if (gaussian_kernel > 0) {
+                cv::GaussianBlur(
+                    gray, gray, cv::Size(gaussian_kernel, gaussian_kernel), gaussian_sigma);
+            }
+        };
+        preprocessGray(ctx.images.first_gray);
+        preprocessGray(ctx.images.second_gray);
     }
 
     // 3. 记录输入尺寸，便于排查 warp 和 blend 的画布大小。
@@ -948,8 +969,8 @@ bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
     // 1. 创建通用输出目录。
     const fs::path originals_dir = ctx.output_dir / "originals";
     const fs::path warped_dir = ctx.output_dir / "warped";
-    const fs::path blend_dir = ctx.output_dir / "blend";
-    const fs::path false_color_overlay_dir = ctx.output_dir / "false_color_overlay";
+    const fs::path blend_dir = ctx.output_dir / "overlay";
+    const fs::path false_color_overlay_dir = ctx.output_dir / "overlay";
     const fs::path foreground_masks_dir = ctx.output_dir / "foreground_masks";
     const fs::path edge_structure_dir = ctx.output_dir / "edge_structure_diagnostic";
     std::error_code ec;
