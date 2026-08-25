@@ -166,6 +166,8 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
     // 避免“新候选”和“原 RANSAC 结果”各用一套标准而不好判断优先级。
     std::vector<cv::Mat> candidateTransforms;
     std::vector<std::vector<unsigned char>> candidateMasks;
+    candidateTransforms.reserve(static_cast<size_t>(1 + _filteredMatchCandidateCount));
+    candidateMasks.reserve(static_cast<size_t>(1 + _filteredMatchCandidateCount));
 
     // 5. 按 YAML 选择初始估计后端：
     //    - OPENCV_PARTIAL_AFFINE：先走 estimateAffinePartial2D，再按 rigidRefineMode 压回刚体。
@@ -180,9 +182,14 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
         }
 
         seed_inliers = partial_affine_utils::countInliers(mask);
-        // 自定义 rigid RANSAC 本身已经是严格刚体模型，也作为一个候选保留下来。
-        candidateTransforms.push_back(A.clone());
-        candidateMasks.push_back(mask);
+        // 自定义 RANSAC 已直接得到最终刚体模型，不进入 OpenCV 后端的候选池。
+        gd.baseline_valid = seed_inliers >= _minInliers;
+        gd.baseline_num_inliers = seed_inliers;
+        gd.baseline_mean_reproj_error =
+            seed_inliers > 0
+                ? partial_affine_utils::reprojectionErrorSum(pts1, pts2, mask, A) /
+                      static_cast<double>(seed_inliers)
+                : -1.0;
         IR_LOG_INFO("RigidEstimator custom rigid RANSAC inliers=",
                     seed_inliers,
                     " / ",
@@ -253,6 +260,8 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
         }
     }
 
+    // OpenCV 后端的 baseline 与候选补偿路径；自定义 RANSAC 已在上方完成最终建模。
+    if (_estimatorBackend != "CUSTOM_RIGID_RANSAC") {
     // 7. 在生成额外候选前冻结 baseline 诊断，避免最终选中候选覆盖触发判断依据。
     const int baselineInliers =
         refined && !A.empty() ? partial_affine_utils::countInliers(mask) : 0;
@@ -270,7 +279,6 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
     // 8. 候选总开关开启且前置条件满足时，始终生成额外候选，不受 baseline 成败影响。
     const bool candidatePrerequisitesMet =
         _enableFilteredMatchCandidates &&
-        _estimatorBackend != "CUSTOM_RIGID_RANSAC" &&
         static_cast<int>(pts1.size()) >= 2 &&
         !filteredDistances.empty() &&
         _filteredMatchCandidateCount > 0;
@@ -310,6 +318,7 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
         }
     }
 
+    // 10. 从已经经过 filter 的匹配里继续抽样并统一评分候选。
     if (canTryFilteredMatchCandidates) {
         // 从已经经过 filter 的匹配里继续抽样。
         // 目标不是扩大搜索范围，而是在“相对更可信”的点里补几个严格 rigid 假设，
@@ -352,7 +361,8 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
 
             // 先用 2 对点生成一个最小刚体假设，再投影回全部 filtered 点上拿到初始 mask。
             if (!rigid_estimator_helpers::buildRigidCandidateFromPair(
-                    pts1, pts2, first, second, _ransacReprojThreshold, candidateA, candidateMask)) {
+                    pts1, pts2, first, second, _ransacReprojThreshold, candidateA, candidateMask) ||
+                partial_affine_utils::countInliers(candidateMask) < _minInliers) {
                 continue;
             }
 
@@ -430,6 +440,9 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
         }
     }
 
+    }
+
+    // 11. 候选选择后必须得到非空刚体矩阵。
     if (A.empty()) {
         gd.message = "rigid estimator produced an empty matrix";
         IR_LOG_ERROR("RigidEstimator: rigid estimator produced an empty matrix.");
@@ -443,11 +456,11 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
                     view.filtered.size());
     }
 
-    // 8. 将最终 mask 提升回上下文中的通用几何结果和点特征内点列表。
+    // 12. 将最终 mask 提升回上下文中的通用几何结果和点特征内点列表。
     partial_affine_utils::promoteInliers(ctx, view, mask);
     const int inliers = partial_affine_utils::countInliers(mask);
 
-    // 9. 回写最终模型、内点数和内点率，并按 minInliers 判断当前 rigid 结果是否有效。
+    // 13. 回写最终模型、内点数和内点率，并按 minInliers 判断当前 rigid 结果是否有效。
     gd.A = A;
     gd.num_inliers = inliers;
     gd.inlier_ratio = view.filtered.empty() ? 0.0 : static_cast<double>(inliers) / view.filtered.size();
@@ -457,7 +470,7 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
         IR_LOG_WARN("RigidEstimator rejected model: ", gd.message);
     }
 
-    // 10. 输出最终 rigid 内点统计，和前面的 RANSAC 初筛形成闭环。
+    // 14. 输出最终 rigid 内点统计，和前面的 RANSAC 初筛形成闭环。
     IR_LOG_INFO("Rigid2D inliers=",
                 inliers,
                 " / ",

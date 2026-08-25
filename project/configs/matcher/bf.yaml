@@ -9,7 +9,7 @@ type: BF
 
 params:
   # MATCH / KNN / RADIUS
-  method: match
+  method: MATCH
 
   # L2 / L1 / HAMMING / HAMMING2 / AUTO
   # 优先级：matcher 显式 norm_type 最高；AUTO 时使用 keypoint 的 descriptor_norm。
@@ -17,7 +17,7 @@ params:
   norm_type: AUTO
 
   # 当 method: knn 时使用，表示每个查询描述子的近邻数量。
-  knn_k: 2
+  knn_k: 64
 
   # 当 method: radius 时使用，表示半径匹配的最大距离。
   radius: 100.0

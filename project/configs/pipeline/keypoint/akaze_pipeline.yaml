@@ -41,6 +41,6 @@ validation:
   warp_overlap:
     enabled: false
   edge_structure_diagnostic:
-    enabled: true
+    enabled: false
   height_difference:
     enabled: true

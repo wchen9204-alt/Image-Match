@@ -73,8 +73,7 @@
 ## 已完成的优化
 
 1. `pairwise_rigid_consistency` 过滤。
-2. `rigidRefineMode: SVD`。
-3. 基于 `filtered_matches` 的 rigid 候选生成与选择。
+2. 基于 `filtered_matches` 的 rigid 候选生成与选择，并加入自定义 RANSAC。
 
 ## 点特征法优化结果
 

@@ -24,7 +24,7 @@ params:
   # - 直接在无缩放 rigid 模型下做项目内自定义 RANSAC
   # - 输出本身就是严格刚体
   # - 此时 method / rigidRefineMode 仅保留为兼容字段，不参与求解
-  estimatorBackend: CUSTOM_RIGID_RANSAC
+  estimatorBackend: OPENCV_PARTIAL_AFFINE
 
   # 鲁棒估计方法；可选 RANSAC / LMEDS；默认 RANSAC。
   # 仅在 estimatorBackend=OPENCV_PARTIAL_AFFINE 时生效。
