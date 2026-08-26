@@ -510,11 +510,10 @@ bool selectBestRigidCandidate(const std::vector<cv::Mat>& candidateTransforms,
                               const RegistrationContext& ctx,
                               const std::vector<cv::Point2f>& src,
                               const std::vector<cv::Point2f>& dst,
-                              int minInliers,
-                              bool enableCandidateMaskScoring,
-                              int candidateMaskForegroundThreshold,
-                               double candidateContainmentTieMargin,
-                              double candidateDedupRotationDiffDeg,
+                               int minInliers,
+                               bool enableCandidateMaskScoring,
+                               int candidateMaskForegroundThreshold,
+                               double candidateDedupRotationDiffDeg,
                               double candidateDedupTranslationDiff,
                               cv::Mat& bestA,
                               std::vector<unsigned char>& bestMask,
@@ -610,39 +609,25 @@ bool selectBestRigidCandidate(const std::vector<cv::Mat>& candidateTransforms,
         validCandidateTransforms.push_back(score.transform.clone());
     }
 
-    // 第 3 步：以最高 containment 建立窗口，而不是对候选两两做带容差比较，
-    // 避免非传递排序导致 max_element 的结果不稳定。
-    std::vector<RigidCandidateScore*> contenders;
-    if (enableCandidateMaskScoring) {
-        const auto highestContainmentIt = std::max_element(
-            scoredCandidates.begin(),
-            scoredCandidates.end(),
-            [](const RigidCandidateScore& lhs, const RigidCandidateScore& rhs) {
-                return lhs.containment < rhs.containment;
-            });
-        if (highestContainmentIt != scoredCandidates.end() &&
-            highestContainmentIt->containment >= 0.0) {
-            const double containmentFloor = highestContainmentIt->containment -
-                                            std::max(0.0, candidateContainmentTieMargin);
-            for (auto& score : scoredCandidates) {
-                if (score.containment >= containmentFloor) {
-                    contenders.push_back(&score);
-                }
+    // 第 3 步：按内点数优先选择候选，保持与自定义 RANSAC 的主排序一致。
+    // Keep the same primary ranking as CUSTOM_RIGID_RANSAC: maximize inliers,
+    // then minimize reprojection error. Containment is only a final tie-breaker.
+    // 第 4 步：内点数相同时按平均重投影误差，再以 containment 稳定平局。
+    RigidCandidateScore* bestScore = &*std::max_element(
+        scoredCandidates.begin(),
+        scoredCandidates.end(),
+        [enableCandidateMaskScoring](const RigidCandidateScore& lhs,
+                                     const RigidCandidateScore& rhs) {
+            if (lhs.inliers != rhs.inliers) {
+                return lhs.inliers < rhs.inliers;
             }
-        }
-    }
-    if (contenders.empty()) {
-        for (auto& score : scoredCandidates) {
-            contenders.push_back(&score);
-        }
-    }
-
-    // 第 4 步：containment 接近时，以平均重投影误差选择最优刚体候选。
-    RigidCandidateScore* bestScore = *std::min_element(
-        contenders.begin(),
-        contenders.end(),
-        [](const RigidCandidateScore* lhs, const RigidCandidateScore* rhs) {
-            return lhs->meanReprojError < rhs->meanReprojError;
+            if (lhs.meanReprojError != rhs.meanReprojError) {
+                return lhs.meanReprojError > rhs.meanReprojError;
+            }
+            if (enableCandidateMaskScoring && lhs.containment != rhs.containment) {
+                return lhs.containment < rhs.containment;
+            }
+            return false;
         });
     if (bestScore == nullptr) {
         return false;

@@ -7,9 +7,7 @@
 #   y' = s*sin(theta)*x + s*cos(theta)*y + ty
 # 它允许统一缩放 s，不允许剪切和各向异性缩放。
 #
-# rigidRefineMode 用于决定是否把 OpenCV 得到的初始模型压回 s=1：
-# - NONE：直接使用 OpenCV 的 A 和 mask，可能包含统一缩放，不是严格刚体。
-# - SVD：使用 OpenCV RANSAC 内点重新拟合严格刚体，只保留旋转和平移。
+# OpenCV 的初始 partial affine 模型直接作为 baseline 使用。
 # ---------------------------------------------------------------------------
 type: RIGID
 
@@ -18,12 +16,12 @@ params:
   #
   # OPENCV_PARTIAL_AFFINE:
   # - 先调用 estimateAffinePartial2D 做鲁棒初筛
-  # - 再按 rigidRefineMode 压回 s=1 的严格刚体
+  # - 直接使用 estimateAffinePartial2D 返回的 partial-affine 结果
   #
   # CUSTOM_RIGID_RANSAC:
   # - 直接在无缩放 rigid 模型下做项目内自定义 RANSAC
   # - 输出本身就是严格刚体
-  # - 此时 method / rigidRefineMode 仅保留为兼容字段，不参与求解
+  # - 此时不使用 method 参数
   estimatorBackend: OPENCV_PARTIAL_AFFINE
 
   # 鲁棒估计方法；可选 RANSAC / LMEDS；默认 RANSAC。
@@ -46,20 +44,6 @@ params:
   # 判定几何结果有效所需的最少内点数；默认 2。
   minInliers: 2
 
-  # 刚体精修模式；可选 SVD / NONE；默认 SVD。
-  # 仅在 estimatorBackend=OPENCV_PARTIAL_AFFINE 时生效。
-  #
-  # SVD:
-  # - 使用 OpenCV RANSAC 内点
-  # - 再用 SVD 重新拟合严格刚体
-  # - 最终矩阵只保留旋转 + 平移，不允许缩放
-  #
-  # NONE:
-  # - 不做刚体精修
-  # - 直接使用 OpenCV 返回的 A 和内点 mask
-  # - 结果可能包含统一缩放，因此不是严格 rigid
-  rigidRefineMode: SVD
-
   # 是否从 filtered_matches 额外抽取严格 rigid 候选；默认 true。
   # 开启且候选前置条件满足时始终执行，不受 baseline 是否成功影响。
   enableFilteredMatchCandidates: true
@@ -74,7 +58,7 @@ params:
 
   # 额外 rigid 候选的两点组合调度策略；可选 COVERAGE_FIRST / LEGACY_LEXICOGRAPHIC，默认 COVERAGE_FIRST。
   # COVERAGE_FIRST 按成功建模的 seed 使用次数优先覆盖未使用 seed，再比较描述子质量和两图空间间距。
-  # LEGACY_LEXICOGRAPHIC 保留历史 i/j 嵌套顺序，便于新旧策略做 A/B 回归对照。
+  # LEGACY_LEXICOGRAPHIC 按 seed 的 i/j 嵌套顺序尝试。
   filteredMatchCandidatePairStrategy: LEGACY_LEXICOGRAPHIC
 
   # 最多生成多少个额外候选模型，默认 12 个。
@@ -84,14 +68,22 @@ params:
   filteredMatchCandidateMinPairDistance: 20.0
 
   # 是否在多候选 rigid 选模时加入前景 mask 几何评分。
-  # 开启后，每个候选都会额外计算局部包含率，并优先选择包含率更高的候选。
+  # 开启后，每个候选都会额外计算局部包含率；选模仍以内点数优先。
   enableCandidateMaskScoring: true
+  # 选模顺序固定为：内点数最多 -> 平均重投影误差最小 -> containment 平局。
+
+  # 多层暗部 fallback 的投票与严格刚体 RANSAC 参数；普通 rigid 后端不读取此节点。
+  multilayer_dark:
+    min_inliers: 6
+    rotation_bin_degrees: 5.0
+    translation_bin_size: 10.0
+    reprojection_threshold: 5.0
+    ransac_iterations: 1000
+    max_clusters: 5
 
   # 候选 mask 评分使用的前景二值化阈值。
   candidateMaskForegroundThreshold: 10
 
-  # 与最高 containment 相差不超过该值的候选进入重投影误差比较；默认 0.20。
-  candidateContainmentTieMargin: 0
   # 轻量候选去重时允许的最大旋转角差，默认2.0，单位为度。
   # 若两个 rigid 候选的旋转差和平移差都很小，则视为重复候选。
   candidateDedupRotationDiffDeg: 2.0

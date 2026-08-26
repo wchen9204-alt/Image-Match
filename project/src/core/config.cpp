@@ -1,5 +1,6 @@
 #include "core/config.h"
 
+#include <algorithm>
 #include <fstream>
 #include <stdexcept>
 #include <vector>
@@ -254,6 +255,29 @@ void parseFeatureInitializer(const YAML::Node& node, const fs::path& base, Pipel
             }
         }
 
+    }
+}
+
+void parseMultilayerDarkFallback(const YAML::Node& node, PipelineConfig& cfg) {
+    if (!node["multilayer_dark_fallback"] || !node["multilayer_dark_fallback"].IsMap()) {
+        return;
+    }
+
+    const auto& multilayer = node["multilayer_dark_fallback"];
+    auto& options = cfg.multilayer_dark_fallback;
+    options.enabled = yaml_utils::getBool(multilayer, "enabled", options.enabled);
+    if (!multilayer["thresholds"] || !multilayer["thresholds"].IsSequence()) {
+        return;
+    }
+
+    std::vector<int> thresholds;
+    thresholds.reserve(multilayer["thresholds"].size());
+    for (const auto& value : multilayer["thresholds"]) {
+        const int threshold = std::clamp(value.as<int>(), 1, 255);
+        thresholds.push_back(threshold);
+    }
+    if (!thresholds.empty()) {
+        options.thresholds = std::move(thresholds);
     }
 }
 
@@ -723,6 +747,7 @@ PipelineConfig Config::loadPipeline(const fs::path& path) {
     }
 
     parseFeatureInitializer(node, base, cfg);
+    parseMultilayerDarkFallback(node, cfg);
 
     IR_LOG_INFO("Pipeline '", cfg.name, "' loaded from ", path.string());
     IR_LOG_INFO("  keypoint : ", cfg.keypoint_path.string());

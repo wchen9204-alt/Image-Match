@@ -8,6 +8,15 @@
 
 namespace ir {
 
+/// 单次完整配准尝试停止的阶段，用于决定是否允许切换到回退策略重试。
+enum class RegistrationAttemptFailure {
+    EXTRACTION,
+    ASSOCIATION,
+    ESTIMATION,
+    WARP,
+    QUALITY
+};
+
 /// 通用配准流水线骨架，负责组织读图、提取、关联、估计、warp、验证和输出流程。
 class BasePipeline : public IPipeline {
 public:
@@ -43,6 +52,17 @@ protected:
     /// 5.子类执行几何估计或直接法配准估计阶段。
     virtual bool runEstimation(RegistrationContext& ctx) = 0;
 
+    /// 当一轮完整尝试失败时，子类可切换到另一套阶段策略并请求重试一次。
+    /// 该钩子只负责切换策略和清理阶段数据；重试流程仍由基类统一调度。
+    virtual bool activateFallback(RegistrationContext& ctx,
+                                  RegistrationAttemptFailure failure,
+                                  const std::string& failure_message) {
+        (void)ctx;
+        (void)failure;
+        (void)failure_message;
+        return false;
+    }
+
     /// 6.根据几何估计结果选择 affine/perspective warper，并生成 warped source 图像。
     virtual bool runWarp(RegistrationContext& ctx);
 
@@ -75,6 +95,11 @@ protected:
 
     /// 9.生成当前样本输出文件名前缀，子类可加入算法名称。
     virtual std::string buildOutputStem(const RegistrationContext& ctx) const;
+
+    /// 执行提取、关联、估计、warp、评测和质量验证的一次完整尝试。
+    bool runRegistrationAttempt(RegistrationContext& ctx,
+                                RegistrationAttemptFailure& failure,
+                                std::string& failure_message);
 
     PipelineConfig _config;
 

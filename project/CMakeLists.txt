@@ -25,7 +25,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # ---------------------------------------------------------------------------
 # OpenCV configuration
 # ---------------------------------------------------------------------------
-set(OPENCV_INSTALL_ROOT "D:/Opcv/opencv-contrib-mingw-install" CACHE PATH "OpenCV installation root")
+set(OPENCV_INSTALL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../deps/opencv-455-contrib-install" CACHE PATH "OpenCV installation root")
 list(APPEND CMAKE_PREFIX_PATH "${OPENCV_INSTALL_ROOT}")
 
 find_package(OpenCV CONFIG REQUIRED
@@ -59,7 +59,7 @@ endif()
 # ---------------------------------------------------------------------------
 # yaml-cpp configuration
 # ---------------------------------------------------------------------------
-set(YAML_CPP_ROOT "D:/yaml-cpp-install" CACHE PATH "yaml-cpp installation root")
+set(YAML_CPP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../deps/yaml-cpp-install" CACHE PATH "yaml-cpp installation root")
 list(APPEND CMAKE_PREFIX_PATH "${YAML_CPP_ROOT}")
 
 find_package(yaml-cpp CONFIG REQUIRED)

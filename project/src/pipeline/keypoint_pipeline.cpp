@@ -11,6 +11,9 @@
 #include "core/config.h"
 #include "core/factory.h"
 #include "core/types.h"
+#include "geometry/multilayer_dark_rigid_estimator.h"
+#include "matcher/keypoint/multilayer_dark_bf_matcher.h"
+#include "keypoint/multilayer_dark_keypoint_extractor.h"
 #include "utils/logger.h"
 #include "utils/string_utils.h"
 #include "utils/timer.h"
@@ -127,38 +130,105 @@ struct MatchViewOutput {
     std::string log_label;
 };
 
+double selectedHeightDifference(const RegistrationResult& result,
+                               const int percentile,
+                               const bool compensated) {
+    if (compensated) {
+        switch (percentile) {
+        case 50:
+            return result.warp_height_diff_compensated_p50;
+        case 75:
+            return result.warp_height_diff_compensated_p75;
+        case 90:
+            return result.warp_height_diff_compensated_p90;
+        case 95:
+            return result.warp_height_diff_compensated_p95;
+        default:
+            return -1.0;
+        }
+    }
+
+    switch (percentile) {
+    case 50:
+        return result.warp_height_diff_p50;
+    case 75:
+        return result.warp_height_diff_p75;
+    case 90:
+        return result.warp_height_diff_p90;
+    case 95:
+        return result.warp_height_diff_p95;
+    default:
+        return -1.0;
+    }
+}
+
 } // namespace
 
+bool KeypointPipeline::run(RegistrationContext& ctx, const PipelineRunOptions& options) {
+    // 每个新样本先使用 YAML 指定的首选点特征；本次回退不会影响下一样本。
+    _active_extractor = _primary_extractor;
+    _active_matcher = _matcher;
+    _active_geometry = _geometry;
+    return BasePipeline::run(ctx, options);
+}
+
 void KeypointPipeline::resetStages() {
-    _extractor.reset();
+    _primary_extractor.reset();
+    _multilayer_dark_extractor.reset();
+    _active_extractor.reset();
     _matcher.reset();
+    _multilayer_dark_matcher.reset();
+    _active_matcher.reset();
     _filters.clear();
     _geometry.reset();
+    _multilayer_dark_geometry.reset();
+    _active_geometry.reset();
 }
 
 bool KeypointPipeline::configureStages(const PipelineConfig& cfg) {
     // 这里仍沿用 KeypointPipeline / keypoint_path 命名，但目录语义已经切到 keypoint。
-    // 1. 从 keypoint YAML 创建关键点提取器。
-    _extractor = Factory::createKeypointExtractor(Config::load(cfg.keypoint_path));
-    // 2. 从 matcher YAML 创建描述子匹配器。
-    _matcher = Factory::createMatcher(Config::load(cfg.matcher_path));
+    // 1. 从 keypoint YAML 创建首选点特征提取器。
+    const YAML::Node keypoint_cfg = Config::load(cfg.keypoint_path);
+    _primary_extractor = Factory::createKeypointExtractor(keypoint_cfg);
+    _active_extractor = _primary_extractor;
 
-    // 3. 按 pipeline YAML 顺序创建匹配过滤器链。
+    // 2. 多层暗部复用同一份点特征 YAML，因此所有已支持的点特征类型均可使用。
+    if (cfg.multilayer_dark_fallback.enabled) {
+        _multilayer_dark_extractor = std::make_shared<MultilayerDarkKeypointExtractor>(
+            keypoint_cfg, cfg.multilayer_dark_fallback.thresholds);
+    }
+
+    // 3. 从 matcher YAML 创建描述子匹配器。
+    const YAML::Node matcher_cfg = Config::load(cfg.matcher_path);
+    _matcher = Factory::createMatcher(matcher_cfg);
+    _active_matcher = _matcher;
+    if (cfg.multilayer_dark_fallback.enabled) {
+        _multilayer_dark_matcher = std::make_shared<MultilayerDarkBfMatcher>(matcher_cfg);
+    }
+
+    // 4. 按 pipeline YAML 顺序创建匹配过滤器链。
     for (const auto& fp : cfg.filter_paths) {
         _filters.push_back(Factory::createFilter(Config::load(fp)));
     }
 
-    // 4. 创建几何估计器，后续由 runEstimation 调用。
-    _geometry = Factory::createGeometryEstimator(Config::load(cfg.geometry_path));
+    // 5. 创建几何估计器，后续由 runEstimation 调用。
+    const YAML::Node geometry_cfg = Config::load(cfg.geometry_path);
+    _geometry = Factory::createGeometryEstimator(geometry_cfg);
+    _active_geometry = _geometry;
+    if (cfg.multilayer_dark_fallback.enabled) {
+        _multilayer_dark_geometry = std::make_shared<MultilayerDarkRigidEstimator>(geometry_cfg);
+    }
 
     IR_LOG_INFO("KeypointPipeline stages configured: extractor=",
-                _extractor->name(),
+                _primary_extractor->name(),
                 ", matcher=",
                 _matcher->name(),
                 ", filters=",
                 static_cast<int>(_filters.size()),
                 ", geometry=",
-                _geometry->name());
+                _geometry->name(),
+                ", multilayer_dark_fallback=",
+                _multilayer_dark_extractor ? "enabled" : "disabled");
     return true;
 }
 
@@ -166,13 +236,13 @@ bool KeypointPipeline::runExtraction(RegistrationContext& ctx) {
     ScopedTimer st(ctx.result.t_extract_ms);
 
     // 1. 检查提取器是否已经由 configureStages 创建。
-    if (!_extractor) {
+    if (!_active_extractor) {
         IR_LOG_ERROR("runExtraction: no keypoint extractor configured.");
         return false;
     }
 
     // 2. 执行关键点检测和描述子计算，结果写入 ctx.keypoint_data。
-    const bool ok = _extractor->extract(ctx);
+    const bool ok = _active_extractor->extract(ctx);
     // 3. 将关键点数量回填到运行摘要，便于输出和批量统计。
     ctx.result.num_keypoints_first = static_cast<int>(ctx.keypoint_data.first.keypoints.size());
     ctx.result.num_keypoints_second = static_cast<int>(ctx.keypoint_data.second.keypoints.size());
@@ -197,21 +267,28 @@ bool KeypointPipeline::runMatch(RegistrationContext& ctx) {
     ScopedTimer st(ctx.result.t_match_ms);
 
     // 1. 检查匹配器是否已经由 configureStages 创建。
-    if (!_matcher) {
+    if (!_active_matcher) {
         IR_LOG_ERROR("runMatch: no matcher configured.");
         return false;
     }
 
     // 2. 调用匹配器生成原始匹配结果。
-    const bool ok = _matcher->match(ctx);
+    const bool ok = _active_matcher->match(ctx);
 
     // 3. 原始统计使用每个 query 的最佳候选，三种匹配方法语义一致。
-    ctx.result.num_raw_matches = static_cast<int>(ctx.keypoint_match_data.raw_matches.size());    return ok;
+    ctx.result.num_raw_matches = static_cast<int>(ctx.keypoint_match_data.raw_matches.size());
+    return ok;
 }
 
 bool KeypointPipeline::runFilters(RegistrationContext& ctx) {
     ScopedTimer st(ctx.result.t_filter_ms);
     auto& md = ctx.keypoint_match_data;
+
+    // 多层暗部匹配器已经按参考流程生成扩展候选，不再经过普通过滤器链。
+    if (_active_matcher != _matcher) {
+        ctx.result.num_filtered_matches = static_cast<int>(md.filtered_matches.size());
+        return !md.filtered_matches.empty();
+    }
 
     // 1. 过滤链从匹配器给出的原始一对一候选开始。
     md.seedFilteredMatchesFromRaw();
@@ -243,7 +320,7 @@ bool KeypointPipeline::runEstimation(RegistrationContext& ctx) {
     ScopedTimer st(ctx.result.t_geometry_ms);
 
     // 1. 检查几何估计器是否已经由 configureStages 创建。
-    if (!_geometry) {
+    if (!_active_geometry) {
         IR_LOG_ERROR("runEstimation: no geometry estimator configured.");
         ctx.geometry_data.message = "no geometry estimator configured";
         return false;
@@ -251,19 +328,95 @@ bool KeypointPipeline::runEstimation(RegistrationContext& ctx) {
 
     ctx.correspondence_source = "KEYPOINT";
     // 2. 使用过滤后的匹配估计几何模型，结果写入 ctx.geometry_data。
-    const bool ok = _geometry->estimate(ctx);
+    const bool ok = _active_geometry->estimate(ctx);
     // 3. 将内点统计同步到通用运行摘要。
     ctx.result.num_inliers = ctx.geometry_data.num_inliers;
     ctx.result.inlier_ratio = ctx.geometry_data.inlier_ratio;
+    if (_active_geometry != _geometry) {
+        ctx.result.num_filtered_matches =
+            static_cast<int>(ctx.keypoint_match_data.filtered_matches.size());
+    }
     return ok;
 }
 
+bool KeypointPipeline::shouldUseMultilayerDarkFallback(
+    const RegistrationContext& ctx,
+    const RegistrationAttemptFailure failure) const {
+    // 1. 仅允许首选点特征在最终图像质量失败后切换一次。
+    if (failure != RegistrationAttemptFailure::QUALITY ||
+        !_config.multilayer_dark_fallback.enabled ||
+        !_multilayer_dark_extractor || !_multilayer_dark_matcher ||
+        !_multilayer_dark_geometry ||
+        _active_extractor != _primary_extractor) {
+        return false;
+    }
+
+    // 2. 重合率低于当前 YAML 阈值时，暗部策略可以接管。
+    const auto& quality = _config.warp_quality;
+    const bool poor_containment = quality.overlap.containment_enabled &&
+        ctx.result.warp_overlap_containment >= 0.0 &&
+        ctx.result.warp_overlap_containment < quality.overlap.min_containment;
+
+    // 3. 高度差优先采用补偿后有效值；补偿未产生有效值时保留原始值。
+    const double raw_height_difference = selectedHeightDifference(
+        ctx.result, quality.height_difference.percentile, false);
+    const double compensated_height_difference = quality.height_difference.compensate_global_height_offset &&
+            ctx.result.warp_height_diff_compensation_attempted
+        ? selectedHeightDifference(ctx.result, quality.height_difference.percentile, true)
+        : -1.0;
+    const double best_height_difference = raw_height_difference >= 0.0 &&
+            compensated_height_difference >= 0.0
+        ? std::min(raw_height_difference, compensated_height_difference)
+        : std::max(raw_height_difference, compensated_height_difference);
+    const bool poor_height_difference = quality.height_difference.enabled &&
+        best_height_difference >= 0.0 &&
+        best_height_difference > quality.height_difference.max_abs_error;
+
+    return poor_containment || poor_height_difference;
+}
+
+void KeypointPipeline::clearAttemptArtifacts(RegistrationContext& ctx) const {
+    // 1. 图像和运行路径可供重试复用，只清理与首选提取结果绑定的中间数据。
+    const double load_time_ms = ctx.result.t_load_ms;
+    ctx.keypoint_data.clear();
+    ctx.keypoint_match_data.clear();
+    ctx.correspondence_source.clear();
+    ctx.correspondence_snapshot.reset();
+    ctx.geometry_data.clear();
+    ctx.transform_data.clear();
+    ctx.evaluation.clear();
+    ctx.warped_image.release();
+    // 2. 最终摘要只记录多层暗部这次结果，读图耗时仍归属于整个样本。
+    ctx.result = RegistrationResult{};
+    ctx.result.t_load_ms = load_time_ms;
+}
+
+bool KeypointPipeline::activateFallback(RegistrationContext& ctx,
+                                        const RegistrationAttemptFailure failure,
+                                        const std::string& failure_message) {
+    if (!shouldUseMultilayerDarkFallback(ctx, failure)) {
+        return false;
+    }
+
+    IR_LOG_WARN("首选点特征结果未通过最终图像质量验证（",
+                failure_message,
+                "），切换到多层暗部提取。");
+    clearAttemptArtifacts(ctx);
+    _active_extractor = _multilayer_dark_extractor;
+    _active_matcher = _multilayer_dark_matcher;
+    _active_geometry = _multilayer_dark_geometry;
+    return true;
+}
+
 std::string KeypointPipeline::buildOutputStem(const RegistrationContext& ctx) const {
-    const std::string matcher_label = buildMatcherLabel(_config.matcher_path);
+    const std::string matcher_label = _active_matcher == _multilayer_dark_matcher
+        ? "BF_KNN_DARK_MULTILAYER"
+        : buildMatcherLabel(_config.matcher_path);
 
     return ctx.image1_path.stem().string() + "_" + ctx.image2_path.stem().string() + "_" +
-           (_extractor ? _extractor->name() : std::string("UNK")) + "_" +
-           (_geometry ? toString(_geometry->type()) : std::string("UNK")) + "_" + matcher_label;
+           (_active_extractor ? _active_extractor->name() : std::string("UNK")) + "_" +
+           (_active_geometry ? toString(_active_geometry->type()) : std::string("UNK")) + "_" +
+           matcher_label;
 }
 
 bool KeypointPipeline::saveOutputs(RegistrationContext& ctx) {
@@ -281,7 +434,7 @@ bool KeypointPipeline::saveOutputs(RegistrationContext& ctx) {
     const std::string stem = buildOutputStem(ctx);
     const std::string keypoint_stem =
         ctx.image1_path.stem().string() + "_" + ctx.image2_path.stem().string() + "_" +
-        (_extractor ? _extractor->name() : std::string("UNK"));
+        (_active_extractor ? _active_extractor->name() : std::string("UNK"));
 
     // 2. 按配置保存 source / target 关键点可视化。
     if (_config.draw_keypoints) {

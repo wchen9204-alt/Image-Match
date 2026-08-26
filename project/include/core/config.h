@@ -215,6 +215,13 @@ struct PipelineConfig {
         WarpQualityValidationConfig validation;
     };
 
+    /// 点特征首选结果未通过图像级质量验证时使用的多层暗部回退配置。
+    struct MultilayerDarkFallbackConfig {
+        bool enabled = false;
+        /// 每层保留 [0, threshold] 范围内的暗部灰度结构，按 YAML 顺序处理。
+        std::vector<int> thresholds = {64, 128, 192};
+    };
+
     std::string name;
 
     /// 显式声明的方法族，由 YAML 中 method_family 字段指定。
@@ -312,6 +319,9 @@ struct PipelineConfig {
 
     /// 直接法前置点特征初始化配置。
     FeatureInitializerConfig feature_initializer;
+
+    /// 仅供 KeypointPipeline 使用的多层暗部回退配置。
+    MultilayerDarkFallbackConfig multilayer_dark_fallback;
 
     MethodFamily methodFamily() const { return method_family; }
 };

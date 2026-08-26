@@ -33,8 +33,6 @@ RigidEstimator::RigidEstimator(const YAML::Node& cfg) {
     _confidence = yaml_utils::getDouble(params, "confidence", 0.99);
     _refineIters = yaml_utils::getInt(params, "refineIters", 10);
     _minInliers = yaml_utils::getInt(params, "minInliers", 3);
-    _rigidRefineMode = string_utils::toUpperAscii(
-        yaml_utils::getString(params, "rigidRefineMode", "SVD"));
     _enableFilteredMatchCandidates =
         yaml_utils::getBool(params, "enableFilteredMatchCandidates", false);
     _filteredMatchCandidateTopK =
@@ -62,20 +60,10 @@ RigidEstimator::RigidEstimator(const YAML::Node& cfg) {
         yaml_utils::getBool(params, "enableCandidateMaskScoring", false);
     _candidateMaskForegroundThreshold =
         std::clamp(yaml_utils::getInt(params, "candidateMaskForegroundThreshold", 10), 0, 255);
-    _candidateContainmentTieMargin =
-        std::max(0.0, yaml_utils::getDouble(params, "candidateContainmentTieMargin", 0.20));
     _candidateDedupRotationDiffDeg =
         std::max(0.0, yaml_utils::getDouble(params, "candidateDedupRotationDiffDeg", 2.0));
     _candidateDedupTranslationDiff =
         std::max(0.0, yaml_utils::getDouble(params, "candidateDedupTranslationDiff", 3.0));
-    if (_rigidRefineMode != "SVD" &&
-        _rigidRefineMode != "NONE") {
-        IR_LOG_WARN("RigidEstimator: unknown rigidRefineMode=",
-                    _rigidRefineMode,
-                    ", fallback to SVD.");
-        _rigidRefineMode = "SVD";
-    }
-
     IR_LOG_INFO("RigidEstimator: method=",
                 method_str,
                 ", estimatorBackend=",
@@ -90,8 +78,6 @@ RigidEstimator::RigidEstimator(const YAML::Node& cfg) {
                 _refineIters,
                 ", minInliers=",
                 _minInliers,
-                ", rigidRefineMode=",
-                _rigidRefineMode,
                 ", enableFilteredMatchCandidates=",
                 _enableFilteredMatchCandidates,
                 ", filteredMatchCandidateTopK=",
@@ -169,8 +155,33 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
     candidateTransforms.reserve(static_cast<size_t>(1 + _filteredMatchCandidateCount));
     candidateMasks.reserve(static_cast<size_t>(1 + _filteredMatchCandidateCount));
 
+    // 两种后端共用 baseline 统计和有效性判断。
+    const auto updateBaselineDiagnostics = [&]() {
+        const int baselineInliers =
+            refined && !A.empty() ? partial_affine_utils::countInliers(mask) : 0;
+        const double baselineMeanReprojectionError =
+            baselineInliers > 0
+                ? partial_affine_utils::reprojectionErrorSum(pts1, pts2, mask, A) /
+                      static_cast<double>(baselineInliers)
+                : -1.0;
+        const bool baselineFailed =
+            !refined || A.empty() || baselineInliers < _minInliers;
+        gd.baseline_valid = !baselineFailed;
+        gd.baseline_num_inliers = baselineInliers;
+        gd.baseline_mean_reproj_error = baselineMeanReprojectionError;
+
+        IR_LOG_INFO("RigidEstimator baseline: valid=",
+                    gd.baseline_valid,
+                    ", inliers=",
+                    gd.baseline_num_inliers,
+                    ", mean_reproj_error=",
+                    gd.baseline_mean_reproj_error,
+                    ", backend=",
+                    _estimatorBackend);
+    };
+
     // 5. 按 YAML 选择初始估计后端：
-    //    - OPENCV_PARTIAL_AFFINE：先走 estimateAffinePartial2D，再按 rigidRefineMode 压回刚体。
+    //    - OPENCV_PARTIAL_AFFINE：直接使用 estimateAffinePartial2D 的结果。
     //    - CUSTOM_RIGID_RANSAC：直接在 s=1 约束下做自定义 RANSAC。
     if (_estimatorBackend == "CUSTOM_RIGID_RANSAC") {
         refined = partial_affine_utils::estimateRigidRansacNoScale2D(
@@ -182,14 +193,6 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
         }
 
         seed_inliers = partial_affine_utils::countInliers(mask);
-        // 自定义 RANSAC 已直接得到最终刚体模型，不进入 OpenCV 后端的候选池。
-        gd.baseline_valid = seed_inliers >= _minInliers;
-        gd.baseline_num_inliers = seed_inliers;
-        gd.baseline_mean_reproj_error =
-            seed_inliers > 0
-                ? partial_affine_utils::reprojectionErrorSum(pts1, pts2, mask, A) /
-                      static_cast<double>(seed_inliers)
-                : -1.0;
         IR_LOG_INFO("RigidEstimator custom rigid RANSAC inliers=",
                     seed_inliers,
                     " / ",
@@ -199,11 +202,7 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
                     ", source=",
                     view.source_name,
                     ")");
-        if (_rigidRefineMode != "SVD") {
-            IR_LOG_INFO("RigidEstimator: rigidRefineMode=",
-                        _rigidRefineMode,
-                        " ignored for CUSTOM_RIGID_RANSAC because the model is already strict rigid.");
-        }
+        updateBaselineDiagnostics();
     } else {
         cv::Mat seedA = cv::estimateAffinePartial2D(pts1,
                                                     pts2,
@@ -214,11 +213,6 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
                                                     _confidence,
                                                     static_cast<size_t>(_refineIters));
 
-        if (seedA.empty()) {
-            gd.message = "estimateAffinePartial2D returned an empty matrix";
-            IR_LOG_ERROR("estimateAffinePartial2D returned an empty matrix.");
-            return false;
-        }
         A = seedA;
         seed_inliers = partial_affine_utils::countInliers(mask);
         IR_LOG_INFO("RigidEstimator OpenCV RANSAC inliers=",
@@ -231,95 +225,48 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
                     view.source_name,
                     ")");
 
-        // 6. 根据 rigidRefineMode 决定是否进一步把模型压回“纯刚体”。
-        //    纯刚体是 3DoF：只允许旋转 + 平移，要求 s=1，不允许缩放。
-        if (_rigidRefineMode == "NONE") {
-            // NONE 表示跳过二次精修，直接沿用 OpenCV partial affine 的 A 和 mask。
-            // 注意：这种结果可能包含统一缩放，不是严格刚体。
-            refined = true;
-            IR_LOG_INFO("RigidEstimator NONE skipped rigid refinement, inliers=",
-                        partial_affine_utils::countInliers(mask),
-                        " / ",
-                        view.filtered.size());
-        } else {
-            // 使用参考实现的一次性质心/叉点积拟合，将 OpenCV RANSAC 内点压回严格刚体。
-            refined = partial_affine_utils::refineRigidFromMask(
-                pts1, pts2, _ransacReprojThreshold, mask, A, true);
-            IR_LOG_INFO("RigidEstimator reference rigid refined=",
-                        refined,
-                        ", refined_inliers=",
-                        refined ? partial_affine_utils::countInliers(mask) : 0,
-                        " / ",
-                        view.filtered.size());
-        }
-
-        if (refined && !A.empty()) {
-            // 先把当前 baseline rigid 结果入池；后面若启用额外候选，就和它一起打分。
+        refined = !A.empty();
+        updateBaselineDiagnostics();
+        if (refined) {
             candidateTransforms.push_back(A.clone());
             candidateMasks.push_back(mask);
+        } else {
+            gd.message = "estimateAffinePartial2D returned an empty matrix";
+            IR_LOG_WARN("estimateAffinePartial2D returned an empty matrix; trying filtered-match candidates.");
         }
-    }
+        // 7. OpenCV 后端可基于 filtered matches 生成额外候选。
+        // 候选总开关开启且前置条件满足时，始终执行，不受 baseline 成败影响。
+        const bool candidatePrerequisitesMet =
+            _enableFilteredMatchCandidates &&
+            static_cast<int>(pts1.size()) >= 2 &&
+            !filteredDistances.empty() &&
+            _filteredMatchCandidateCount > 0;
+        const bool canTryFilteredMatchCandidates = candidatePrerequisitesMet;
+        gd.candidate_fallback_attempted = canTryFilteredMatchCandidates;
+        gd.candidate_fallback_trigger_reason =
+            canTryFilteredMatchCandidates ? "enabled" : "not_available";
 
-    // OpenCV 后端的 baseline 与候选补偿路径；自定义 RANSAC 已在上方完成最终建模。
-    if (_estimatorBackend != "CUSTOM_RIGID_RANSAC") {
-    // 7. 在生成额外候选前冻结 baseline 诊断，避免最终选中候选覆盖触发判断依据。
-    const int baselineInliers =
-        refined && !A.empty() ? partial_affine_utils::countInliers(mask) : 0;
-    const double baselineMeanReprojectionError =
-        baselineInliers > 0
-            ? partial_affine_utils::reprojectionErrorSum(pts1, pts2, mask, A) /
-                  static_cast<double>(baselineInliers)
-            : -1.0;
-    const bool baselineFailed =
-        !refined || A.empty() || baselineInliers < _minInliers;
-    gd.baseline_valid = !baselineFailed;
-    gd.baseline_num_inliers = baselineInliers;
-    gd.baseline_mean_reproj_error = baselineMeanReprojectionError;
-
-    // 8. 候选总开关开启且前置条件满足时，始终生成额外候选，不受 baseline 成败影响。
-    const bool candidatePrerequisitesMet =
-        _enableFilteredMatchCandidates &&
-        static_cast<int>(pts1.size()) >= 2 &&
-        !filteredDistances.empty() &&
-        _filteredMatchCandidateCount > 0;
-    const bool canTryFilteredMatchCandidates = candidatePrerequisitesMet;
-    gd.candidate_fallback_attempted = canTryFilteredMatchCandidates;
-    gd.candidate_fallback_trigger_reason =
-        canTryFilteredMatchCandidates ? "enabled" : "not_available";
-
-    IR_LOG_INFO("RigidEstimator baseline: valid=",
-                gd.baseline_valid,
-                ", inliers=",
-                gd.baseline_num_inliers,
-                ", mean_reproj_error=",
-                gd.baseline_mean_reproj_error,
-                ", candidate_state=",
-                gd.candidate_fallback_trigger_reason,
-                ", candidate_prerequisites=",
-                candidatePrerequisitesMet);
-
-    // 9. baseline 本身失败时，只有满足候选触发条件才允许继续由额外候选接管。
-    if (!refined) {
-        gd.message = "failed to refine rigid transform from RANSAC inliers";
-        IR_LOG_DEBUG("RigidEstimator: baseline refine failed, mode=",
-                    _estimatorBackend,
-                    "/",
-                    _rigidRefineMode,
-                    ", seed_inliers=",
-                    seed_inliers,
-                    " / ",
-                    view.filtered.size(),
-                    canTryFilteredMatchCandidates ? "; trying filtered-match candidates."
-                                                  : "; no filtered-match candidate fallback available.");
-        A.release();
-        mask.clear();
-        if (!canTryFilteredMatchCandidates) {
-            return false;
+        // 8. baseline 失败时，只有满足候选条件才允许继续由额外候选接管。
+        if (!refined) {
+            gd.message = "failed to refine rigid transform from RANSAC inliers";
+            IR_LOG_DEBUG("RigidEstimator: baseline refine failed, mode=",
+                        _estimatorBackend,
+                        ", strict rigid refinement",
+                        ", seed_inliers=",
+                        seed_inliers,
+                        " / ",
+                        view.filtered.size(),
+                        canTryFilteredMatchCandidates ? "; trying filtered-match candidates."
+                                                      : "; no filtered-match candidate fallback available.");
+            A.release();
+            mask.clear();
+            if (!canTryFilteredMatchCandidates) {
+                return false;
+            }
         }
-    }
 
-    // 10. 从已经经过 filter 的匹配里继续抽样并统一评分候选。
-    if (canTryFilteredMatchCandidates) {
+        // 9. 从已经经过 filter 的匹配里继续抽样并统一评分候选。
+        if (canTryFilteredMatchCandidates) {
         // 从已经经过 filter 的匹配里继续抽样。
         // 目标不是扩大搜索范围，而是在“相对更可信”的点里补几个严格 rigid 假设，
         // 缓解 baseline RANSAC 落到局部最优的情况。
@@ -366,13 +313,8 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
                 continue;
             }
 
-            bool candidateRefined = false;
-            if (_rigidRefineMode == "NONE") {
-                candidateRefined = true;
-            } else {
-                candidateRefined = partial_affine_utils::refineRigidFromMask(
-                    pts1, pts2, _ransacReprojThreshold, candidateMask, candidateA, false);
-            }
+            const bool candidateRefined = partial_affine_utils::refineRigidFromMask(
+                pts1, pts2, _ransacReprojThreshold, candidateMask, candidateA, false);
             if (!candidateRefined || candidateA.empty()) {
                 continue;
             }
@@ -391,7 +333,8 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
         double selectedContainment = -1.0;
         std::vector<cv::Mat> validCandidateTransforms;
 
-        // 先按 containment 缩小候选窗口，再用平均重投影误差选出刚体。
+        // 先按内点数选出最一致的模型，再用平均重投影误差打平，
+        // 与 CUSTOM_RIGID_RANSAC 保持相同的主排序标准。
         if (rigid_estimator_helpers::selectBestRigidCandidate(candidateTransforms,
                                                               candidateMasks,
                                                               ctx,
@@ -400,7 +343,6 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
                                                               _minInliers,
                                                               _enableCandidateMaskScoring,
                                                               _candidateMaskForegroundThreshold,
-                                                               _candidateContainmentTieMargin,
                                                               _candidateDedupRotationDiffDeg,
                                                               _candidateDedupTranslationDiff,
                                                               selectedA,
@@ -438,11 +380,10 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
                         ", pair_strategy=",
                         _filteredMatchCandidatePairStrategy);
         }
+        }
     }
 
-    }
-
-    // 11. 候选选择后必须得到非空刚体矩阵。
+    // 10. 候选选择后必须得到非空刚体矩阵。
     if (A.empty()) {
         gd.message = "rigid estimator produced an empty matrix";
         IR_LOG_ERROR("RigidEstimator: rigid estimator produced an empty matrix.");
@@ -456,11 +397,11 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
                     view.filtered.size());
     }
 
-    // 12. 将最终 mask 提升回上下文中的通用几何结果和点特征内点列表。
+    // 11. 将最终 mask 提升回上下文中的通用几何结果和点特征内点列表。
     partial_affine_utils::promoteInliers(ctx, view, mask);
     const int inliers = partial_affine_utils::countInliers(mask);
 
-    // 13. 回写最终模型、内点数和内点率，并按 minInliers 判断当前 rigid 结果是否有效。
+    // 12. 回写最终模型、内点数和内点率，并按 minInliers 判断当前 rigid 结果是否有效。
     gd.A = A;
     gd.num_inliers = inliers;
     gd.inlier_ratio = view.filtered.empty() ? 0.0 : static_cast<double>(inliers) / view.filtered.size();
@@ -470,7 +411,7 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
         IR_LOG_WARN("RigidEstimator rejected model: ", gd.message);
     }
 
-    // 14. 输出最终 rigid 内点统计，和前面的 RANSAC 初筛形成闭环。
+    // 13. 输出最终 rigid 内点统计，和前面的 RANSAC 初筛形成闭环。
     IR_LOG_INFO("Rigid2D inliers=",
                 inliers,
                 " / ",

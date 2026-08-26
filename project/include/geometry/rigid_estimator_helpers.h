@@ -87,8 +87,8 @@ int selectNextCandidateSeedPair(const std::vector<CandidateSeedPair>& pairs,
                                 const std::string& strategy);
 
 /// 在 baseline 与额外 rigid 候选中选择最优结果。
-/// 有效候选必须达到 minInliers；先以最高 containment 建立候选窗口，
-/// 再以平均重投影误差选择窗口内最优候选。
+/// 有效候选必须达到 minInliers；先选择内点数最多的候选，
+/// 再以平均重投影误差打平，最后才使用 containment 作为稳定平局条件。
 bool selectBestRigidCandidate(const std::vector<cv::Mat>& candidateTransforms,
                               const std::vector<std::vector<unsigned char>>& candidateMasks,
                               const RegistrationContext& ctx,
@@ -97,7 +97,6 @@ bool selectBestRigidCandidate(const std::vector<cv::Mat>& candidateTransforms,
                               int minInliers,
                               bool enableCandidateMaskScoring,
                               int candidateMaskForegroundThreshold,
-                               double candidateContainmentTieMargin,
                               double candidateDedupRotationDiffDeg,
                               double candidateDedupTranslationDiff,
                               cv::Mat& bestA,

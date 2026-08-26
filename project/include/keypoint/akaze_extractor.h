@@ -18,6 +18,7 @@ public:
     KeypointType type() const override { return KeypointType::AKAZE; }
     /// AKAZE 可能输出浮点或二值描述子，默认距离类型由配置决定。
     NormType normType() const override { return _norm; }
+    cv::Ptr<cv::Feature2D> feature2D() const override { return _impl; }
 
     /// 执行 AKAZE 关键点检测、边界角点增强和描述子计算。
     bool extract(RegistrationContext& ctx) override;

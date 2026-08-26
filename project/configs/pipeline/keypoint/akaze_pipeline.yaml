@@ -21,6 +21,11 @@ filters:
   # - ../../filter/cross_check.yaml
   - ../../filter/pairwise_rigid_consistency.yaml
 
+# 首选点特征结果仅在最终重合率或高度差验证失败后切换到多层暗部。
+multilayer_dark_fallback:
+  enabled: true
+  thresholds: [64, 128, 192]
+
 # 支持的几何模型：
 # rigid / similarity / affine / homography
 geometry: ../../geometry/rigid.yaml

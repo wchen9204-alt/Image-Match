@@ -17,6 +17,7 @@ public:
     std::string name() const override { return "SIFT"; }
     KeypointType type() const override { return KeypointType::SIFT; }
     NormType normType() const override { return _norm; }
+    cv::Ptr<cv::Feature2D> feature2D() const override { return _impl; }
 
     /// 执行 SIFT 关键点检测、边界角点增强和描述子计算。
     bool extract(RegistrationContext& ctx) override;

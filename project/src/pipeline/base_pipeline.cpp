@@ -1196,73 +1196,97 @@ bool BasePipeline::showWindows(RegistrationContext& ctx) {
     return true;
 }
 
+bool BasePipeline::runRegistrationAttempt(RegistrationContext& ctx,
+                                          RegistrationAttemptFailure& failure,
+                                          std::string& failure_message) {
+    // 1. 执行方法专属的特征、结构或直接法提取阶段。
+    if (!runExtraction(ctx)) {
+        failure = RegistrationAttemptFailure::EXTRACTION;
+        failure_message = "extract failed";
+        return false;
+    }
+
+    // 2. 建立描述子匹配、结构关联或直接法占位结果。
+    if (!runAssociation(ctx)) {
+        failure = RegistrationAttemptFailure::ASSOCIATION;
+        failure_message = "associate failed";
+        if (!ctx.structure_match_data.message.empty()) {
+            failure_message += ": " + ctx.structure_match_data.message;
+        }
+        return false;
+    }
+
+    // 3. 估计几何模型前后刷新共享对应点快照，供评测与可视化复用。
+    refreshCorrespondenceSnapshot(ctx);
+    const bool estimation_ok = runEstimation(ctx);
+    refreshCorrespondenceSnapshot(ctx);
+    if (!estimation_ok) {
+        failure = RegistrationAttemptFailure::ESTIMATION;
+        failure_message = ctx.geometry_data.message.empty()
+                              ? std::string("estimation failed")
+                              : std::string("estimation failed: ") + ctx.geometry_data.message;
+        return false;
+    }
+
+    // 4. 使用估计出的变换生成 warped source 图像。
+    if (!runWarp(ctx)) {
+        failure = RegistrationAttemptFailure::WARP;
+        failure_message = ctx.result.message.empty() ? "warp failed" : ctx.result.message;
+        return false;
+    }
+    if (_config.warp && ctx.warped_image.empty()) {
+        failure = RegistrationAttemptFailure::WARP;
+        failure_message = "warp failed: warped image is empty";
+        return false;
+    }
+
+    // 5. 评测并验证本次完整结果；回退策略只在此后接管。
+    if (!_evaluator.metrics().empty()) {
+        Sample dummy_sample;
+        _evaluator.evaluate(ctx, dummy_sample);
+        syncEvaluationMetricsToResult(ctx);
+    }
+    if (!validateRegistrationQuality(ctx)) {
+        failure = RegistrationAttemptFailure::QUALITY;
+        failure_message = ctx.result.message.empty() ? "registration validation failed"
+                                                     : ctx.result.message;
+        return false;
+    }
+    return true;
+}
+
 bool BasePipeline::run(RegistrationContext& ctx, const PipelineRunOptions& options) {
     Timer total;
 
-    // 1. 初始化本次运行上下文；批处理优先使用本次传入的路径，单次运行回退到 YAML 配置。
     ctx.reset();
     ctx.image1_path = options.image1_path.empty() ? _config.image1_path : options.image1_path;
     ctx.image2_path = options.image2_path.empty() ? _config.image2_path : options.image2_path;
     ctx.output_dir = options.output_dir.empty() ? _config.output_dir : options.output_dir;
 
-    auto fail = [&](const std::string& msg) {
+    auto fail = [&](const std::string& message) {
         ctx.result.success = false;
-        ctx.result.message = msg;
+        ctx.result.message = message;
         ctx.result.t_total_ms = total.elapsedMs();
-        IR_LOG_ERROR("Pipeline failed: ", msg);
+        IR_LOG_ERROR("Pipeline failed: ", message);
         saveOutputs(ctx);
         return false;
     };
 
-    // 2. 依次执行公共流程：读图、提取、关联、估计、warp 和输出。
     if (!loadImages(ctx)) {
         return fail("load failed");
     }
 
-    if (!runExtraction(ctx)) {
-        return fail("extract failed");
+    RegistrationAttemptFailure failure = RegistrationAttemptFailure::EXTRACTION;
+    std::string failure_message;
+    bool success = runRegistrationAttempt(ctx, failure, failure_message);
+    if (!success && activateFallback(ctx, failure, failure_message)) {
+        IR_LOG_INFO("使用回退策略重试配准：", failure_message);
+        success = runRegistrationAttempt(ctx, failure, failure_message);
+    }
+    if (!success) {
+        return fail(failure_message);
     }
 
-    if (!runAssociation(ctx)) {
-        std::string detail = "associate failed";
-        if (!ctx.structure_match_data.message.empty()) {
-            detail += ": " + ctx.structure_match_data.message;
-        }
-        return fail(detail);
-    }
-
-    // 几何估计器读取同一份预建快照，避免在各估计器内部重新展开对应点。
-    refreshCorrespondenceSnapshot(ctx);
-    const bool estimationOk = runEstimation(ctx);
-
-    // 估计过程会写回内点；刷新后评测和可视化共享最终数据，而不重复构建快照。
-    refreshCorrespondenceSnapshot(ctx);
-    if (!estimationOk) {
-        const std::string detail =
-            ctx.geometry_data.message.empty()
-                ? std::string("estimation failed")
-                : std::string("estimation failed: ") + ctx.geometry_data.message;
-        return fail(detail);
-    }
-
-    if (!runWarp(ctx)) {
-        return fail(ctx.result.message.empty() ? "warp failed" : ctx.result.message);
-    }
-    if (_config.warp && ctx.warped_image.empty()) {
-        return fail("warp failed: warped image is empty");
-    }
-    // 运行评测指标（仅成功时计算）
-    if (!_evaluator.metrics().empty()) {
-        Sample dummySample;
-        _evaluator.evaluate(ctx, dummySample);
-        syncEvaluationMetricsToResult(ctx);
-    }
-    if (!validateRegistrationQuality(ctx)) {
-        return fail(ctx.result.message.empty() ? "registration validation failed"
-                                              : ctx.result.message);
-    }
-
-    // 3. 在写盘前冻结成功路径的总耗时，保证与失败路径采用相同口径。
     ctx.result.success = true;
     ctx.result.t_total_ms = total.elapsedMs();
     ctx.result.message = "OK";

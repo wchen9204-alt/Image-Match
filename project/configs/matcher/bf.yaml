@@ -24,3 +24,8 @@ params:
 
   # 仅当 method: match 时生效，开启后由 BFMatcher 执行双向一致性检查。
   crossCheck: true
+
+# 多层暗部 fallback 使用的独立 KNN 参数；普通 method=match 流程不读取此节点。
+multilayer_dark:
+  knn: 64
+  expansion_multiplier: 2.0

@@ -20,6 +20,10 @@ public:
     /// 返回流水线名称，用于日志、摘要和输出文件命名。
     std::string name() const override { return "KeypointPipeline"; }
 
+    /// 每个样本从 YAML 指定的首选点特征开始执行。
+    bool run(RegistrationContext& ctx,
+             const PipelineRunOptions& options = PipelineRunOptions{}) override;
+
 protected:
     /// 清空上一轮配置创建的点特征阶段组件。
     void resetStages() override;
@@ -38,6 +42,11 @@ protected:
     /// 几何阶段会把最终确认的 inliers / inlier_mask 写回上下文。
     bool runEstimation(RegistrationContext& ctx) override;
 
+    /// 仅在首选点特征结果的高度差或重合率未通过时切换到多层暗部提取器。
+    bool activateFallback(RegistrationContext& ctx,
+                          RegistrationAttemptFailure failure,
+                          const std::string& failure_message) override;
+
     /// 保存点特征专属可视化输出，再委托基类保存通用 warp 输出。
     bool saveOutputs(RegistrationContext& ctx) override;
 
@@ -53,11 +62,20 @@ private:
     /// 若匹配器只提供按 query 分组的候选，会先以每行 top-1 种子生成 filtered。
     bool runFilters(RegistrationContext& ctx);
 
-    std::shared_ptr<IKeypointExtractor> _extractor;
+    bool shouldUseMultilayerDarkFallback(const RegistrationContext& ctx,
+                                         RegistrationAttemptFailure failure) const;
+    void clearAttemptArtifacts(RegistrationContext& ctx) const;
+
+    std::shared_ptr<IKeypointExtractor> _primary_extractor;
+    std::shared_ptr<IKeypointExtractor> _multilayer_dark_extractor;
+    std::shared_ptr<IKeypointExtractor> _active_extractor;
     std::shared_ptr<IMatcher> _matcher;
+    std::shared_ptr<IMatcher> _multilayer_dark_matcher;
+    std::shared_ptr<IMatcher> _active_matcher;
     std::vector<std::shared_ptr<IFilter>> _filters;
     std::shared_ptr<IGeometryEstimator> _geometry;
+    std::shared_ptr<IGeometryEstimator> _multilayer_dark_geometry;
+    std::shared_ptr<IGeometryEstimator> _active_geometry;
 };
 
 } // namespace ir
-

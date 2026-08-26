@@ -38,8 +38,6 @@ private:
     int _minInliers = 3;
     /// 刚体估计后端；例如 OPENCV_PARTIAL_AFFINE。
     std::string _estimatorBackend = "OPENCV_PARTIAL_AFFINE";
-    /// 刚体模型细化方式；当前仅保留 SVD 和 NONE。
-    std::string _rigidRefineMode = "SVD";
     /// 是否从 filtered matches 中额外生成多候选 rigid 模型。
     bool _enableFilteredMatchCandidates = false;
     /// 生成候选时，按排序优先参与抽样的前 Top-K 个匹配数。
@@ -56,8 +54,6 @@ private:
     bool _enableCandidateMaskScoring = false;
     /// 候选 mask 与边缘 IoU 评分时，将图像二值化为前景 mask 使用的阈值。
     int _candidateMaskForegroundThreshold = 10;
-    /// 与最高 containment 相差不超过该值的候选进入边缘 IoU 比较。
-    double _candidateContainmentTieMargin = 0.20;
     /// 候选去重时允许的最大旋转角差，单位度。
     double _candidateDedupRotationDiffDeg = 2.0;
     /// 候选去重时允许的最大平移差，单位像素。
