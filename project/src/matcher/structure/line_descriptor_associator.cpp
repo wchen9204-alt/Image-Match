@@ -206,6 +206,8 @@ std::vector<cv::line_descriptor::KeyLine> toKeyLines(const std::vector<cv::Vec4i
     return out;
 }
 
+#endif
+
 /// 通用 KNN 匹配：根据描述子类型自动选择匹配器（二进制→BinaryDescriptorMatcher，浮点→BFMatcher L2）。
 /// 输出重映射后的 KNN 分组（描述子索引→线段 class_id）。
 // 描述子匹配：支持 MATCH / KNN / RADIUS 三种模式。
@@ -213,8 +215,8 @@ std::vector<cv::line_descriptor::KeyLine> toKeyLines(const std::vector<cv::Vec4i
 std::vector<std::vector<cv::DMatch>> matchDescriptors(
     const cv::Mat& srcDescriptors,
     const cv::Mat& dstDescriptors,
-    const std::vector<cv::line_descriptor::KeyLine>& srcKeys,
-    const std::vector<cv::line_descriptor::KeyLine>& dstKeys,
+    const std::vector<int>& srcLineIndices,
+    const std::vector<int>& dstLineIndices,
     const std::string& matchMode, int knnK, float radius,
     bool binaryDescriptor, bool useFlann) {
 
@@ -261,10 +263,10 @@ std::vector<std::vector<cv::DMatch>> matchDescriptors(
         remapped.reserve(neighbours.size());
         for (const auto& c : neighbours) {
             if (c.queryIdx < 0 || c.trainIdx < 0 ||
-                c.queryIdx >= static_cast<int>(srcKeys.size()) ||
-                c.trainIdx >= static_cast<int>(dstKeys.size())) continue;
-            const int ql = srcKeys[static_cast<size_t>(c.queryIdx)].class_id;
-            const int tl = dstKeys[static_cast<size_t>(c.trainIdx)].class_id;
+                c.queryIdx >= static_cast<int>(srcLineIndices.size()) ||
+                c.trainIdx >= static_cast<int>(dstLineIndices.size())) continue;
+            const int ql = srcLineIndices[static_cast<size_t>(c.queryIdx)];
+            const int tl = dstLineIndices[static_cast<size_t>(c.trainIdx)];
             if (ql < 0 || tl < 0) continue;
             remapped.emplace_back(ql, tl, c.distance);
         }
@@ -272,6 +274,8 @@ std::vector<std::vector<cv::DMatch>> matchDescriptors(
     }
     return out;
 }
+
+#ifdef IR_HAS_OPENCV_LINE_DESCRIPTOR
 
 bool computeLbd(const cv::Mat& gray,
                 std::vector<cv::line_descriptor::KeyLine>& keyLines,
@@ -585,25 +589,14 @@ bool LineDescriptorAssociator::associate(RegistrationContext& ctx) {
     IR_LOG_DEBUG("LineDescriptorAssociator input: srcLines=", srcLines.size(),
                 ", dstLines=", dstLines.size(), ", descriptor=", descriptor);
 
-    // 2. 构建 KeyLine 索引（LBD 需要完整 KeyLine 做描述子计算，MSLD 仅需 class_id 映射）
-    std::vector<cv::line_descriptor::KeyLine> srcKeys;
-    std::vector<cv::line_descriptor::KeyLine> dstKeys;
-    if (isLbd) {
-        srcKeys = toKeyLines(srcLines);
-        dstKeys = toKeyLines(dstLines);
-    } else {
-        srcKeys.reserve(srcLines.size());
-        for (size_t i = 0; i < srcLines.size(); ++i) {
-            cv::line_descriptor::KeyLine kl;
-            kl.class_id = static_cast<int>(i);
-            srcKeys.push_back(kl);
-        }
-        dstKeys.reserve(dstLines.size());
-        for (size_t i = 0; i < dstLines.size(); ++i) {
-            cv::line_descriptor::KeyLine kl;
-            kl.class_id = static_cast<int>(i);
-            dstKeys.push_back(kl);
-        }
+    // 2. 描述子矩阵的行索引与输入线段索引一一对应。
+    std::vector<int> srcLineIndices(srcLines.size());
+    std::vector<int> dstLineIndices(dstLines.size());
+    for (size_t i = 0; i < srcLineIndices.size(); ++i) {
+        srcLineIndices[i] = static_cast<int>(i);
+    }
+    for (size_t i = 0; i < dstLineIndices.size(); ++i) {
+        dstLineIndices[i] = static_cast<int>(i);
     }
 
     // 3. 计算描述子
@@ -617,6 +610,8 @@ bool LineDescriptorAssociator::associate(RegistrationContext& ctx) {
         IR_LOG_ERROR("LineDescriptorAssociator: ", md.message);
         return false;
 #else
+        std::vector<cv::line_descriptor::KeyLine> srcKeys = toKeyLines(srcLines);
+        std::vector<cv::line_descriptor::KeyLine> dstKeys = toKeyLines(dstLines);
         if (!computeLbd(ctx.images.first_gray, srcKeys, srcDescriptors, md.message) ||
             !computeLbd(ctx.images.second_gray, dstKeys, dstDescriptors, md.message)) {
             IR_LOG_WARN("LineDescriptorAssociator LBD failed: ", md.message);
@@ -658,7 +653,7 @@ bool LineDescriptorAssociator::associate(RegistrationContext& ctx) {
     const bool useFlann = (string_utils::toUpperAscii(_matcher) == "FLANN") && !isLbd;
     const std::string modeKey = string_utils::toUpperAscii(_matchMode);
     md.raw_matches_knn =
-        matchDescriptors(srcDescriptors, dstDescriptors, srcKeys, dstKeys,
+        matchDescriptors(srcDescriptors, dstDescriptors, srcLineIndices, dstLineIndices,
                          modeKey, _knnK, _matchRadius, isLbd, useFlann);
     IR_LOG_DEBUG("LineDescriptorAssociator KNN: raw_matches_knn groups=",
                 md.raw_matches_knn.size());
@@ -733,5 +728,3 @@ bool LineDescriptorAssociator::associate(RegistrationContext& ctx) {
 }
 
 } // namespace ir
-
-

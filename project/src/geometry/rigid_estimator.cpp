@@ -29,7 +29,7 @@ RigidEstimator::RigidEstimator(const YAML::Node& cfg) {
     }
 
     _ransacReprojThreshold = yaml_utils::getDouble(params, "ransacReprojThreshold", 3.0);
-    _maxIters = yaml_utils::getInt(params, "maxIters", 2000);
+    _maxIters = yaml_utils::getInt(params, "maxIters", 1000);
     _confidence = yaml_utils::getDouble(params, "confidence", 0.99);
     _refineIters = yaml_utils::getInt(params, "refineIters", 10);
     _minInliers = yaml_utils::getInt(params, "minInliers", 3);
@@ -185,7 +185,7 @@ bool RigidEstimator::estimate(RegistrationContext& ctx) {
     //    - CUSTOM_RIGID_RANSAC：直接在 s=1 约束下做自定义 RANSAC。
     if (_estimatorBackend == "CUSTOM_RIGID_RANSAC") {
         refined = partial_affine_utils::estimateRigidRansacNoScale2D(
-            pts1, pts2, _ransacReprojThreshold, _maxIters, _confidence, A, mask, true);
+            pts1, pts2, _ransacReprojThreshold, _maxIters, A, mask, true);
         if (!refined) {
             gd.message = "custom rigid RANSAC returned no valid model";
             IR_LOG_ERROR("RigidEstimator: custom rigid RANSAC returned no valid model.");

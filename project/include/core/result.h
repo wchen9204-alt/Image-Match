@@ -18,6 +18,8 @@ struct EdgeStructureStrictRejectionStats {
 struct RegistrationResult {
     bool success = false;
     std::string message;
+    /// 点特征最终采用的方案：FAST 或 MULTILAYER；其他方法为空。
+    std::string registration_strategy;
 
     /// 各阶段关键数量统计。
     int num_keypoints_first = 0;

@@ -42,10 +42,14 @@ protected:
     /// 几何阶段会把最终确认的 inliers / inlier_mask 写回上下文。
     bool runEstimation(RegistrationContext& ctx) override;
 
-    /// 仅在首选点特征结果的高度差或重合率未通过时切换到多层暗部提取器。
+    /// 首选 FAST 方案任一配准阶段失败时，切换到多层暗部提取器重试一次。
     bool activateFallback(RegistrationContext& ctx,
                           RegistrationAttemptFailure failure,
                           const std::string& failure_message) override;
+
+    /// 在首选方案进入最终质量评估前执行 fallback 专用门控；失败时交给多层暗部重试。
+    bool runPreQualityGate(RegistrationContext& ctx,
+                           std::string& failure_message) override;
 
     /// 保存点特征专属可视化输出，再委托基类保存通用 warp 输出。
     bool saveOutputs(RegistrationContext& ctx) override;
@@ -62,8 +66,11 @@ private:
     /// 若匹配器只提供按 query 分组的候选，会先以每行 top-1 种子生成 filtered。
     bool runFilters(RegistrationContext& ctx);
 
-    bool shouldUseMultilayerDarkFallback(const RegistrationContext& ctx,
-                                         RegistrationAttemptFailure failure) const;
+    /// 判断当前失败是否允许切换到多层暗部；首选 FAST 的配准阶段失败均可重试。
+    bool shouldUseMultilayerDarkFallback(RegistrationAttemptFailure failure) const;
+    /// 检查首选 Warp 是否满足 fallback 门控的固定重合率、灰度差和内点率条件。
+    bool passMultilayerDarkFallbackGate(const RegistrationContext& ctx,
+                                        std::string& failure_message) const;
     void clearAttemptArtifacts(RegistrationContext& ctx) const;
 
     std::shared_ptr<IKeypointExtractor> _primary_extractor;

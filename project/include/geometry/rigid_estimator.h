@@ -29,7 +29,7 @@ private:
     /// RANSAC 内点判定使用的最大重投影误差阈值，单位像素。
     double _ransacReprojThreshold = 3.0;
     /// RANSAC 最大迭代次数。
-    int _maxIters = 2000;
+    int _maxIters = 1000;
     /// RANSAC 期望置信度。
     double _confidence = 0.99;
     /// OpenCV 估计完成后额外局部优化的迭代次数。

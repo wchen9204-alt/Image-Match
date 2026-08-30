@@ -2,7 +2,7 @@
 
 ## AKAZE 样本观察
 
-以下结论以 `percentile: 90`、`max_abs_error: 0.10` 为当前观察基线。样本编号均来自 AKAZE 批处理结果。
+以下结论以 `percentile: 90`、`max_abs_error: 0.15` 为当前观察基线。样本编号均来自 AKAZE 批处理结果。
 
 误判为错误：
 1.重合部分大面积灰度不一致：test07、test20、test64

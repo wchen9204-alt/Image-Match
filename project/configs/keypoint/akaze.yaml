@@ -21,7 +21,7 @@ params:
   descriptor_channels: 3
 
   # 默认值：0.001。关键点响应阈值；越小通常检测到的点越多。
-  threshold: 0.0001
+  threshold: 0.001
 
   # 默认值：4。尺度空间 octave 数量。
   nOctaves: 4

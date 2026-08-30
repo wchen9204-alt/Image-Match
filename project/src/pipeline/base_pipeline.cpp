@@ -957,6 +957,13 @@ bool BasePipeline::validateWarpQuality(RegistrationContext& ctx) {
     return true;
 }
 
+bool BasePipeline::runPreQualityGate(RegistrationContext& ctx,
+                                     std::string& failure_message) {
+    (void)ctx;
+    failure_message.clear();
+    return true;
+}
+
 std::string BasePipeline::buildOutputStem(const RegistrationContext& ctx) const {
     return ctx.image1_path.stem().string() + "_" + ctx.image2_path.stem().string() + "_" + name();
 }
@@ -982,12 +989,9 @@ bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
     fs::create_directories(edge_structure_dir, ec);
 
     const std::string stem = buildOutputStem(ctx);
-    const std::string sampleStem = ctx.image1_path.stem().string() + "_" +
-                                   ctx.image2_path.stem().string();
-
     // 2. 按独立开关保存原始 source / target，便于和 warped / blend 对照。
     if (_config.save_originals && !ctx.images.first.empty()) {
-        const fs::path out = originals_dir / (sampleStem + "_source_original.png");
+        const fs::path out = originals_dir / (stem + "_source_original.png");
         if (cv::imwrite(out.string(), ctx.images.first)) {
             IR_LOG_INFO("Wrote source original image: ", out.string());
         } else {
@@ -995,7 +999,7 @@ bool BasePipeline::saveOutputs(RegistrationContext& ctx) {
         }
     }
     if (_config.save_originals && !ctx.images.second.empty()) {
-        const fs::path out = originals_dir / (sampleStem + "_target_original.png");
+        const fs::path out = originals_dir / (stem + "_target_original.png");
         if (cv::imwrite(out.string(), ctx.images.second)) {
             IR_LOG_INFO("Wrote target original image: ", out.string());
         } else {
@@ -1240,7 +1244,15 @@ bool BasePipeline::runRegistrationAttempt(RegistrationContext& ctx,
         return false;
     }
 
-    // 5. 评测并验证本次完整结果；回退策略只在此后接管。
+    // 5. 执行方法专属的前置门控；失败时交给 fallback，不保存首选方案结果。
+    std::string gate_message;
+    if (!runPreQualityGate(ctx, gate_message)) {
+        failure = RegistrationAttemptFailure::QUALITY;
+        failure_message = gate_message.empty() ? "pre-quality gate failed" : gate_message;
+        return false;
+    }
+
+    // 6. 评测并验证本次完整结果；回退策略只在此后接管。
     if (!_evaluator.metrics().empty()) {
         Sample dummy_sample;
         _evaluator.evaluate(ctx, dummy_sample);

@@ -83,6 +83,15 @@ bool extractLayerKeypoints(const cv::Mat& gray,
     return !keypoints.empty();
 }
 
+std::vector<int> buildLayerThresholds(const int layer_count) {
+    std::vector<int> thresholds;
+    thresholds.reserve(static_cast<size_t>(layer_count));
+    for (int index = 0; index < layer_count; ++index) {
+        thresholds.push_back(255 * (layer_count - index) / layer_count);
+    }
+    return thresholds;
+}
+
 bool computeOriginalDescriptors(const cv::Mat& gray,
                                 const YAML::Node& keypoint_config,
                                 std::vector<cv::KeyPoint>& keypoints,
@@ -108,21 +117,11 @@ bool computeOriginalDescriptors(const cv::Mat& gray,
 
 MultilayerDarkKeypointExtractor::MultilayerDarkKeypointExtractor(
     const YAML::Node& keypoint_config,
-    std::vector<int> thresholds)
+    const int layer_count)
     : _extractor(Factory::createKeypointExtractor(keypoint_config)),
       _keypoint_config(keypoint_config),
       _name(_extractor->name() + "_DARK_MULTILAYER"),
-      _thresholds(std::move(thresholds)) {
-    std::vector<int> unique_thresholds;
-    unique_thresholds.reserve(_thresholds.size());
-    for (const int threshold : _thresholds) {
-        if (std::find(unique_thresholds.begin(), unique_thresholds.end(), threshold) ==
-            unique_thresholds.end()) {
-            unique_thresholds.push_back(threshold);
-        }
-    }
-    _thresholds = std::move(unique_thresholds);
-}
+      _layer_count(std::max(1, layer_count)) {}
 
 bool MultilayerDarkKeypointExtractor::extract(RegistrationContext& ctx) {
     auto& features = ctx.keypoint_data;
@@ -131,8 +130,8 @@ bool MultilayerDarkKeypointExtractor::extract(RegistrationContext& ctx) {
     features.norm_type = _extractor->normType();
 
     // 1. 准备原图灰度，暗部图层只用于本提取器，不改写配准流程中的原始图像。
-    if (ctx.images.first.empty() || ctx.images.second.empty() || _thresholds.empty()) {
-        IR_LOG_ERROR("多层暗部提取缺少输入图像或阈值。");
+    if (ctx.images.first.empty() || ctx.images.second.empty()) {
+        IR_LOG_ERROR("多层暗部提取缺少输入图像。");
         return false;
     }
     if (!image_utils::ensureGray(ctx.images.first, ctx.images.first_gray) ||
@@ -144,8 +143,9 @@ bool MultilayerDarkKeypointExtractor::extract(RegistrationContext& ctx) {
     // 2. 源图和目标图分别处理；某一张图缺少某个阈值层，不影响另一张图继续提取。
     std::vector<cv::KeyPoint> first_keypoints;
     std::vector<cv::KeyPoint> second_keypoints;
-    extractLayerKeypoints(ctx.images.first_gray, _thresholds, _keypoint_config, first_keypoints);
-    extractLayerKeypoints(ctx.images.second_gray, _thresholds, _keypoint_config, second_keypoints);
+    const std::vector<int> thresholds = buildLayerThresholds(_layer_count);
+    extractLayerKeypoints(ctx.images.first_gray, thresholds, _keypoint_config, first_keypoints);
+    extractLayerKeypoints(ctx.images.second_gray, thresholds, _keypoint_config, second_keypoints);
 
     // 3. 合并去重后的关键点，再在每张对应原灰度图上独立计算描述子。
     const bool first_ok = computeOriginalDescriptors(
@@ -163,7 +163,7 @@ bool MultilayerDarkKeypointExtractor::extract(RegistrationContext& ctx) {
                 " / ",
                 features.second.keypoints.size(),
                 " 个关键点，共 ",
-                _thresholds.size(),
+                _layer_count,
                 " 层。");
     return first_ok && second_ok && !features.empty();
 }

@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <fstream>
+#include <filesystem>
+#include <iomanip>
 #include <limits>
 #include <map>
 #include <random>
@@ -9,10 +12,12 @@
 #include <utility>
 #include <vector>
 
+#include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
 #include "data/correspondence_view.h"
 #include "geometry/partial_affine_utils.h"
+#include "pipeline/base_pipeline_helpers.h"
 #include "utils/logger.h"
 #include "utils/yaml_utils.h"
 
@@ -21,6 +26,22 @@ namespace ir {
 namespace {
 
 using VoteKey = std::tuple<int, int, int>;
+
+/// 计算非零前景包围盒的几何中心，作为多层暗部投票时的旋转参考点。
+bool foregroundBoundingBoxCenter(const cv::Mat& gray, cv::Point2d& center) {
+    std::vector<cv::Point> foreground_points;
+    cv::findNonZero(gray, foreground_points);
+    if (foreground_points.empty()) {
+        return false;
+    }
+
+    const cv::Rect bounds = cv::boundingRect(foreground_points);
+    center = {
+        static_cast<double>(bounds.x) + static_cast<double>(bounds.width) * 0.5,
+        static_cast<double>(bounds.y) + static_cast<double>(bounds.height) * 0.5
+    };
+    return true;
+}
 
 cv::Point2f applyRigid(const cv::Mat& matrix, const cv::Point2f& point) {
     return {
@@ -39,6 +60,104 @@ struct RansacResult {
     int inliers = 0;
     bool success = false;
 };
+
+struct ClusterReport {
+    bool selected = false;
+    bool judged = false;
+    size_t matches = 0;
+    size_t ransac_matches = 0;
+    bool ransac_attempted = false;
+    bool ransac_success = false;
+    int best_inliers = 0;
+    double score = 0.0;
+    cv::Mat matrix;
+    std::string status;
+};
+
+void writeClusterReport(const RegistrationContext& ctx,
+                        const std::vector<ClusterReport>& reports) {
+    if (ctx.output_dir.empty()) {
+        return;
+    }
+
+    const std::filesystem::path debug_dir = ctx.output_dir / "debug";
+    std::error_code error;
+    std::filesystem::create_directories(debug_dir, error);
+    if (error) {
+        IR_LOG_WARN("无法创建多层暗部簇诊断目录：", debug_dir.string(),
+                    "，错误：", error.message());
+        return;
+    }
+
+    std::ofstream output(debug_dir / "multilayer_clusters.csv", std::ios::trunc);
+    if (!output) {
+        IR_LOG_WARN("无法写入多层暗部簇诊断文件：",
+                    (debug_dir / "multilayer_clusters.csv").string());
+        return;
+    }
+
+    output << "rank,selected,judged,matches,ransac_attempted,ransac_matches,"
+              "gray_diff_p90,gray_diff_p90_normalized,rotation_deg,tx,ty,status\n";
+    output << std::fixed << std::setprecision(6);
+    for (size_t index = 0; index < reports.size(); ++index) {
+        const ClusterReport& report = reports[index];
+        output << (index + 1) << ','
+               << (report.selected ? "yes" : "no") << ','
+               << (report.judged ? "yes" : "no") << ','
+               << report.matches << ','
+               << (report.ransac_attempted ? "yes" : "no") << ','
+               << report.ransac_matches << ','
+               << (report.ransac_success ? "true" : "false") << ','
+               << report.best_inliers << ',';
+        if (!report.ransac_success) {
+            output << "n/a,n/a,n/a,n/a,";
+        } else {
+            const double rotation = std::atan2(
+                report.matrix.at<double>(1, 0), report.matrix.at<double>(0, 0)) *
+                180.0 / CV_PI;
+            output << report.score << ',' << rotation << ','
+                   << report.matrix.at<double>(0, 2) << ','
+                   << report.matrix.at<double>(1, 2) << ',';
+        }
+        output << report.status << '\n';
+    }
+}
+
+void writeClusterAlignedImage(const RegistrationContext& ctx,
+                              const size_t rank,
+                              const ClusterReport& report) {
+    if (!report.ransac_success || report.matrix.empty() ||
+        ctx.images.first_gray.empty() || ctx.images.second_gray.empty() ||
+        ctx.output_dir.empty()) {
+        return;
+    }
+
+    cv::Mat warped_source;
+    cv::warpAffine(ctx.images.first_gray,
+                   warped_source,
+                   report.matrix,
+                   ctx.images.second_gray.size(),
+                   cv::INTER_LINEAR,
+                   cv::BORDER_CONSTANT,
+                   cv::Scalar(0));
+    cv::Mat aligned;
+    if (!base_pipeline_helpers::buildFalseColorOverlay(
+            warped_source, ctx.images.second_gray, 0, aligned)) {
+        return;
+    }
+
+    const std::filesystem::path match_dir = ctx.output_dir / "debug" / "match";
+    std::error_code error;
+    std::filesystem::create_directories(match_dir, error);
+    if (error) {
+        return;
+    }
+    const std::filesystem::path output =
+        match_dir / ("multilayer_cluster_" + std::to_string(rank) + "_aligned.png");
+    if (!cv::imwrite(output.string(), aligned)) {
+        IR_LOG_WARN("无法写入多层暗部簇对齐图：", output.string());
+    }
+}
 
 RansacResult runReferenceRigidRansac(const std::vector<cv::Point2f>& source,
                                      const std::vector<cv::Point2f>& target,
@@ -207,7 +326,13 @@ bool MultilayerDarkRigidEstimator::estimate(RegistrationContext& ctx) {
         return false;
     }
 
-    // 1. 按每个匹配隐含的旋转角与平移量投票分簇。
+    // 1. 以 source 前景包围盒中心为旋转参考点，按每个匹配隐含的旋转角与平移量投票分簇。
+    cv::Point2d rotation_center;
+    if (!foregroundBoundingBoxCenter(ctx.images.first_gray, rotation_center)) {
+        geometry.message = "多层暗部 source 前景为空，无法确定旋转中心";
+        return false;
+    }
+
     std::map<VoteKey, std::vector<cv::DMatch>> bins;
     for (const auto& match : view.filtered) {
         if (match.queryIdx < 0 || match.trainIdx < 0 ||
@@ -223,10 +348,12 @@ bool MultilayerDarkRigidEstimator::estimate(RegistrationContext& ctx) {
         const double radians = angle * CV_PI / 180.0;
         const double cosine = std::cos(radians);
         const double sine = std::sin(radians);
-        const double tx = target_keypoint.pt.x -
-            (cosine * source_keypoint.pt.x - sine * source_keypoint.pt.y);
-        const double ty = target_keypoint.pt.y -
-            (sine * source_keypoint.pt.x + cosine * source_keypoint.pt.y);
+        const double relative_x = source_keypoint.pt.x - rotation_center.x;
+        const double relative_y = source_keypoint.pt.y - rotation_center.y;
+        const double rotated_x = rotation_center.x + cosine * relative_x - sine * relative_y;
+        const double rotated_y = rotation_center.y + sine * relative_x + cosine * relative_y;
+        const double tx = target_keypoint.pt.x - rotated_x;
+        const double ty = target_keypoint.pt.y - rotated_y;
         bins[{static_cast<int>(std::floor(angle / _rotation_bin_degrees)),
               static_cast<int>(std::floor(tx / _translation_bin_size)),
               static_cast<int>(std::floor(ty / _translation_bin_size))}].push_back(match);
@@ -252,10 +379,19 @@ bool MultilayerDarkRigidEstimator::estimate(RegistrationContext& ctx) {
     std::vector<cv::DMatch> best_matches;
     int best_inliers = 0;
     double best_score = -std::numeric_limits<double>::infinity();
+    size_t best_report_index = std::numeric_limits<size_t>::max();
+    std::vector<ClusterReport> reports;
+    reports.reserve(clusters.size());
     for (const auto& cluster : clusters) {
+        ClusterReport report;
+        report.matches = cluster.size();
         if (cluster.size() < static_cast<size_t>(_min_inliers)) {
+            report.status = "skipped_too_few_matches";
+            reports.push_back(std::move(report));
             continue;
         }
+        report.judged = true;
+        report.ransac_attempted = true;
         std::vector<cv::Point2f> source;
         std::vector<cv::Point2f> target;
         std::vector<cv::DMatch> valid_matches;
@@ -270,13 +406,21 @@ bool MultilayerDarkRigidEstimator::estimate(RegistrationContext& ctx) {
             target.push_back(view.second_keypoints[static_cast<size_t>(match.trainIdx)].pt);
             valid_matches.push_back(match);
         }
+        report.ransac_matches = valid_matches.size();
         const RansacResult candidate = runReferenceRigidRansac(
             source, target, _reprojection_threshold, _ransac_iterations);
         if (!candidate.success) {
+            report.status = "ransac_failed";
+            reports.push_back(std::move(report));
             continue;
         }
-        const double score = scoreRegistration(
+        report.ransac_success = true;
+        report.best_inliers = candidate.inliers;
+        report.matrix = candidate.matrix;
+        report.score = scoreRegistration(
             ctx.images.first_gray, ctx.images.second_gray, candidate.matrix);
+        report.status = "completed";
+        const double score = report.score;
         if (best_matrix.empty() || score > best_score) {
             best_matrix = candidate.matrix;
             best_mask = candidate.mask;
@@ -285,6 +429,19 @@ bool MultilayerDarkRigidEstimator::estimate(RegistrationContext& ctx) {
             best_matches = std::move(valid_matches);
             best_inliers = candidate.inliers;
             best_score = score;
+            best_report_index = reports.size();
+        }
+        reports.push_back(std::move(report));
+    }
+
+    // 3. 保存排序后前十个投票簇的诊断信息，便于定位匹配簇和 RANSAC 的问题。
+    if (!reports.empty()) {
+        if (best_report_index < reports.size()) {
+            reports[best_report_index].selected = true;
+        }
+        writeClusterReport(ctx, reports);
+        for (size_t index = 0; index < reports.size(); ++index) {
+            writeClusterAlignedImage(ctx, index + 1, reports[index]);
         }
     }
 
@@ -293,7 +450,7 @@ bool MultilayerDarkRigidEstimator::estimate(RegistrationContext& ctx) {
         return false;
     }
 
-    // 3. 将候选簇内的原始索引和 mask 写回通用上下文，供后续刷新快照、warp、验证和可视化使用。
+    // 4. 将候选簇内的原始索引和 mask 写回通用上下文，供后续刷新快照、warp、验证和可视化使用。
     ctx.keypoint_match_data.filtered_matches = best_matches;
     ctx.keypoint_match_data.inlier_mask = best_mask;
     ctx.keypoint_match_data.inlier_matches.clear();

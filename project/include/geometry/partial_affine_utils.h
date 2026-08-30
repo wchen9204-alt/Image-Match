@@ -204,7 +204,6 @@ inline bool estimateRigidRansacNoScale2D(const std::vector<cv::Point2f>& src,
                                          const std::vector<cv::Point2f>& dst,
                                          double threshold,
                                          int maxIters,
-                                         double confidence,
                                          cv::Mat& A,
                                          std::vector<unsigned char>& mask,
                                          bool logIterations = false) {
@@ -213,57 +212,24 @@ inline bool estimateRigidRansacNoScale2D(const std::vector<cv::Point2f>& src,
         return false;
     }
 
-    auto pairDistance2 = [](const cv::Point2f& a, const cv::Point2f& b) {
-        const double dx = static_cast<double>(a.x) - static_cast<double>(b.x);
-        const double dy = static_cast<double>(a.y) - static_cast<double>(b.y);
-        return dx * dx + dy * dy;
-    };
-
-    auto updateRequiredIters = [&](int inliers) {
-        if (inliers < 2) {
-            return std::max(1, maxIters);
-        }
-
-        const double ratio = static_cast<double>(inliers) / static_cast<double>(n);
-        const double sampleSuccess = ratio * ratio;
-        if (sampleSuccess >= 1.0) {
-            return 1;
-        }
-        if (sampleSuccess <= 0.0) {
-            return std::max(1, maxIters);
-        }
-
-        const double safeConfidence = std::clamp(confidence, 1e-9, 1.0 - 1e-9);
-        const double denom = std::log(1.0 - sampleSuccess);
-        if (!std::isfinite(denom) || std::abs(denom) < 1e-12) {
-            return std::max(1, maxIters);
-        }
-
-        const double numer = std::log(1.0 - safeConfidence);
-        const int required = static_cast<int>(std::ceil(numer / denom));
-        return std::clamp(required, 1, std::max(1, maxIters));
-    };
-
     cv::Mat bestA;
     std::vector<unsigned char> bestMask;
     int bestInliers = 0;
-    double bestError = std::numeric_limits<double>::infinity();
 
+    // 沿用项目原有随机采样实现，固定种子保证结果可复现。
     cv::RNG rng(0x5EED1234u);
-    int requiredIters = std::max(1, maxIters);
-    for (int iter = 0; iter < requiredIters; ++iter) {
-        int i = 0;
-        int j = 1;
+    const int iterations = std::max(1, maxIters);
+    for (int iter = 0; iter < iterations; ++iter) {
+        size_t i = 0;
+        size_t j = 1;
         if (n > 2) {
-            i = rng.uniform(0, static_cast<int>(n));
-            j = rng.uniform(0, static_cast<int>(n - 1));
+            i = static_cast<size_t>(rng.uniform(0, static_cast<int>(n)));
+            j = static_cast<size_t>(rng.uniform(0, static_cast<int>(n - 1)));
             if (j >= i) {
                 ++j;
             }
         }
-
-        // 两对点过近时会让旋转方向不稳定，直接跳过该假设。
-        if (pairDistance2(src[i], src[j]) <= 1e-6 || pairDistance2(dst[i], dst[j]) <= 1e-6) {
+        if (i == j) {
             continue;
         }
 
@@ -277,8 +243,6 @@ inline bool estimateRigidRansacNoScale2D(const std::vector<cv::Point2f>& src,
         std::vector<unsigned char> candidateMask =
             maskByReprojection(src, dst, candidateA, threshold);
         const int candidateInliers = countInliers(candidateMask);
-        const double candidateError =
-            reprojectionErrorSum(src, dst, candidateMask, candidateA);
 
         if (logIterations) {
             IR_LOG_TRACE("Rigid custom RANSAC iter=",
@@ -289,21 +253,15 @@ inline bool estimateRigidRansacNoScale2D(const std::vector<cv::Point2f>& src,
                         j,
                         "), inliers=",
                         candidateInliers,
-                        ", error=",
-                        candidateError,
                         ", best_inliers=",
-                        bestInliers,
-                        ", best_error=",
-                        bestError);
+                        bestInliers);
         }
 
-        if (candidateInliers > bestInliers ||
-            (candidateInliers == bestInliers && candidateError < bestError)) {
+        // 参考实现只按内点数量选模，平局时保留先出现的模型。
+        if (candidateInliers > bestInliers) {
             bestInliers = candidateInliers;
-            bestError = candidateError;
             bestA = candidateA;
             bestMask = candidateMask;
-            requiredIters = std::min(requiredIters, updateRequiredIters(candidateInliers));
         }
     }
 

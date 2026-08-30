@@ -556,9 +556,13 @@ int RegistrationApp::runBatch(const std::filesystem::path& batch_yaml) {
     if (batch.summary_csv) {
         const auto csv_path = pipeline_root / "summary.csv";
         writeSummaryCsv(csv_path, base_cfg.methodFamily(), sample_names, results, evaluations);
-        app_helpers::writeBatchHtmlReport(pipeline_root, sample_names, results);
         IR_LOG_INFO("Wrote summary CSV: ", csv_path.string());
     }
+    // Keep the report beside this run's sample assets.
+    app_helpers::writeBatchHtmlReport(pipeline_root,
+                                      sample_names,
+                                      results,
+                                      pipeline_root);
 
     IR_LOG_INFO("Batch summary: ", ok_count, " / ", samples.size(), " samples succeeded.");
     if (!succeeded_names.empty()) {

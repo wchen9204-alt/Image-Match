@@ -266,19 +266,17 @@ void parseMultilayerDarkFallback(const YAML::Node& node, PipelineConfig& cfg) {
     const auto& multilayer = node["multilayer_dark_fallback"];
     auto& options = cfg.multilayer_dark_fallback;
     options.enabled = yaml_utils::getBool(multilayer, "enabled", options.enabled);
-    if (!multilayer["thresholds"] || !multilayer["thresholds"].IsSequence()) {
-        return;
-    }
+    options.min_foreground_overlap_ratio = yaml_utils::getDouble(
+        multilayer,
+        "min_foreground_overlap_ratio",
+        options.min_foreground_overlap_ratio);
+    options.max_height_difference = yaml_utils::getDouble(
+        multilayer, "max_height_difference", options.max_height_difference);
+    options.min_inlier_ratio = yaml_utils::getDouble(
+        multilayer, "min_inlier_ratio", options.min_inlier_ratio);
 
-    std::vector<int> thresholds;
-    thresholds.reserve(multilayer["thresholds"].size());
-    for (const auto& value : multilayer["thresholds"]) {
-        const int threshold = std::clamp(value.as<int>(), 1, 255);
-        thresholds.push_back(threshold);
-    }
-    if (!thresholds.empty()) {
-        options.thresholds = std::move(thresholds);
-    }
+    options.layer_count = std::max(
+        1, yaml_utils::getInt(multilayer, "layer_count", options.layer_count));
 }
 
 

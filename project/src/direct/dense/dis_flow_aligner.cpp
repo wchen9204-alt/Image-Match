@@ -90,9 +90,11 @@ bool DisFlowAligner::align(RegistrationContext& ctx) {
         if (_variationalRefinementGamma >= 0.0f) {
             solver->setVariationalRefinementGamma(_variationalRefinementGamma);
         }
+#if CV_VERSION_MAJOR > 4 || (CV_VERSION_MAJOR == 4 && CV_VERSION_MINOR >= 10)
         if (_variationalRefinementEpsilon >= 0.0f) {
             solver->setVariationalRefinementEpsilon(_variationalRefinementEpsilon);
         }
+#endif
         solver->setUseMeanNormalization(_useMeanNormalization);
         solver->setUseSpatialPropagation(_useSpatialPropagation);
         return solver;

@@ -6,7 +6,7 @@
 #include <vector>
 
 #include <opencv2/imgproc.hpp>
-#include <opencv2/ximgproc.hpp>
+#include <opencv2/ximgproc/fast_line_detector.hpp>
 
 #ifdef IR_HAS_OPENCV_LINE_DESCRIPTOR
 #include <opencv2/line_descriptor.hpp>

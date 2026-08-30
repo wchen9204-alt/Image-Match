@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <numeric>
 #include <sstream>
 #include <vector>
 
@@ -899,60 +900,77 @@ std::string htmlEscape(const std::string& value) {
     return escaped;
 }
 
-fs::path findFalseColorImage(const fs::path& caseRoot) {
-    const std::vector<fs::path> directories = {
-        caseRoot / "overlay",
-        caseRoot / "false_color_overlay",
-        caseRoot / "final_false_color_overlay"};
-    for (const auto& directory : directories) {
-        if (!fs::is_directory(directory)) {
+fs::path findImageWithSuffix(const fs::path& directory,
+                             const std::string& suffix,
+                             const std::string& preferredToken = {}) {
+    if (!fs::is_directory(directory)) {
+        return {};
+    }
+    std::vector<fs::path> images;
+    std::error_code ec;
+    std::string wantedSuffix = suffix;
+    std::transform(wantedSuffix.begin(), wantedSuffix.end(), wantedSuffix.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    for (const auto& entry : fs::directory_iterator(directory, ec)) {
+        if (!entry.is_regular_file()) {
             continue;
         }
-        std::vector<fs::path> images;
-        std::error_code ec;
-        for (const auto& entry : fs::directory_iterator(directory, ec)) {
-            if (!entry.is_regular_file()) {
-                continue;
-            }
-            const std::string extension = entry.path().extension().string();
-            const std::string filename = entry.path().filename().string();
-            std::string lowerExtension = extension;
-            std::string lowerFilename = filename;
-            std::transform(lowerExtension.begin(), lowerExtension.end(), lowerExtension.begin(),
-                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            std::transform(lowerFilename.begin(), lowerFilename.end(), lowerFilename.begin(),
-                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            if ((lowerExtension == ".png" || lowerExtension == ".jpg" ||
-                 lowerExtension == ".jpeg") &&
-                lowerFilename.find("false_color_overlay") != std::string::npos) {
-                images.push_back(entry.path());
-            }
-        }
-        if (!images.empty()) {
-            std::sort(images.begin(), images.end());
-            return images.front();
+        const std::string extension = entry.path().extension().string();
+        std::string filename = entry.path().filename().string();
+        std::string lowerExtension = extension;
+        std::transform(lowerExtension.begin(), lowerExtension.end(), lowerExtension.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        std::transform(filename.begin(), filename.end(), filename.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if ((lowerExtension == ".png" || lowerExtension == ".jpg" || lowerExtension == ".jpeg") &&
+            filename.size() >= wantedSuffix.size() &&
+            filename.compare(filename.size() - wantedSuffix.size(), wantedSuffix.size(), wantedSuffix) == 0) {
+            images.push_back(entry.path());
         }
     }
-    return {};
+    if (images.empty()) {
+        return {};
+    }
+    if (!preferredToken.empty()) {
+        std::string token = preferredToken;
+        std::transform(token.begin(), token.end(), token.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        const auto preferred = std::find_if(images.begin(), images.end(), [&](const fs::path& path) {
+            std::string filename = path.filename().string();
+            std::transform(filename.begin(), filename.end(), filename.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return filename.find(token) != std::string::npos;
+        });
+        if (preferred != images.end()) {
+            return *preferred;
+        }
+    }
+    std::sort(images.begin(), images.end());
+    return images.front();
 }
 
 } // namespace
 
 void writeBatchHtmlReport(const std::filesystem::path& pipeline_root,
                           const std::vector<std::string>& sample_names,
-                          const std::vector<RegistrationResult>& results) {
+                          const std::vector<RegistrationResult>& results,
+                          const std::filesystem::path& assets_root) {
     if (pipeline_root.empty() || sample_names.empty()) {
         return;
     }
 
     const int total = static_cast<int>(sample_names.size());
-    const int passed = static_cast<int>(std::count_if(
+    const double totalTimeMs = std::accumulate(
+        results.begin(), results.end(), 0.0,
+        [](double sum, const RegistrationResult& result) { return sum + result.t_total_ms; });
+    const int fastCount = static_cast<int>(std::count_if(
         results.begin(), results.end(), [](const RegistrationResult& result) {
-            return result.success;
+            return result.registration_strategy == "FAST";
         }));
-    const int missing = std::max(0, total - static_cast<int>(results.size()));
-    const int failed = std::max(0, total - passed - missing);
-    const double passRate = total > 0 ? 100.0 * static_cast<double>(passed) / total : 0.0;
+    const int multilayerCount = static_cast<int>(std::count_if(
+        results.begin(), results.end(), [](const RegistrationResult& result) {
+            return result.registration_strategy == "MULTILAYER";
+        }));
 
     std::ostringstream html;
     html << "<!doctype html><html><head><meta charset=\"utf-8\"><title>"
@@ -960,45 +978,63 @@ void writeBatchHtmlReport(const std::filesystem::path& pipeline_root,
          << " false color report</title><style>"
          << "*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#14213d;background:#f7f9fc;"
             "margin:0;padding:18px}h1{font-size:22px;margin:0 0 16px}.summary{display:grid;"
-            "grid-template-columns:repeat(5,minmax(140px,1fr));gap:12px;margin-bottom:22px}.card{"
+             "grid-template-columns:repeat(4,minmax(140px,1fr));gap:12px;margin-bottom:22px}.card{"
             "background:#fff;border:1px solid #d5ddea;border-radius:8px;padding:16px}.value{font-size:24px;"
             "font-weight:700}.label{color:#52627a;font-size:12px;margin-top:8px}.case{background:#fff;"
             "border:1px solid #d5ddea;border-radius:8px;margin:0 0 12px;overflow:hidden}.case-head{"
             "display:flex;justify-content:space-between;align-items:center;padding:14px 18px;"
             "border-bottom:1px solid #d5ddea}.case h2{font-size:17px;margin:0}.status{border-radius:16px;"
             "padding:6px 12px;font-size:12px;font-weight:700;color:#fff}.passed{background:#087f3f}.failed{"
-            "background:#b3261e}.missing{background:#7a5c00}.case-body{padding:12px 18px}.case img{display:block;"
-            "width:100%;max-height:360px;object-fit:contain;background:#000}.notice{color:#b3261e;"
-            "padding:12px 0;font-size:13px}@media(max-width:800px){.summary{grid-template-columns:repeat(2,1fr)}}"
-            "</style></head><body>";
+             "background:#b3261e}.missing{background:#7a5c00}.case-body{padding:12px 18px}.meta{color:#52627a;"
+             "font-size:13px;margin-bottom:12px}.images{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.image-cell{min-width:0}.image-label{font-size:12px;font-weight:700;color:#52627a;margin-bottom:6px}.case img{display:block;width:100%;height:260px;object-fit:contain;background:#000}.notice{color:#b3261e;"
+             "padding:12px 0;font-size:13px}@media(max-width:800px){.summary{grid-template-columns:repeat(2,1fr)}.images{grid-template-columns:1fr}}"
+             "</style></head><body>";
     html << "<h1>False-color registration report</h1><div class=\"summary\">";
     html << "<div class=\"card\"><div class=\"value\">" << total
          << "</div><div class=\"label\">total</div></div>";
-    html << "<div class=\"card\"><div class=\"value\">" << passed
-         << "</div><div class=\"label\">passed</div></div>";
-    html << "<div class=\"card\"><div class=\"value\">" << failed
-         << "</div><div class=\"label\">failed</div></div>";
-    html << "<div class=\"card\"><div class=\"value\">" << missing
-         << "</div><div class=\"label\">missing input</div></div>";
     html << "<div class=\"card\"><div class=\"value\">" << std::fixed << std::setprecision(1)
-         << passRate << "%</div><div class=\"label\">pass rate</div></div></div>";
+         << totalTimeMs << " ms</div><div class=\"label\">total time</div></div>";
+    html << "<div class=\"card\"><div class=\"value\">" << fastCount
+         << "</div><div class=\"label\">FAST</div></div>";
+    html << "<div class=\"card\"><div class=\"value\">" << multilayerCount
+         << "</div><div class=\"label\">MULTILAYER</div></div></div>";
 
     for (size_t index = 0; index < sample_names.size(); ++index) {
         const bool isPassed = index < results.size() && results[index].success;
         const std::string status = isPassed ? "PASSED" : "FAILED";
         const std::string statusClass = isPassed ? "passed" : "failed";
         const std::string name = htmlEscape(sample_names[index]);
+        const RegistrationResult* result = index < results.size() ? &results[index] : nullptr;
+        const std::string strategy = result && !result->registration_strategy.empty()
+            ? result->registration_strategy : "UNKNOWN";
+        const double elapsedMs = result ? result->t_total_ms : 0.0;
         html << "<section class=\"case\"><div class=\"case-head\"><h2>" << name
              << "</h2><span class=\"status " << statusClass << "\">" << status
-             << "</span></div><div class=\"case-body\">";
-        const fs::path image = findFalseColorImage(pipeline_root / sample_names[index]);
-        if (!image.empty()) {
-            const fs::path relative = fs::relative(image, pipeline_root);
-            html << "<img src=\"" << htmlEscape(relative.generic_string()) << "\" alt=\""
-                 << name << " false color overlay\">";
-        } else {
-            html << "<div class=\"notice\">No false-color overlay was generated.</div>";
-        }
+             << "</span></div><div class=\"case-body\"><div class=\"meta\">方案："
+             << htmlEscape(strategy) << "　耗时：" << std::fixed << std::setprecision(2)
+             << elapsedMs << " ms</div><div class=\"images\">";
+        const fs::path imageRoot = assets_root.empty() ? pipeline_root : assets_root;
+        const fs::path caseRoot = imageRoot / sample_names[index];
+        const fs::path source = findImageWithSuffix(caseRoot / "originals", "_source_original.png");
+        const fs::path target = findImageWithSuffix(caseRoot / "originals", "_target_original.png");
+        const fs::path falseColor = findImageWithSuffix(
+            caseRoot / "overlay", "_false_color_overlay.png",
+            strategy == "MULTILAYER" ? "DARK_MULTILAYER" : "");
+        const auto writeImage = [&](const char* label, const fs::path& image) {
+            html << "<div class=\"image-cell\"><div class=\"image-label\">" << label << "</div>";
+            if (!image.empty()) {
+                const fs::path relative = fs::relative(image, pipeline_root);
+                html << "<img src=\"" << htmlEscape(relative.generic_string()) << "\" alt=\""
+                     << name << " " << label << "\">";
+            } else {
+                html << "<div class=\"notice\">未生成</div>";
+            }
+            html << "</div>";
+        };
+        writeImage("source", source);
+        writeImage("target", target);
+        writeImage("false-color", falseColor);
+        html << "</div>";
         html << "</div></section>";
     }
     html << "</body></html>";
@@ -1017,4 +1053,6 @@ void writeBatchHtmlReport(const std::filesystem::path& pipeline_root,
     if (file_utils::writeWholeFile(reportPath, formattedHtml)) {
         IR_LOG_INFO("Wrote batch HTML report: ", reportPath.string());
     }
-}} // namespace ir::registration_app_helpers
+}
+
+} // namespace ir::registration_app_helpers

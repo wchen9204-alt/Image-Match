@@ -35,7 +35,8 @@ void writeRunSummaryFiles(const RegistrationContext& ctx,
 
 void writeBatchHtmlReport(const std::filesystem::path& pipeline_root,
                           const std::vector<std::string>& sample_names,
-                          const std::vector<RegistrationResult>& results);
+                          const std::vector<RegistrationResult>& results,
+                          const std::filesystem::path& assets_root = {});
 
 } // namespace ir::registration_app_helpers
 

@@ -9,7 +9,6 @@
 #include <vector>
 
 #include <opencv2/imgproc.hpp>
-#include <opencv2/ximgproc.hpp>
 #include <opencv2/ximgproc/edge_drawing.hpp>
 
 namespace ir::edge_structure_diagnostic {

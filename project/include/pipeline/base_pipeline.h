@@ -53,7 +53,6 @@ protected:
     virtual bool runEstimation(RegistrationContext& ctx) = 0;
 
     /// 当一轮完整尝试失败时，子类可切换到另一套阶段策略并请求重试一次。
-    /// 该钩子只负责切换策略和清理阶段数据；重试流程仍由基类统一调度。
     virtual bool activateFallback(RegistrationContext& ctx,
                                   RegistrationAttemptFailure failure,
                                   const std::string& failure_message) {
@@ -90,6 +89,10 @@ protected:
     /// 验证 warped source 与 target 的前景重叠和高度差。
     virtual bool validateWarpQuality(RegistrationContext& ctx);
 
+    /// 在最终质量验证前执行方法专属的前置门控。
+    virtual bool runPreQualityGate(RegistrationContext& ctx,
+                                   std::string& failure_message);
+
     /// 8.保存通用输出图像；子类可扩展保存专属可视化。
     virtual bool saveOutputs(RegistrationContext& ctx);
 
@@ -108,4 +111,3 @@ protected:
 };
 
 } // namespace ir
-

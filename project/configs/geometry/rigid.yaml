@@ -22,7 +22,7 @@ params:
   # - 直接在无缩放 rigid 模型下做项目内自定义 RANSAC
   # - 输出本身就是严格刚体
   # - 此时不使用 method 参数
-  estimatorBackend: OPENCV_PARTIAL_AFFINE
+  estimatorBackend: CUSTOM_RIGID_RANSAC
 
   # 鲁棒估计方法；可选 RANSAC / LMEDS；默认 RANSAC。
   # 仅在 estimatorBackend=OPENCV_PARTIAL_AFFINE 时生效。
@@ -32,8 +32,8 @@ params:
   # RANSAC 内点重投影误差阈值，单位像素；OpenCV 默认 5.0。
   ransacReprojThreshold: 5
 
-  # RANSAC 最大迭代次数；OpenCV 默认 2000。
-  maxIters: 2000
+  # RANSAC 最大迭代次数；参考刚体 RANSAC 默认 1000。
+  maxIters: 1000
 
   # RANSAC 置信度；OpenCV 默认 0.99。
   confidence: 0.90
@@ -77,7 +77,7 @@ params:
     min_inliers: 6
     rotation_bin_degrees: 5.0
     translation_bin_size: 10.0
-    reprojection_threshold: 5.0
+    reprojection_threshold: 3.0
     ransac_iterations: 1000
     max_clusters: 5
 

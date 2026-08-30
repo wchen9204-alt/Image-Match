@@ -11,9 +11,11 @@
 #include "core/config.h"
 #include "core/factory.h"
 #include "core/types.h"
+#include "evaluator/quality/warp_quality_evaluator.h"
 #include "geometry/multilayer_dark_rigid_estimator.h"
 #include "matcher/keypoint/multilayer_dark_bf_matcher.h"
 #include "keypoint/multilayer_dark_keypoint_extractor.h"
+#include "pipeline/base_pipeline_helpers.h"
 #include "utils/logger.h"
 #include "utils/string_utils.h"
 #include "utils/timer.h"
@@ -130,38 +132,6 @@ struct MatchViewOutput {
     std::string log_label;
 };
 
-double selectedHeightDifference(const RegistrationResult& result,
-                               const int percentile,
-                               const bool compensated) {
-    if (compensated) {
-        switch (percentile) {
-        case 50:
-            return result.warp_height_diff_compensated_p50;
-        case 75:
-            return result.warp_height_diff_compensated_p75;
-        case 90:
-            return result.warp_height_diff_compensated_p90;
-        case 95:
-            return result.warp_height_diff_compensated_p95;
-        default:
-            return -1.0;
-        }
-    }
-
-    switch (percentile) {
-    case 50:
-        return result.warp_height_diff_p50;
-    case 75:
-        return result.warp_height_diff_p75;
-    case 90:
-        return result.warp_height_diff_p90;
-    case 95:
-        return result.warp_height_diff_p95;
-    default:
-        return -1.0;
-    }
-}
-
 } // namespace
 
 bool KeypointPipeline::run(RegistrationContext& ctx, const PipelineRunOptions& options) {
@@ -192,10 +162,10 @@ bool KeypointPipeline::configureStages(const PipelineConfig& cfg) {
     _primary_extractor = Factory::createKeypointExtractor(keypoint_cfg);
     _active_extractor = _primary_extractor;
 
-    // 2. 多层暗部复用同一份点特征 YAML，因此所有已支持的点特征类型均可使用。
+    // 2. 多层暗部复用同一份点特征 YAML，所有已支持的点特征类型均可使用。
     if (cfg.multilayer_dark_fallback.enabled) {
         _multilayer_dark_extractor = std::make_shared<MultilayerDarkKeypointExtractor>(
-            keypoint_cfg, cfg.multilayer_dark_fallback.thresholds);
+            keypoint_cfg, cfg.multilayer_dark_fallback.layer_count);
     }
 
     // 3. 从 matcher YAML 创建描述子匹配器。
@@ -340,39 +310,121 @@ bool KeypointPipeline::runEstimation(RegistrationContext& ctx) {
 }
 
 bool KeypointPipeline::shouldUseMultilayerDarkFallback(
-    const RegistrationContext& ctx,
     const RegistrationAttemptFailure failure) const {
-    // 1. 仅允许首选点特征在最终图像质量失败后切换一次。
-    if (failure != RegistrationAttemptFailure::QUALITY ||
-        !_config.multilayer_dark_fallback.enabled ||
+    // 1. 首选 FAST 方案，提取、匹配、估计、变换或质量验证失败后都可由多层暗部重试。
+    //    读图失败发生在尝试流程外，两套方案都没有输入，因此不在这里处理。
+    switch (failure) {
+    case RegistrationAttemptFailure::EXTRACTION:
+    case RegistrationAttemptFailure::ASSOCIATION:
+    case RegistrationAttemptFailure::ESTIMATION:
+    case RegistrationAttemptFailure::WARP:
+    case RegistrationAttemptFailure::QUALITY:
+        break;
+    default:
+        return false;
+    }
+    if (!_config.multilayer_dark_fallback.enabled ||
         !_multilayer_dark_extractor || !_multilayer_dark_matcher ||
         !_multilayer_dark_geometry ||
         _active_extractor != _primary_extractor) {
         return false;
     }
+    return true;
+}
 
-    // 2. 重合率低于当前 YAML 阈值时，暗部策略可以接管。
-    const auto& quality = _config.warp_quality;
-    const bool poor_containment = quality.overlap.containment_enabled &&
-        ctx.result.warp_overlap_containment >= 0.0 &&
-        ctx.result.warp_overlap_containment < quality.overlap.min_containment;
+bool KeypointPipeline::passMultilayerDarkFallbackGate(
+    const RegistrationContext& ctx,
+    std::string& failure_message) const {
+    const auto& gate = _config.multilayer_dark_fallback;
 
-    // 3. 高度差优先采用补偿后有效值；补偿未产生有效值时保留原始值。
-    const double raw_height_difference = selectedHeightDifference(
-        ctx.result, quality.height_difference.percentile, false);
-    const double compensated_height_difference = quality.height_difference.compensate_global_height_offset &&
-            ctx.result.warp_height_diff_compensation_attempted
-        ? selectedHeightDifference(ctx.result, quality.height_difference.percentile, true)
-        : -1.0;
-    const double best_height_difference = raw_height_difference >= 0.0 &&
-            compensated_height_difference >= 0.0
-        ? std::min(raw_height_difference, compensated_height_difference)
-        : std::max(raw_height_difference, compensated_height_difference);
-    const bool poor_height_difference = quality.height_difference.enabled &&
-        best_height_difference >= 0.0 &&
-        best_height_difference > quality.height_difference.max_abs_error;
+    // 1. 先检查几何估计得到的内点率。
+    if (ctx.result.inlier_ratio < gate.min_inlier_ratio) {
+        failure_message = "multilayer fallback gate: inlier ratio " +
+                           std::to_string(ctx.result.inlier_ratio) + " < " +
+                           std::to_string(gate.min_inlier_ratio);
+        return false;
+    }
 
-    return poor_containment || poor_height_difference;
+    // 2. 读取当前首选几何结果，使用同一个 source -> target 变换评估图像质量。
+    cv::Mat matrix;
+    if (!base_pipeline_helpers::activeTransformMatrix(ctx, matrix)) {
+        failure_message = "multilayer fallback gate: no transform matrix";
+        return false;
+    }
+
+    // 3. 按参考 FAST 流程分别计算 source / target 前景重合率；仅两者都不足时拒绝。
+    cv::Mat source_mask;
+    cv::Mat target_mask;
+    cv::Mat warped_source_mask;
+    if (!base_pipeline_helpers::buildForegroundMask(ctx.images.first, 0, source_mask) ||
+        !base_pipeline_helpers::buildForegroundMask(ctx.images.second, 0, target_mask) ||
+        !base_pipeline_helpers::warpMaskToTargetSize(
+            source_mask, target_mask.size(), matrix, warped_source_mask)) {
+        failure_message = "multilayer fallback gate: cannot build foreground overlap masks";
+        return false;
+    }
+
+    cv::Mat overlap_mask;
+    cv::bitwise_and(warped_source_mask, target_mask, overlap_mask);
+    const int source_foreground = cv::countNonZero(source_mask);
+    const int target_foreground = cv::countNonZero(target_mask);
+    if (source_foreground <= 0 || target_foreground <= 0) {
+        failure_message = "multilayer fallback gate: empty foreground";
+        return false;
+    }
+
+    const int overlap_foreground = cv::countNonZero(overlap_mask);
+    const double source_overlap =
+        static_cast<double>(overlap_foreground) / static_cast<double>(source_foreground);
+    const double target_overlap =
+        static_cast<double>(overlap_foreground) / static_cast<double>(target_foreground);
+    if (source_overlap < gate.min_foreground_overlap_ratio &&
+        target_overlap < gate.min_foreground_overlap_ratio) {
+        failure_message = "multilayer fallback gate: source overlap " +
+                          std::to_string(source_overlap) + ", target overlap " +
+                          std::to_string(target_overlap) + " < " +
+                          std::to_string(gate.min_foreground_overlap_ratio);
+        return false;
+    }
+
+    // 4. 高度差门控使用独立阈值。
+    warp_quality::WarpQualityOptions options;
+    options.validate_containment = false;
+    options.foreground_threshold = 0;
+    options.validate_height_difference = true;
+    options.compensate_global_height_offset = false;
+    options.height_difference_percentile = 90;
+    options.max_height_difference_error = gate.max_height_difference;
+    options.allow_local_noise_fallback = false;
+
+    // 5. 高度差只在 source 与 target 的前景重合区域内计算，并直接使用原始 P90。
+    warp_quality::WarpQualityResult quality;
+    const bool evaluated = warp_quality::evaluateWarpQuality(
+        options,
+        ctx.images.first,
+        ctx.images.second,
+        matrix,
+        ctx.warped_image,
+        quality);
+    if (!evaluated || !quality.pass) {
+        failure_message = quality.message.empty()
+            ? "multilayer fallback gate: gray difference failed"
+            : "multilayer fallback gate: " + quality.message;
+        return false;
+    }
+    return true;
+}
+
+bool KeypointPipeline::runPreQualityGate(RegistrationContext& ctx,
+                                         std::string& failure_message) {
+    // 1. 只对启用 fallback 的首选方案执行门控，多层暗部重试直接进入正常评估。
+    if (!_config.multilayer_dark_fallback.enabled ||
+        _active_extractor != _primary_extractor) {
+        failure_message.clear();
+        return true;
+    }
+    // 2. 门控失败会在最终质量验证前返回，避免保存首选方案的中间输出。
+    return passMultilayerDarkFallbackGate(ctx, failure_message);
 }
 
 void KeypointPipeline::clearAttemptArtifacts(RegistrationContext& ctx) const {
@@ -394,11 +446,11 @@ void KeypointPipeline::clearAttemptArtifacts(RegistrationContext& ctx) const {
 bool KeypointPipeline::activateFallback(RegistrationContext& ctx,
                                         const RegistrationAttemptFailure failure,
                                         const std::string& failure_message) {
-    if (!shouldUseMultilayerDarkFallback(ctx, failure)) {
+    if (!shouldUseMultilayerDarkFallback(failure)) {
         return false;
     }
 
-    IR_LOG_WARN("首选点特征结果未通过最终图像质量验证（",
+    IR_LOG_WARN("首选点特征方案失败（",
                 failure_message,
                 "），切换到多层暗部提取。");
     clearAttemptArtifacts(ctx);
@@ -409,17 +461,14 @@ bool KeypointPipeline::activateFallback(RegistrationContext& ctx,
 }
 
 std::string KeypointPipeline::buildOutputStem(const RegistrationContext& ctx) const {
-    const std::string matcher_label = _active_matcher == _multilayer_dark_matcher
-        ? "BF_KNN_DARK_MULTILAYER"
-        : buildMatcherLabel(_config.matcher_path);
-
-    return ctx.image1_path.stem().string() + "_" + ctx.image2_path.stem().string() + "_" +
-           (_active_extractor ? _active_extractor->name() : std::string("UNK")) + "_" +
-           (_active_geometry ? toString(_active_geometry->type()) : std::string("UNK")) + "_" +
-           matcher_label;
+    (void)ctx;
+    return _active_extractor ? _active_extractor->name() : std::string("KEYPOINT");
 }
 
 bool KeypointPipeline::saveOutputs(RegistrationContext& ctx) {
+    // 保存前记录最终 active 方案，供批处理报告展示。
+    ctx.result.registration_strategy =
+        _active_extractor == _multilayer_dark_extractor ? "MULTILAYER" : "FAST";
     if (!_config.save_visuals || ctx.output_dir.empty()) {
         return true;
     }
@@ -432,9 +481,7 @@ bool KeypointPipeline::saveOutputs(RegistrationContext& ctx) {
     fs::create_directories(match_dir, ec);
 
     const std::string stem = buildOutputStem(ctx);
-    const std::string keypoint_stem =
-        ctx.image1_path.stem().string() + "_" + ctx.image2_path.stem().string() + "_" +
-        (_active_extractor ? _active_extractor->name() : std::string("UNK"));
+    const std::string keypoint_stem = stem;
 
     // 2. 按配置保存 source / target 关键点可视化。
     if (_config.draw_keypoints) {

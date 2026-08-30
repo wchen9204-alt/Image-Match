@@ -218,8 +218,15 @@ struct PipelineConfig {
     /// 点特征首选结果未通过图像级质量验证时使用的多层暗部回退配置。
     struct MultilayerDarkFallbackConfig {
         bool enabled = false;
-        /// 每层保留 [0, threshold] 范围内的暗部灰度结构，按 YAML 顺序处理。
-        std::vector<int> thresholds = {64, 128, 192};
+        /// 多层暗部提取层数；阈值按参考公式从 255 均匀递减生成。
+        int layer_count = 10;
+        /// 首选结果触发多层暗部前要求达到的单侧前景重合率。
+        /// source / target 任一侧达到该阈值即可继续 FAST。
+        double min_foreground_overlap_ratio = 0.75;
+        /// 首选结果触发多层暗部前允许的重合区域高度差 P90。
+        double max_height_difference = 0.10;
+        /// 首选结果触发多层暗部前要求达到的几何内点率。
+        double min_inlier_ratio = 0.15;
     };
 
     std::string name;
