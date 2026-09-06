@@ -29,10 +29,10 @@ params:
   # 注意：OpenCV estimateAffinePartial2D 不支持 USAC_MAGSAC，若配置会自动回退 RANSAC。
   method: RANSAC
 
-  # RANSAC 内点重投影误差阈值，单位像素；OpenCV 默认 5.0。
-  ransacReprojThreshold: 5
+  # RANSAC 内点重投影误差阈值，单位像素。
+  ransacReprojThreshold: 3
 
-  # RANSAC 最大迭代次数；参考刚体 RANSAC 默认 1000。
+  # RANSAC 最大迭代次数。
   maxIters: 1000
 
   # RANSAC 置信度；OpenCV 默认 0.99。
@@ -41,8 +41,8 @@ params:
   # OpenCV partial affine 细化迭代次数；OpenCV 默认 10。
   refineIters: 10
 
-  # 判定几何结果有效所需的最少内点数；默认 2。
-  minInliers: 2
+  # FAST/Rigid 首选几何结果有效所需的最少内点数。
+  minInliers: 6
 
   # 是否从 filtered_matches 额外抽取严格 rigid 候选；默认 true。
   # 开启且候选前置条件满足时始终执行，不受 baseline 是否成功影响。
@@ -74,12 +74,30 @@ params:
 
   # 多层暗部 fallback 的投票与严格刚体 RANSAC 参数；普通 rigid 后端不读取此节点。
   multilayer_dark:
+    # 多层暗部候选通过 RANSAC 所需的最少内点数。
     min_inliers: 6
+    # 投票方式：KEYPOINT_ANGLE 使用关键点自身方向差（当前默认）；
+    # POINT_PAIR 使用两图关键点连线的方向差与位移进行点对投票。
+    voting_method: KEYPOINT_ANGLE
     rotation_bin_degrees: 5.0
     translation_bin_size: 10.0
+    # 多层关键点预过滤开关。过滤发生在关键点合并、原图描述子计算之后，KNN 之前；
+    # KEYPOINT_ANGLE 和 POINT_PAIR 两种投票方式都可独立使用。
+    keypoint_filter_enabled: true
+    # 开启预过滤后，先按 response 过滤，再在每个 grid 内保留 response 最高的若干关键点。
+    keypoint_filter_response_threshold: 0.008
+    keypoint_filter_grid_size: 50.0
+    keypoint_filter_max_keypoints_per_grid: 10
+    # 两图点对距离的候选容差、每个外层点对的最多候选数。
+    point_pair_distance_tolerance: 3.0
+    point_pair_max_candidates: 64
+    # 最小点对距离 = 两图中较小前景包围盒宽度 * 此比例。
+    point_pair_min_distance_ratio: 0.5
+    # 同一几何点对两端独立计算的平移分量允许的最大差值。
+    point_pair_translation_tolerance: 10.0
     reprojection_threshold: 3.0
     ransac_iterations: 1000
-    max_clusters: 5
+    max_clusters: 10
 
   # 候选 mask 评分使用的前景二值化阈值。
   candidateMaskForegroundThreshold: 10

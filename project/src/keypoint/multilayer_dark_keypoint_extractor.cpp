@@ -16,7 +16,7 @@ namespace ir {
 
 namespace {
 
-/// 参考多层暗部流程：保留阈值以下像素，再拉伸有效暗部灰度范围。
+/// 多层暗部流程：保留阈值以下像素，再拉伸有效暗部灰度范围。
 cv::Mat buildDarkFeatureLayer(const cv::Mat& gray, const int threshold) {
     cv::Mat layer = cv::Mat::zeros(gray.size(), CV_8UC1);
     const cv::Mat dark_mask = gray <= threshold;
@@ -107,7 +107,7 @@ bool computeOriginalDescriptors(const cv::Mat& gray,
     if (extractor.empty()) {
         return false;
     }
-    // 描述子回到原始灰度图计算，与参考多层 AKAZE 流程保持一致。
+    // 描述子回到原始灰度图计算，保证不同暗部层的描述子处于同一灰度基准。
     extractor->compute(gray, keypoints, descriptors);
     return !keypoints.empty() && !descriptors.empty() &&
            descriptors.rows == static_cast<int>(keypoints.size());

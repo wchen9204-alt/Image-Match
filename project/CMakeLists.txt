@@ -25,19 +25,35 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # ---------------------------------------------------------------------------
 # OpenCV configuration
 # ---------------------------------------------------------------------------
-set(OPENCV_INSTALL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../deps/opencv-455-contrib-install" CACHE PATH "OpenCV installation root")
+if(MSVC)
+    set(_opencv_default_root "${CMAKE_CURRENT_SOURCE_DIR}/../deps/opencv-4120/opencv/install-msvc-contrib")
+    set(_opencv_contrib_library_default "${_opencv_default_root}/x64/vc17/lib")
+    set(_opencv_contrib_runtime_default "${_opencv_default_root}/x64/vc17/bin")
+else()
+    set(_opencv_default_root "${CMAKE_CURRENT_SOURCE_DIR}/../deps/opencv-455-contrib-install")
+    set(_opencv_contrib_library_default "${_opencv_default_root}/x64/mingw/lib")
+    set(_opencv_contrib_runtime_default "${_opencv_default_root}/x64/mingw/bin")
+endif()
+
+set(OPENCV_INSTALL_ROOT "${_opencv_default_root}" CACHE PATH "OpenCV installation root")
 list(APPEND CMAKE_PREFIX_PATH "${OPENCV_INSTALL_ROOT}")
+
+set(_opencv_components
+    core
+    imgproc
+    highgui
+    features2d
+    imgcodecs
+    flann
+    calib3d
+    video)
+if(MSVC)
+    list(APPEND _opencv_components xfeatures2d ximgproc)
+endif()
 
 find_package(OpenCV CONFIG REQUIRED
     COMPONENTS
-        core
-        imgproc
-        highgui
-        features2d
-        imgcodecs
-        flann
-        calib3d
-        video
+        ${_opencv_components}
     OPTIONAL_COMPONENTS
         line_descriptor
         optflow
@@ -46,13 +62,13 @@ find_package(OpenCV CONFIG REQUIRED
 # 当前机器保留的 OpenCV 4.5.5 安装只导出了标准模块的 CMake 配置，
 # contrib 的 xfeatures2d/ximgproc 导入库仍由同一套构建产物提供。
 set(OPENCV_CONTRIB_LIBRARY_DIR
-    "${OPENCV_INSTALL_ROOT}/x64/mingw/lib"
+    "${_opencv_contrib_library_default}"
     CACHE PATH "OpenCV contrib import-library directory")
 set(OPENCV_CONTRIB_INCLUDE_DIR
     "${OPENCV_INSTALL_ROOT}/include"
     CACHE PATH "OpenCV contrib include directory")
 set(OPENCV_CONTRIB_RUNTIME_DIR
-    "${OPENCV_INSTALL_ROOT}/x64/mingw/bin"
+    "${_opencv_contrib_runtime_default}"
     CACHE PATH "OpenCV contrib runtime-DLL directory")
 foreach(header
         "${OPENCV_CONTRIB_INCLUDE_DIR}/opencv2/xfeatures2d.hpp"
@@ -62,13 +78,15 @@ foreach(header
         message(FATAL_ERROR "OpenCV contrib header not found: ${header}")
     endif()
 endforeach()
-foreach(module xfeatures2d ximgproc)
-    set(module_library "${OPENCV_CONTRIB_LIBRARY_DIR}/libopencv_${module}455.dll.a")
-    if(NOT EXISTS "${module_library}")
-        message(FATAL_ERROR "OpenCV contrib import library not found: ${module_library}")
-    endif()
-    list(APPEND OpenCV_LIBS "${module_library}")
-endforeach()
+if(NOT MSVC)
+    foreach(module xfeatures2d ximgproc)
+        set(module_library "${OPENCV_CONTRIB_LIBRARY_DIR}/libopencv_${module}455.dll.a")
+        if(NOT EXISTS "${module_library}")
+            message(FATAL_ERROR "OpenCV contrib import library not found: ${module_library}")
+        endif()
+        list(APPEND OpenCV_LIBS "${module_library}")
+    endforeach()
+endif()
 message(STATUS "OpenCV version: ${OpenCV_VERSION}")
 if(OpenCV_line_descriptor_FOUND)
     message(STATUS "OpenCV line_descriptor module: FOUND")
@@ -84,7 +102,12 @@ endif()
 # ---------------------------------------------------------------------------
 # yaml-cpp configuration
 # ---------------------------------------------------------------------------
-set(YAML_CPP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../deps/yaml-cpp-install-local" CACHE PATH "yaml-cpp installation root")
+if(MSVC)
+    set(_yaml_cpp_default_root "${CMAKE_CURRENT_SOURCE_DIR}/../deps/yaml-cpp-install-msvc")
+else()
+    set(_yaml_cpp_default_root "${CMAKE_CURRENT_SOURCE_DIR}/../deps/yaml-cpp-install-local")
+endif()
+set(YAML_CPP_ROOT "${_yaml_cpp_default_root}" CACHE PATH "yaml-cpp installation root")
 list(APPEND CMAKE_PREFIX_PATH "${YAML_CPP_ROOT}")
 
 find_package(yaml-cpp CONFIG REQUIRED)
@@ -161,24 +184,13 @@ set_target_properties(registration_app PROPERTIES
 
 if(WIN32)
     file(GLOB OPENCV_RUNTIME_DLLS
-        "${OPENCV_INSTALL_ROOT}/x64/mingw/bin/*.dll"
+        "${OPENCV_CONTRIB_RUNTIME_DIR}/*.dll"
     )
 
     if(OPENCV_RUNTIME_DLLS)
         add_custom_command(TARGET registration_app POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${OPENCV_RUNTIME_DLLS}
-                $<TARGET_FILE_DIR:registration_app>
-        )
-    endif()
-
-    file(GLOB OPENCV_CONTRIB_RUNTIME_DLLS
-        "${OPENCV_CONTRIB_RUNTIME_DIR}/*.dll"
-    )
-    if(OPENCV_CONTRIB_RUNTIME_DLLS)
-        add_custom_command(TARGET registration_app POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${OPENCV_CONTRIB_RUNTIME_DLLS}
                 $<TARGET_FILE_DIR:registration_app>
         )
     endif()

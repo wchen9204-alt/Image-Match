@@ -530,177 +530,25 @@ std::string buildSummaryJson(const RegistrationContext& ctx,
         << json_output::escapeString(r.edge_structure_status) << "\",\n";
     oss << "    \"edge_structure_message\": \""
         << json_output::escapeString(r.edge_structure_message) << "\",\n";
-    oss << "    \"edge_structure_source_foreground_elongation_ratio\": "
-        << r.edge_structure_source_foreground_elongation_ratio << ",\n";
-    oss << "    \"edge_structure_target_foreground_elongation_ratio\": "
-        << r.edge_structure_target_foreground_elongation_ratio << ",\n";
-    oss << "    \"edge_structure_source_axis_occupancy\": "
-        << r.edge_structure_source_axis_occupancy << ",\n";
-    oss << "    \"edge_structure_target_axis_occupancy\": "
-        << r.edge_structure_target_axis_occupancy << ",\n";
-    oss << "    \"edge_structure_source_centerline_deviation_ratio\": "
-        << r.edge_structure_source_centerline_deviation_ratio << ",\n";
-    oss << "    \"edge_structure_target_centerline_deviation_ratio\": "
-        << r.edge_structure_target_centerline_deviation_ratio << ",\n";
-    oss << "    \"edge_structure_source_foreground_long_side\": "
-        << r.edge_structure_source_foreground_long_side << ",\n";
-    oss << "    \"edge_structure_target_foreground_long_side\": "
-        << r.edge_structure_target_foreground_long_side << ",\n";
-    oss << "    \"edge_structure_common_canvas_width\": "
-        << r.edge_structure_common_canvas_width << ",\n";
-    oss << "    \"edge_structure_common_canvas_height\": "
-        << r.edge_structure_common_canvas_height << ",\n";
-    oss << "    \"edge_structure_common_canvas_offset_x\": "
-        << r.edge_structure_common_canvas_offset_x << ",\n";
-    oss << "    \"edge_structure_common_canvas_offset_y\": "
-        << r.edge_structure_common_canvas_offset_y << ",\n";
-    oss << "    \"edge_structure_source_visibility_pixels\": "
-        << r.edge_structure_source_visibility_pixels << ",\n";
-    oss << "    \"edge_structure_target_visibility_pixels\": "
-        << r.edge_structure_target_visibility_pixels << ",\n";
-    oss << "    \"edge_structure_common_visibility_pixels\": "
-        << r.edge_structure_common_visibility_pixels << ",\n";
     oss << "    \"edge_structure_visibility_area_ratio\": "
         << r.edge_structure_visibility_area_ratio << ",\n";
     oss << "    \"edge_structure_visibility_overlap_containment\": "
         << r.edge_structure_visibility_overlap_containment << ",\n";
-    oss << "    \"edge_structure_source_visibility_ratio\": "
-        << r.edge_structure_source_visibility_ratio << ",\n";
-    oss << "    \"edge_structure_target_visibility_ratio\": "
-        << r.edge_structure_target_visibility_ratio << ",\n";
-    oss << "    \"edge_structure_ps\": " << r.edge_structure_ps << ",\n";
-    oss << "    \"edge_structure_pt\": " << r.edge_structure_pt << ",\n";
-    oss << "    \"edge_structure_source_fragment_count\": "
-        << r.edge_structure_source_fragment_count << ",\n";
-    oss << "    \"edge_structure_target_fragment_count\": "
-        << r.edge_structure_target_fragment_count << ",\n";
-    oss << "    \"edge_structure_source_line_group_count\": "
-        << r.edge_structure_source_line_group_count << ",\n";
-    oss << "    \"edge_structure_target_line_group_count\": "
-        << r.edge_structure_target_line_group_count << ",\n";
-    oss << "    \"edge_structure_source_valid_line_group_count\": "
-        << r.edge_structure_source_valid_line_group_count << ",\n";
-    oss << "    \"edge_structure_target_valid_line_group_count\": "
-        << r.edge_structure_target_valid_line_group_count << ",\n";
-    oss << "    \"edge_structure_source_main_line_group_count\": "
-        << r.edge_structure_source_main_line_group_count << ",\n";
-    oss << "    \"edge_structure_target_main_line_group_count\": "
-        << r.edge_structure_target_main_line_group_count << ",\n";
-    oss << "    \"edge_structure_source_main_direction_reliable\": "
-        << (r.edge_structure_source_main_direction_reliable ? "true" : "false") << ",\n";
-    oss << "    \"edge_structure_target_main_direction_reliable\": "
-        << (r.edge_structure_target_main_direction_reliable ? "true" : "false") << ",\n";
-    oss << "    \"edge_structure_source_main_direction_degrees\": "
-        << r.edge_structure_source_main_direction_degrees << ",\n";
-    oss << "    \"edge_structure_target_main_direction_degrees\": "
-        << r.edge_structure_target_main_direction_degrees << ",\n";
-    oss << "    \"edge_structure_source_main_direction_support_ratio\": "
-        << r.edge_structure_source_main_direction_support_ratio << ",\n";
-    oss << "    \"edge_structure_target_main_direction_support_ratio\": "
-        << r.edge_structure_target_main_direction_support_ratio << ",\n";
-    oss << "    \"edge_structure_source_main_direction_spread_degrees\": "
-        << r.edge_structure_source_main_direction_spread_degrees << ",\n";
-    oss << "    \"edge_structure_target_main_direction_spread_degrees\": "
-        << r.edge_structure_target_main_direction_spread_degrees << ",\n";
-    oss << "    \"edge_structure_source_main_direction_margin\": "
-        << r.edge_structure_source_main_direction_margin << ",\n";
-    oss << "    \"edge_structure_target_main_direction_margin\": "
-        << r.edge_structure_target_main_direction_margin << ",\n";
-    oss << "    \"edge_structure_source_main_max_actual_length_ratio\": "
-        << r.edge_structure_source_main_max_actual_length_ratio << ",\n";
-    oss << "    \"edge_structure_target_main_max_actual_length_ratio\": "
-        << r.edge_structure_target_main_max_actual_length_ratio << ",\n";
-    oss << "    \"edge_structure_main_direction_difference_degrees\": "
-        << r.edge_structure_main_direction_difference_degrees << ",\n";
-    oss << "    \"edge_structure_reference_direction_degrees\": "
-        << r.edge_structure_reference_direction_degrees << ",\n";
     oss << "    \"edge_structure_horizontal\": {\n";
     oss << "      \"status\": \""
         << json_output::escapeString(r.edge_structure_horizontal_status) << "\",\n";
-    oss << "      \"source_eligible_line_groups\": "
-        << r.edge_structure_source_horizontal_eligible_line_groups << ",\n";
-    oss << "      \"target_eligible_line_groups\": "
-        << r.edge_structure_target_horizontal_eligible_line_groups << ",\n";
-    oss << "      \"candidate_pairs\": "
-        << r.edge_structure_horizontal_candidate_pairs << ",\n";
     oss << "      \"accepted_matches\": "
         << r.edge_structure_horizontal_accepted_matches << ",\n";
     oss << "      \"Hs\": " << r.edge_structure_source_horizontal_match_ratio << ",\n";
-    oss << "      \"Ht\": " << r.edge_structure_target_horizontal_match_ratio << ",\n";
-    oss << "      \"source_matched_actual_length\": "
-        << r.edge_structure_source_horizontal_matched_actual_length << ",\n";
-    oss << "      \"target_matched_actual_length\": "
-        << r.edge_structure_target_horizontal_matched_actual_length << ",\n";
-    oss << "      \"strong_conflict_count\": "
-        << r.edge_structure_horizontal_strong_conflict_count << ",\n";
-    oss << "      \"source_strong_conflict_actual_length\": "
-        << r.edge_structure_source_horizontal_strong_conflict_actual_length << ",\n";
-    oss << "      \"target_strong_conflict_actual_length\": "
-        << r.edge_structure_target_horizontal_strong_conflict_actual_length << ",\n";
-    oss << "      \"source_strong_conflict_length_ratio\": "
-        << r.edge_structure_source_horizontal_strong_conflict_length_ratio << ",\n";
-    oss << "      \"target_strong_conflict_length_ratio\": "
-        << r.edge_structure_target_horizontal_strong_conflict_length_ratio << ",\n";
-    oss << "      \"source_unmatched_actual_length\": "
-        << r.edge_structure_source_horizontal_unmatched_actual_length << ",\n";
-    oss << "      \"target_unmatched_actual_length\": "
-        << r.edge_structure_target_horizontal_unmatched_actual_length << ",\n";
-    oss << "      \"source_unmatched_length_ratio\": "
-        << r.edge_structure_source_horizontal_unmatched_length_ratio << ",\n";
-    oss << "      \"target_unmatched_length_ratio\": "
-        << r.edge_structure_target_horizontal_unmatched_length_ratio << ",\n";
-    oss << "      \"ambiguous_match_count\": "
-        << r.edge_structure_horizontal_ambiguous_match_count << ",\n";
-    oss << "      \"ambiguous_actual_length_ratio\": "
-        << r.edge_structure_horizontal_ambiguous_actual_length_ratio << ",\n";
-    oss << "      \"matched_angle_difference_mean_degrees\": "
-        << r.edge_structure_horizontal_matched_angle_difference_mean_degrees << ",\n";
-    oss << "      \"matched_angle_difference_max_degrees\": "
-        << r.edge_structure_horizontal_matched_angle_difference_max_degrees << "\n";
+    oss << "      \"Ht\": " << r.edge_structure_target_horizontal_match_ratio << "\n";
     oss << "    },\n";
     oss << "    \"edge_structure_vertical\": {\n";
     oss << "      \"status\": \""
         << json_output::escapeString(r.edge_structure_vertical_status) << "\",\n";
-    oss << "      \"source_eligible_line_groups\": "
-        << r.edge_structure_source_vertical_eligible_line_groups << ",\n";
-    oss << "      \"target_eligible_line_groups\": "
-        << r.edge_structure_target_vertical_eligible_line_groups << ",\n";
-    oss << "      \"candidate_pairs\": "
-        << r.edge_structure_vertical_candidate_pairs << ",\n";
     oss << "      \"accepted_matches\": "
         << r.edge_structure_vertical_accepted_matches << ",\n";
     oss << "      \"Vs\": " << r.edge_structure_source_vertical_match_ratio << ",\n";
-    oss << "      \"Vt\": " << r.edge_structure_target_vertical_match_ratio << ",\n";
-    oss << "      \"source_matched_actual_length\": "
-        << r.edge_structure_source_vertical_matched_actual_length << ",\n";
-    oss << "      \"target_matched_actual_length\": "
-        << r.edge_structure_target_vertical_matched_actual_length << ",\n";
-    oss << "      \"strong_conflict_count\": "
-        << r.edge_structure_vertical_strong_conflict_count << ",\n";
-    oss << "      \"source_strong_conflict_actual_length\": "
-        << r.edge_structure_source_vertical_strong_conflict_actual_length << ",\n";
-    oss << "      \"target_strong_conflict_actual_length\": "
-        << r.edge_structure_target_vertical_strong_conflict_actual_length << ",\n";
-    oss << "      \"source_strong_conflict_length_ratio\": "
-        << r.edge_structure_source_vertical_strong_conflict_length_ratio << ",\n";
-    oss << "      \"target_strong_conflict_length_ratio\": "
-        << r.edge_structure_target_vertical_strong_conflict_length_ratio << ",\n";
-    oss << "      \"source_unmatched_actual_length\": "
-        << r.edge_structure_source_vertical_unmatched_actual_length << ",\n";
-    oss << "      \"target_unmatched_actual_length\": "
-        << r.edge_structure_target_vertical_unmatched_actual_length << ",\n";
-    oss << "      \"source_unmatched_length_ratio\": "
-        << r.edge_structure_source_vertical_unmatched_length_ratio << ",\n";
-    oss << "      \"target_unmatched_length_ratio\": "
-        << r.edge_structure_target_vertical_unmatched_length_ratio << ",\n";
-    oss << "      \"ambiguous_match_count\": "
-        << r.edge_structure_vertical_ambiguous_match_count << ",\n";
-    oss << "      \"ambiguous_actual_length_ratio\": "
-        << r.edge_structure_vertical_ambiguous_actual_length_ratio << ",\n";
-    oss << "      \"matched_angle_difference_mean_degrees\": "
-        << r.edge_structure_vertical_matched_angle_difference_mean_degrees << ",\n";
-    oss << "      \"matched_angle_difference_max_degrees\": "
-        << r.edge_structure_vertical_matched_angle_difference_max_degrees << "\n";
+    oss << "      \"Vt\": " << r.edge_structure_target_vertical_match_ratio << "\n";
     oss << "    },\n";
     oss << "    \"warp_height_diff_valid_count\": " << r.warp_height_diff_valid_count << ",\n";
     oss << "    \"warp_height_diff_overlap_ratio\": " << r.warp_height_diff_overlap_ratio << ",\n";
@@ -982,10 +830,8 @@ void writeBatchHtmlReport(const std::filesystem::path& pipeline_root,
             "background:#fff;border:1px solid #d5ddea;border-radius:8px;padding:16px}.value{font-size:24px;"
             "font-weight:700}.label{color:#52627a;font-size:12px;margin-top:8px}.case{background:#fff;"
             "border:1px solid #d5ddea;border-radius:8px;margin:0 0 12px;overflow:hidden}.case-head{"
-            "display:flex;justify-content:space-between;align-items:center;padding:14px 18px;"
-            "border-bottom:1px solid #d5ddea}.case h2{font-size:17px;margin:0}.status{border-radius:16px;"
-            "padding:6px 12px;font-size:12px;font-weight:700;color:#fff}.passed{background:#087f3f}.failed{"
-             "background:#b3261e}.missing{background:#7a5c00}.case-body{padding:12px 18px}.meta{color:#52627a;"
+             "display:flex;align-items:center;padding:14px 18px;"
+             "border-bottom:1px solid #d5ddea}.case h2{font-size:17px;margin:0}.case-body{padding:12px 18px}.meta{color:#52627a;"
              "font-size:13px;margin-bottom:12px}.images{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.image-cell{min-width:0}.image-label{font-size:12px;font-weight:700;color:#52627a;margin-bottom:6px}.case img{display:block;width:100%;height:260px;object-fit:contain;background:#000}.notice{color:#b3261e;"
              "padding:12px 0;font-size:13px}@media(max-width:800px){.summary{grid-template-columns:repeat(2,1fr)}.images{grid-template-columns:1fr}}"
              "</style></head><body>";
@@ -1000,17 +846,13 @@ void writeBatchHtmlReport(const std::filesystem::path& pipeline_root,
          << "</div><div class=\"label\">MULTILAYER</div></div></div>";
 
     for (size_t index = 0; index < sample_names.size(); ++index) {
-        const bool isPassed = index < results.size() && results[index].success;
-        const std::string status = isPassed ? "PASSED" : "FAILED";
-        const std::string statusClass = isPassed ? "passed" : "failed";
         const std::string name = htmlEscape(sample_names[index]);
         const RegistrationResult* result = index < results.size() ? &results[index] : nullptr;
         const std::string strategy = result && !result->registration_strategy.empty()
             ? result->registration_strategy : "UNKNOWN";
         const double elapsedMs = result ? result->t_total_ms : 0.0;
         html << "<section class=\"case\"><div class=\"case-head\"><h2>" << name
-             << "</h2><span class=\"status " << statusClass << "\">" << status
-             << "</span></div><div class=\"case-body\"><div class=\"meta\">方案："
+             << "</h2></div><div class=\"case-body\"><div class=\"meta\">方案："
              << htmlEscape(strategy) << "　耗时：" << std::fixed << std::setprecision(2)
              << elapsedMs << " ms</div><div class=\"images\">";
         const fs::path imageRoot = assets_root.empty() ? pipeline_root : assets_root;

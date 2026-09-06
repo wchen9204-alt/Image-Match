@@ -37,7 +37,7 @@ feature_initializer:
   # 初值使用策略：ACCEPTED_ONLY 仅使用通过完整质量门控的点特征结果。
   # ESTIMATED_WHEN_AVAILABLE 会使用已估计出的合法变换；没有合法矩阵时仍直接使用原图。
   seed_mode: ACCEPTED_ONLY
-  # 直接法最终成功判定参考；可选 DIRECT_ONLY / BEST_OF_DIRECT_AND_INITIALIZER。
+  # 直接法最终成功判定来源；可选 DIRECT_ONLY / BEST_OF_DIRECT_AND_INITIALIZER。
   # DIRECT_ONLY: 只用直接法最终 warp 结果做成功判定。
   # BEST_OF_DIRECT_AND_INITIALIZER: direct 和已接受的点特征初值分别按各自规则判定；
   # 若只有一方成功则直接采用成功方，若两者都成功则比较双方质量后选择更优结果。

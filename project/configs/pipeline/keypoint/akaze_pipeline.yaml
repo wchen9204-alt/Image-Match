@@ -25,11 +25,11 @@ filters:
 multilayer_dark_fallback:
   enabled: true
   # 首选结果未达到以下任一门槛时，进入多层暗部重试。
-  # 与参考 FAST 一致：仅当 source、target 两侧前景重合率都低于该值时，切换多层暗部。
+  # 仅当 source、target 两侧前景重合率都低于该值时，切换多层暗部。
   min_foreground_overlap_ratio: 0.75
   max_height_difference: 0.10
   min_inlier_ratio: 0.15
-  # 阈值按参考代码公式从 255 均匀递减生成。
+  # 阈值按灰度范围从 255 均匀递减生成。
   layer_count: 10
 
 # 支持的几何模型：

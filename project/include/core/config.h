@@ -29,7 +29,7 @@ enum class StructureMatchSource {
     INLIERS
 };
 
-/// 直接法最终成功判定时，如何参考点特征初始化结果。
+/// 直接法最终成功判定时，如何使用点特征初始化结果。
 enum class DirectValidationReferenceMode {
     /// 只使用直接法最终输出的 warp 质量作为成功判定依据。
     DIRECT_ONLY,
@@ -218,7 +218,7 @@ struct PipelineConfig {
     /// 点特征首选结果未通过图像级质量验证时使用的多层暗部回退配置。
     struct MultilayerDarkFallbackConfig {
         bool enabled = false;
-        /// 多层暗部提取层数；阈值按参考公式从 255 均匀递减生成。
+        /// 多层暗部提取层数；阈值从 255 均匀递减生成。
         int layer_count = 10;
         /// 首选结果触发多层暗部前要求达到的单侧前景重合率。
         /// source / target 任一侧达到该阈值即可继续 FAST。

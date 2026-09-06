@@ -168,21 +168,24 @@ bool KeypointPipeline::configureStages(const PipelineConfig& cfg) {
             keypoint_cfg, cfg.multilayer_dark_fallback.layer_count);
     }
 
-    // 3. 从 matcher YAML 创建描述子匹配器。
+    // 3. 几何配置同时决定多层点对投票是否在 KNN 前预过滤关键点。
+    const YAML::Node geometry_cfg = Config::load(cfg.geometry_path);
+
+    // 4. 从 matcher YAML 创建描述子匹配器。
     const YAML::Node matcher_cfg = Config::load(cfg.matcher_path);
     _matcher = Factory::createMatcher(matcher_cfg);
     _active_matcher = _matcher;
     if (cfg.multilayer_dark_fallback.enabled) {
-        _multilayer_dark_matcher = std::make_shared<MultilayerDarkBfMatcher>(matcher_cfg);
+        _multilayer_dark_matcher = std::make_shared<MultilayerDarkBfMatcher>(
+            matcher_cfg, geometry_cfg);
     }
 
-    // 4. 按 pipeline YAML 顺序创建匹配过滤器链。
+    // 5. 按 pipeline YAML 顺序创建匹配过滤器链。
     for (const auto& fp : cfg.filter_paths) {
         _filters.push_back(Factory::createFilter(Config::load(fp)));
     }
 
-    // 5. 创建几何估计器，后续由 runEstimation 调用。
-    const YAML::Node geometry_cfg = Config::load(cfg.geometry_path);
+    // 6. 创建几何估计器，后续由 runEstimation 调用。
     _geometry = Factory::createGeometryEstimator(geometry_cfg);
     _active_geometry = _geometry;
     if (cfg.multilayer_dark_fallback.enabled) {
@@ -254,7 +257,7 @@ bool KeypointPipeline::runFilters(RegistrationContext& ctx) {
     ScopedTimer st(ctx.result.t_filter_ms);
     auto& md = ctx.keypoint_match_data;
 
-    // 多层暗部匹配器已经按参考流程生成扩展候选，不再经过普通过滤器链。
+    // 多层暗部匹配器已经生成扩展候选，不再经过普通过滤器链。
     if (_active_matcher != _matcher) {
         ctx.result.num_filtered_matches = static_cast<int>(md.filtered_matches.size());
         return !md.filtered_matches.empty();
@@ -275,13 +278,8 @@ bool KeypointPipeline::runFilters(RegistrationContext& ctx) {
         }
     }
 
-    // 3. 所有过滤器都未保留候选时，回退到 raw，避免空集合直接进入几何阶段。
-    if (md.filtered_matches.empty() && !md.raw_matches.empty()) {
-        const size_t restored_count = md.raw_matches.size();
-        md.restoreFilteredMatchesFromRaw();
-        IR_LOG_WARN("All filters rejected candidates; restored ", restored_count, " raw matches.");
-    }
-    // 4. 记录最终进入几何估计的匹配数量。
+    // 3. 保留过滤器的实际输出；若结果为空，后续几何估计失败并触发 fallback。
+    //    这里不恢复 raw matches，避免绕过比例测试重新接受歧义匹配。
     ctx.result.num_filtered_matches = static_cast<int>(md.filtered_matches.size());
     return ok;
 }
@@ -352,7 +350,7 @@ bool KeypointPipeline::passMultilayerDarkFallbackGate(
         return false;
     }
 
-    // 3. 按参考 FAST 流程分别计算 source / target 前景重合率；仅两者都不足时拒绝。
+    // 3. 分别计算 source / target 前景重合率；仅两者都不足时拒绝。
     cv::Mat source_mask;
     cv::Mat target_mask;
     cv::Mat warped_source_mask;

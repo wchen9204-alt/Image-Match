@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -83,7 +84,7 @@ inline void collectMaskedPoints(const std::vector<cv::Point2f>& src,
     }
 }
 
-/// 用参考实现的质心、叉积和点积估计无缩放刚体变换。
+/// 使用质心、叉积和点积估计无缩放刚体变换。
 /// 这是纯 rigid 约束的最小二乘回归步骤，不包含 RANSAC。
 inline bool estimateRigidNoScale2D(const std::vector<cv::Point2f>& src,
                                    const std::vector<cv::Point2f>& dst,
@@ -216,19 +217,13 @@ inline bool estimateRigidRansacNoScale2D(const std::vector<cv::Point2f>& src,
     std::vector<unsigned char> bestMask;
     int bestInliers = 0;
 
-    // 沿用项目原有随机采样实现，固定种子保证结果可复现。
-    cv::RNG rng(0x5EED1234u);
+    // 固定种子保证每次运行的采样序列可复现。
+    std::mt19937 rng(42);
+    std::uniform_int_distribution<size_t> distribution(0, n - 1);
     const int iterations = std::max(1, maxIters);
     for (int iter = 0; iter < iterations; ++iter) {
-        size_t i = 0;
-        size_t j = 1;
-        if (n > 2) {
-            i = static_cast<size_t>(rng.uniform(0, static_cast<int>(n)));
-            j = static_cast<size_t>(rng.uniform(0, static_cast<int>(n - 1)));
-            if (j >= i) {
-                ++j;
-            }
-        }
+        const size_t i = distribution(rng);
+        const size_t j = distribution(rng);
         if (i == j) {
             continue;
         }
@@ -257,7 +252,7 @@ inline bool estimateRigidRansacNoScale2D(const std::vector<cv::Point2f>& src,
                         bestInliers);
         }
 
-        // 参考实现只按内点数量选模，平局时保留先出现的模型。
+        // 只按内点数量选模，平局时保留先出现的模型。
         if (candidateInliers > bestInliers) {
             bestInliers = candidateInliers;
             bestA = candidateA;
@@ -280,7 +275,7 @@ inline bool estimateRigidRansacNoScale2D(const std::vector<cv::Point2f>& src,
 }
 
 /// 基于已有内点掩码回归一次严格刚体模型，不迭代更新内点掩码。
-/// 这是参考实现的最终精修路径。
+/// 这是刚体模型的最终精修路径。
 inline bool refineRigidFromMask(const std::vector<cv::Point2f>& src,
                                 const std::vector<cv::Point2f>& dst,
                                 double threshold,
@@ -309,7 +304,7 @@ inline bool refineRigidFromMask(const std::vector<cv::Point2f>& src,
     }
 
     if (logIterations) {
-        IR_LOG_TRACE("Rigid reference refine inliers=", inlierSrc.size());
+        IR_LOG_TRACE("Rigid refine inliers=", inlierSrc.size());
     }
     mask = currentMask;
     return true;

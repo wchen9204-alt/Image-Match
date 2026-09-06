@@ -79,24 +79,36 @@ project/
 |   `-- SuperGluePretrainedNetwork/
 |-- datasets/
 |-- outputs/
-`-- build-mingw/
+`-- build-msvc-opencv412/
 ```
 
 完整目录说明见 `PROJECT_DIRECTORY_STRUCTURE_CN.md`。
 
 ## 构建
 
-当前本地构建目标是 MinGW：
+当前默认构建目标是 MSVC + OpenCV 4.12。构建目录使用 `NMake Makefiles`，因此必须先加载 Visual Studio 的 MSVC 开发环境。
+
+在“x64 Native Tools Command Prompt for VS 2022”中执行：
+
+```cmd
+cmake --build project/build-msvc-opencv412
+```
+
+如果从普通 PowerShell 执行，请使用：
 
 ```powershell
-cmake --build project/build-mingw
+cmd.exe /d /c 'call "E:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && cmake --build project/build-msvc-opencv412'
 ```
+
+如果 Visual Studio 安装在其他目录，请相应替换 `VsDevCmd.bat` 的路径。
 
 主程序：
 
 ```text
-project/build-mingw/bin/registration_app.exe
+project/build-msvc-opencv412/bin/registration_app.exe
 ```
+
+如使用 MinGW 构建，也可以将上述路径中的 `build-msvc-opencv412` 替换为 `build-mingw`。
 
 核心依赖：
 
@@ -109,16 +121,16 @@ project/build-mingw/bin/registration_app.exe
 运行一个 pipeline YAML：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/keypoint/orb_pipeline.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/keypoint/orb_pipeline.yaml
 ```
 
 按方法族的示例：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/keypoint/orb_pipeline.yaml
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/structure/line_pipeline.yaml
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/direct/frequency_direct_pipeline.yaml
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/learning/loftr_learning_pipeline.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/keypoint/orb_pipeline.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/structure/line_pipeline.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/direct/frequency_direct_pipeline.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/learning/loftr_learning_pipeline.yaml
 ```
 
 每个 pipeline 也可以通过 `io` 块覆盖输入图像和输出目录。
@@ -134,11 +146,11 @@ project/configs/pipeline/batch/
 示例：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/batch_keypoint.yaml
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/batch_structure.yaml
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/batch_direct.yaml
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/batch_learning.yaml
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/compare_direct.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/batch/batch_keypoint.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/batch/batch_structure.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/batch/batch_direct.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/batch/batch_learning.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/batch/compare_direct.yaml
 ```
 
 批处理会扫描配置的数据集根目录，对每个样本运行指定的单次 pipeline，
