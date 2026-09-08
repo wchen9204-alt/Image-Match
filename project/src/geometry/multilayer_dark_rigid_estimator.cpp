@@ -1,6 +1,7 @@
 #include "geometry/multilayer_dark_rigid_estimator.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <fstream>
@@ -93,6 +94,15 @@ struct RansacResult {
     bool success = false;
 };
 
+/// 保存一个刚体候选的三项图像评分分量和加权总分。
+struct RegistrationScore {
+    double source_overlap = 0.0;
+    double target_overlap = 0.0;
+    double gray_residual_p90 = 255.0;
+    double gray_similarity = 0.0;
+    double total = 0.0;
+};
+
 /// 保存单个投票簇的 RANSAC、评分和调试输出信息。
 struct ClusterReport {
     bool selected = false;
@@ -102,6 +112,10 @@ struct ClusterReport {
     bool ransac_attempted = false;
     bool ransac_success = false;
     int best_inliers = 0;
+    int raw_support_count = 0;
+    double raw_support_ratio = 0.0;
+    bool score_within_margin = false;
+    RegistrationScore registration_score;
     double score = 0.0;
     cv::Mat matrix;
     std::string status;
@@ -192,26 +206,36 @@ void writeClusterReport(const RegistrationContext& ctx,
         return;
     }
 
-    output << "rank,selected,judged,matches,ransac_attempted,ransac_matches,"
-              "gray_diff_p90,gray_diff_p90_normalized,rotation_deg,tx,ty,status\n";
+    output << "rank,selected,score_within_margin,judged,matches,ransac_attempted,ransac_matches,"
+              "ransac_success,best_inliers,raw_support_count,raw_support_ratio,"
+              "score,source_overlap,target_overlap,"
+              "gray_diff_p90,gray_similarity,rotation_deg,tx,ty,status\n";
     output << std::fixed << std::setprecision(6);
     for (size_t index = 0; index < reports.size(); ++index) {
         const ClusterReport& report = reports[index];
         output << (index + 1) << ','
                << (report.selected ? "yes" : "no") << ','
+               << (report.score_within_margin ? "yes" : "no") << ','
                << (report.judged ? "yes" : "no") << ','
                << report.matches << ','
                << (report.ransac_attempted ? "yes" : "no") << ','
                << report.ransac_matches << ','
                << (report.ransac_success ? "true" : "false") << ','
-               << report.best_inliers << ',';
+               << report.best_inliers << ','
+               << report.raw_support_count << ','
+               << report.raw_support_ratio << ',';
         if (!report.ransac_success) {
-            output << "n/a,n/a,n/a,n/a,";
+            output << "n/a,n/a,n/a,n/a,n/a,n/a,n/a,n/a,n/a,n/a,";
         } else {
             const double rotation = std::atan2(
                 report.matrix.at<double>(1, 0), report.matrix.at<double>(0, 0)) *
                 180.0 / CV_PI;
-            output << report.score << ',' << rotation << ','
+            output << report.score << ','
+                   << report.registration_score.source_overlap << ','
+                   << report.registration_score.target_overlap << ','
+                   << report.registration_score.gray_residual_p90 << ','
+                   << report.registration_score.gray_similarity << ','
+                   << rotation << ','
                    << report.matrix.at<double>(0, 2) << ','
                    << report.matrix.at<double>(1, 2) << ',';
         }
@@ -351,10 +375,59 @@ double percentile90(std::vector<double> values) {
     return values[index];
 }
 
-/// 根据前景重叠率和重叠区域灰度差评价刚体模型质量。
-double scoreRegistration(const cv::Mat& source_gray,
-                         const cv::Mat& target_gray,
-                         const cv::Mat& matrix) {
+/// 统计候选刚体模型在全部 KNN 候选中的支持数量和支持率。
+std::pair<int, double> countRawSupports(
+    std::span<const cv::KeyPoint> first_keypoints,
+    std::span<const cv::KeyPoint> second_keypoints,
+    const std::vector<std::vector<cv::DMatch>>& knn_matches,
+    const cv::Mat& matrix,
+    double reprojection_threshold) {
+    size_t total_count = 0;
+    for (const auto& neighbours : knn_matches) {
+        total_count += neighbours.size();
+    }
+    if (matrix.empty() || total_count == 0) {
+        return {0, 0.0};
+    }
+
+    const double threshold_squared = reprojection_threshold * reprojection_threshold;
+    int support_count = 0;
+    for (const auto& neighbours : knn_matches) {
+        for (const auto& match : neighbours) {
+            if (match.queryIdx < 0 || match.trainIdx < 0 ||
+                match.queryIdx >= static_cast<int>(first_keypoints.size()) ||
+                match.trainIdx >= static_cast<int>(second_keypoints.size())) {
+                continue;
+            }
+            const cv::Point2f projected = applyRigid(
+                matrix, first_keypoints[static_cast<size_t>(match.queryIdx)].pt);
+            const cv::Point2f target =
+                second_keypoints[static_cast<size_t>(match.trainIdx)].pt;
+            const double dx = static_cast<double>(projected.x) - target.x;
+            const double dy = static_cast<double>(projected.y) - target.y;
+            if (dx * dx + dy * dy <= threshold_squared) {
+                ++support_count;
+            }
+        }
+    }
+    return {support_count,
+            static_cast<double>(support_count) /
+                static_cast<double>(total_count)};
+}
+
+/// 根据前景重叠率和带 2 px 位置容差的局部灰度差评价刚体模型质量。
+RegistrationScore scoreRegistration(const cv::Mat& source_gray,
+                                    const cv::Mat& target_gray,
+                                    const cv::Mat& matrix) {
+    constexpr std::array<std::pair<int, int>, 13> gray_search_offsets{{
+        {0, -2},
+        {-1, -1}, {0, -1}, {1, -1},
+        {-2, 0}, {-1, 0}, {0, 0}, {1, 0}, {2, 0},
+        {-1, 1}, {0, 1}, {1, 1},
+        {0, 2}
+    }};
+
+    RegistrationScore result;
     cv::Mat warped_source;
     cv::warpAffine(source_gray,
                    warped_source,
@@ -381,8 +454,11 @@ double scoreRegistration(const cv::Mat& source_gray,
     const double target_area = static_cast<double>(cv::countNonZero(target_mask));
     const double overlap_area = static_cast<double>(cv::countNonZero(overlap_mask));
     if (source_area <= 0.0 || target_area <= 0.0) {
-        return 0.0;
+        return result;
     }
+
+    result.source_overlap = overlap_area / source_area;
+    result.target_overlap = overlap_area / target_area;
 
     std::vector<double> residuals;
     residuals.reserve(static_cast<size_t>(overlap_area));
@@ -391,14 +467,30 @@ double scoreRegistration(const cv::Mat& source_gray,
             if (overlap_mask.at<unsigned char>(y, x) == 0) {
                 continue;
             }
-            residuals.push_back(std::abs(
-                static_cast<double>(warped_source.at<unsigned char>(y, x)) -
-                static_cast<double>(target_gray.at<unsigned char>(y, x))));
+            const int source_gray_value = warped_source.at<unsigned char>(y, x);
+            int minimum_residual = 255;
+            for (const auto& [dx, dy] : gray_search_offsets) {
+                const int target_x = x + dx;
+                const int target_y = y + dy;
+                if (target_x < 0 || target_x >= target_gray.cols ||
+                    target_y < 0 || target_y >= target_gray.rows ||
+                    target_mask.at<unsigned char>(target_y, target_x) == 0) {
+                    continue;
+                }
+                minimum_residual = std::min(
+                    minimum_residual,
+                    std::abs(source_gray_value -
+                             static_cast<int>(target_gray.at<unsigned char>(target_y, target_x))));
+            }
+            residuals.push_back(static_cast<double>(minimum_residual));
         }
     }
-    return 0.4 * overlap_area / source_area +
-           0.4 * overlap_area / target_area +
-           0.2 * (1.0 - percentile90(std::move(residuals)) / 255.0);
+    result.gray_residual_p90 = percentile90(std::move(residuals));
+    result.gray_similarity = 1.0 - result.gray_residual_p90 / 255.0;
+    result.total = 0.40 * result.source_overlap +
+                   0.40 * result.target_overlap +
+                   0.20 * result.gray_similarity;
+    return result;
 }
 
 } // namespace
@@ -417,6 +509,8 @@ MultilayerDarkRigidEstimator::MultilayerDarkRigidEstimator(const YAML::Node& cfg
     _ransac_iterations = std::max(
         1, yaml_utils::getInt(options, "ransac_iterations", 1000));
     _max_clusters = std::max(1, yaml_utils::getInt(options, "max_clusters", 5));
+    _score_tie_margin = std::max(
+        0.0, yaml_utils::getDouble(options, "score_tie_margin", 0.03));
     _voting_method = yaml_utils::getString(options, "voting_method", "KEYPOINT_ANGLE");
     std::transform(_voting_method.begin(), _voting_method.end(), _voting_method.begin(),
                    [](unsigned char value) { return static_cast<char>(std::toupper(value)); });
@@ -645,6 +739,8 @@ bool MultilayerDarkRigidEstimator::estimate(RegistrationContext& ctx) {
         double score = 0.0;
         int inlier_count = 0;
         double inlier_ratio = 0.0;
+        int raw_support_count = 0;
+        double raw_support_ratio = 0.0;
         cv::Mat matrix;
         std::vector<unsigned char> mask;
         std::vector<cv::Point2f> source;
@@ -688,8 +784,17 @@ bool MultilayerDarkRigidEstimator::estimate(RegistrationContext& ctx) {
         report.ransac_success = true;
         report.best_inliers = candidate.inliers;
         report.matrix = candidate.matrix;
-        report.score = scoreRegistration(
+        report.registration_score = scoreRegistration(
             ctx.images.first_gray, ctx.images.second_gray, candidate.matrix);
+        report.score = report.registration_score.total;
+        const auto raw_supports = countRawSupports(
+            view.first_keypoints,
+            view.second_keypoints,
+            ctx.keypoint_match_data.neighbour_matches_by_query,
+            candidate.matrix,
+            _reprojection_threshold);
+        report.raw_support_count = raw_supports.first;
+        report.raw_support_ratio = raw_supports.second;
         report.status = "completed";
         const double inlier_ratio = valid_matches.empty()
             ? 0.0
@@ -702,6 +807,8 @@ bool MultilayerDarkRigidEstimator::estimate(RegistrationContext& ctx) {
             reports.back().score,
             candidate.inliers,
             inlier_ratio,
+            raw_supports.first,
+            raw_supports.second,
             candidate.matrix.clone(),
             candidate.mask,
             std::move(source),
@@ -709,7 +816,7 @@ bool MultilayerDarkRigidEstimator::estimate(RegistrationContext& ctx) {
             std::move(valid_matches)});
     }
 
-    // 3. 先按图像评分筛选候选；评分接近时依次以内点数、内点率和评分决胜。
+    // 3. 先按图像评分筛选候选；评分接近时按全部 KNN 支持数量和评分决胜。
     if (!scored_candidates.empty()) {
         const auto best_score_it = std::max_element(
             scored_candidates.begin(), scored_candidates.end(),
@@ -721,14 +828,15 @@ bool MultilayerDarkRigidEstimator::estimate(RegistrationContext& ctx) {
         const ScoredCandidate& best_score_candidate = *best_score_it;
         size_t selected_index = best_score_index;
 
+        // 仅当图像评分确实接近时，才用全部 KNN 候选支持数量决胜。
+        // 评分差必须不超过 YAML 配置的容差，再进行几何指标比较。
         std::vector<size_t> eligible_indices;
         for (size_t index = 0; index < scored_candidates.size(); ++index) {
             const auto& candidate = scored_candidates[index];
-            if (candidate.score + 0.01 < best_score_candidate.score ||
-                candidate.inlier_count <= best_score_candidate.inlier_count ||
-                candidate.inlier_ratio <= best_score_candidate.inlier_ratio) {
+            if (candidate.score + _score_tie_margin < best_score_candidate.score) {
                 continue;
             }
+            reports[candidate.report_index].score_within_margin = true;
             eligible_indices.push_back(index);
         }
         if (!eligible_indices.empty()) {
@@ -737,11 +845,11 @@ bool MultilayerDarkRigidEstimator::estimate(RegistrationContext& ctx) {
                 [&](const size_t lhs, const size_t rhs) {
                     const auto& left = scored_candidates[lhs];
                     const auto& right = scored_candidates[rhs];
-                    if (left.inlier_count != right.inlier_count) {
-                        return left.inlier_count < right.inlier_count;
+                    if (left.raw_support_count > right.raw_support_count) {
+                        return false;
                     }
-                    if (left.inlier_ratio != right.inlier_ratio) {
-                        return left.inlier_ratio < right.inlier_ratio;
+                    if (left.raw_support_count < right.raw_support_count) {
+                        return true;
                     }
                     return left.score < right.score;
                 });

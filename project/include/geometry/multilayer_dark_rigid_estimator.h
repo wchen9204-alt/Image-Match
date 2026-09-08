@@ -36,6 +36,8 @@ private:
     int _ransac_iterations = 1000;
     /// 参与后续 RANSAC 和评分的最大投票簇数量。
     int _max_clusters = 5;
+    /// 允许以内点数和内点率比较候选的最大评分差。
+    double _score_tie_margin = 0.03;
     /// 投票方式：KEYPOINT_ANGLE 或 POINT_PAIR。
     std::string _voting_method = "KEYPOINT_ANGLE";
     /// 点对长度匹配时允许的最大绝对误差，单位为像素。

@@ -165,7 +165,10 @@ bool KeypointPipeline::configureStages(const PipelineConfig& cfg) {
     // 2. 多层暗部复用同一份点特征 YAML，所有已支持的点特征类型均可使用。
     if (cfg.multilayer_dark_fallback.enabled) {
         _multilayer_dark_extractor = std::make_shared<MultilayerDarkKeypointExtractor>(
-            keypoint_cfg, cfg.multilayer_dark_fallback.layer_count);
+            keypoint_cfg,
+            cfg.multilayer_dark_fallback.layer_count,
+            cfg.multilayer_dark_fallback.density_clustering_enabled,
+            cfg.multilayer_dark_fallback.fixed_ten_layers_enabled);
     }
 
     // 3. 几何配置同时决定多层点对投票是否在 KNN 前预过滤关键点。
@@ -426,9 +429,8 @@ bool KeypointPipeline::runPreQualityGate(RegistrationContext& ctx,
 }
 
 void KeypointPipeline::clearAttemptArtifacts(RegistrationContext& ctx) const {
-    // 1. 图像和运行路径可供重试复用，只清理与首选提取结果绑定的中间数据。
+    // 1. 保留首选 FAST 阶段的关键点和描述子，供多层暗部提取复用原图层。
     const double load_time_ms = ctx.result.t_load_ms;
-    ctx.keypoint_data.clear();
     ctx.keypoint_match_data.clear();
     ctx.correspondence_source.clear();
     ctx.correspondence_snapshot.reset();

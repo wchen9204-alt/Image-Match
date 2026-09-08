@@ -21,6 +21,10 @@ filters:
 # 多层暗部 fallback 配置。
 multilayer_dark_fallback:
   enabled: true
+  # 是否启用灰度密度峰聚类选层；关闭后不进行密度选层。
+  density_clustering_enabled: true
+  # 密度方案不适用或被关闭时，是否使用固定十层；关闭则仅保留 FAST 原图层。
+  fixed_ten_layers_enabled: true
   # 首选结果未达到以下任一门槛时，进入多层暗部重试。
   # 仅当 source、target 两侧前景重合率都低于该值时，切换多层暗部。
   min_foreground_overlap_ratio: 0.75

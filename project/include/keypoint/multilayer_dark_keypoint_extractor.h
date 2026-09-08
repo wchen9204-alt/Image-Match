@@ -15,7 +15,9 @@ class MultilayerDarkKeypointExtractor final : public IKeypointExtractor {
 public:
     /// 使用原点特征 YAML 创建层内提取器，保证算法与参数保持一致。
     MultilayerDarkKeypointExtractor(const YAML::Node& keypoint_config,
-                                    int layer_count);
+                                    int layer_count,
+                                    bool density_clustering_enabled,
+                                    bool fixed_ten_layers_enabled);
 
     std::string name() const override { return _name; }
     KeypointType type() const override { return _extractor->type(); }
@@ -28,6 +30,8 @@ private:
     YAML::Node _keypoint_config;
     std::string _name;
     int _layer_count = 10;
+    bool _density_clustering_enabled = true;
+    bool _fixed_ten_layers_enabled = true;
 };
 
 } // namespace ir

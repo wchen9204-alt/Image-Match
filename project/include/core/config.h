@@ -218,6 +218,10 @@ struct PipelineConfig {
     /// 点特征首选结果未通过图像级质量验证时使用的多层暗部回退配置。
     struct MultilayerDarkFallbackConfig {
         bool enabled = false;
+        /// 是否按灰度密度峰聚类选择图层；关闭时强制使用固定十层。
+        bool density_clustering_enabled = true;
+        /// 是否允许固定十层方案；关闭后密度方案不满足条件时仅保留 FAST 原图层。
+        bool fixed_ten_layers_enabled = true;
         /// 多层暗部提取层数；阈值从 255 均匀递减生成。
         int layer_count = 10;
         /// 首选结果触发多层暗部前要求达到的单侧前景重合率。

@@ -83,7 +83,7 @@ params:
     translation_bin_size: 10.0
     # 多层关键点预过滤开关。过滤发生在关键点合并、原图描述子计算之后，KNN 之前；
     # KEYPOINT_ANGLE 和 POINT_PAIR 两种投票方式都可独立使用。
-    keypoint_filter_enabled: true
+    keypoint_filter_enabled: false
     # 开启预过滤后，先按 response 过滤，再在每个 grid 内保留 response 最高的若干关键点。
     keypoint_filter_response_threshold: 0.008
     keypoint_filter_grid_size: 50.0
@@ -98,6 +98,8 @@ params:
     reprojection_threshold: 3.0
     ransac_iterations: 1000
     max_clusters: 10
+    # 评分差不超过该值时，才允许以内点数和内点率比较候选。
+    score_tie_margin: 0.05
 
   # 候选 mask 评分使用的前景二值化阈值。
   candidateMaskForegroundThreshold: 10
