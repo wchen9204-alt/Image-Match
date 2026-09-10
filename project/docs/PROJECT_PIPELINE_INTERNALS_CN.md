@@ -14,7 +14,7 @@ loadImages()
   -> runAssociation()
   -> runEstimation()
   -> runWarp()
-  -> validateWarpQuality()
+  -> validateRegistrationQuality()
   -> saveOutputs()
 ```
 

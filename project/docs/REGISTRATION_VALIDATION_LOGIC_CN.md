@@ -15,6 +15,7 @@
 其中：
 
 - `validateMethodSpecificQuality` 内部负责方法特有判定：
+  - `method_quality`：方法族自身的基础产物数量验证。
   - `match_quality`：离散对应关系质量验证。
   - `direct_quality`：直接法算法自身置信度验证。
   - `structure_overlap`：结构法响应图重叠验证。
@@ -77,21 +78,13 @@
 局限：如果阈值设得过松，仍可能放过“覆盖了但没对上”的结果。
 
 
-作用：在重叠区域分别提取 warped source 和 target 的边缘，计算边缘 IoU，用来补充拦截“前景覆盖充分，但内容结构没有真正对齐”的结果。
+### edge_structure_diagnostic
 
-主要字段：
+配置位置：`validation.edge_structure_diagnostic`。当前由直线结构 pipeline 启用。
 
-- `enabled`：是否启用。
-- `min_iou`：边缘 IoU 下限。
-- `canny_low_threshold`：Canny 低阈值。
-- `canny_high_threshold`：Canny 高阈值。
-- `dilate_size`：边缘 mask 膨胀核尺寸。
-- `min_edge_pixels`：最低边缘像素数。
+作用：在最终 warp 后的 source 与 target 上提取并分组长边缘，比较水平、竖直方向的线组位置、跨度、角度和可见域支撑。结果为 `PASS`、`FAIL` 或 `INSUFFICIENT`：前两者直接决定结果，`INSUFFICIENT` 时继续由重叠和高度差等通用指标判定。
 
-输出指标：
-
-
-局限：低纹理、强模糊或边缘很少的样本，对边缘 IoU 不友好，因此它更适合作为公共最终判定里的补充项，而不是唯一依据。
+主要字段包括线段筛选、线组拟合、主方向识别、候选线对和歧义判定的阈值；共享参数定义在 `configs/validation/quality_profiles.yaml` 的 `shared.edge_structure_diagnostic`。
 
 ## 方法特有判定
 

@@ -2,7 +2,7 @@
 
 ## 1. 平台定位
 
-本平台是一个基于 C++17、OpenCV 和 YAML 配置驱动的二维图像配准实验平台。平台面向不同配准方法的统一实验、统一输出和统一评测，支持将点特征法、结构特征法、直接法和深度学习匹配法纳入同一套运行框架中。
+本平台是一个基于 C++20、OpenCV 和 YAML 配置驱动的二维图像配准实验平台。平台面向不同配准方法的统一实验、统一输出和统一评测，支持将点特征法、结构特征法、直接法和深度学习匹配法纳入同一套运行框架中。
 
 平台的核心思想是：算法组件由 YAML 配置选择，运行流程由 Pipeline 串联，中间数据由 RegistrationContext 统一传递，实验结果由统一目录结构保存。
 
@@ -99,7 +99,7 @@ geometry: ../../geometry/rigid.yaml
 | `summary.csv` | 单次或批量实验的统计表。 |
 | `comparison.csv` | 多方法横向对比实验统计表。 |
 
-当前摘要会记录成功状态、失败原因、关键点或结构数量、匹配数、内点数、内点率、耗时、IoU、裁尾平均绝对灰度差 和评测指标。
+当前摘要会记录成功状态、失败原因、方法相关的特征/结构/匹配统计、耗时、重叠包含率、结构 IoU（适用时）和高度差统计。高度差包含 mean、P50、P75、P90、P95、max；点特征、直接法和学习法的摘要还会记录全局高度补偿前后的对应统计。
 
 ## 3. 软件环境
 
@@ -109,20 +109,22 @@ geometry: ../../geometry/rigid.yaml
 
 | 依赖 | 用途 |
 |---|---|
-| C++17 | 主体工程语言标准。 |
+| C++20 | 主体工程语言标准。 |
 | OpenCV 4.x | 图像读写、特征提取、匹配、几何估计、光流、可视化等。 |
 | OpenCV contrib | SURF、line_descriptor、ximgproc、optflow 等扩展模块。 |
 | yaml-cpp | 解析 YAML 配置文件。 |
 | CMake | 生成构建系统并管理目标。 |
 
-当前 `CMakeLists.txt` 中本机默认路径为：
+`CMakeLists.txt` 会根据编译器选择默认依赖根目录：
 
 ```text
-OpenCV:  D:/Opcv/opencv-contrib-mingw-install
-yaml-cpp: D:/yaml-cpp-install
+MSVC OpenCV: `../deps/opencv-4120/opencv/install-msvc-contrib`
+MinGW OpenCV: `../deps/opencv-455-contrib-install`
+MSVC yaml-cpp: `../deps/yaml-cpp-install-msvc`
+MinGW yaml-cpp: `../deps/yaml-cpp-install-local`
 ```
 
-如果在其他电脑上运行，需要修改 CMake 缓存参数或 `CMakeLists.txt` 中的安装路径。
+如果依赖不位于这些默认位置，可在配置阶段通过 `OPENCV_INSTALL_ROOT`、`OPENCV_CONTRIB_LIBRARY_DIR`、`OPENCV_CONTRIB_RUNTIME_DIR` 和 `YAML_CPP_ROOT` 覆盖。
 
 ### 3.2 Python 环境
 
@@ -153,19 +155,19 @@ third_party/SuperGluePretrainedNetwork
 
 ## 4. 编译方法
 
-在项目根目录执行：
+在工作区根目录先配置一个构建目录，再执行构建。现有的 `build-mingw/` 和 `build-msvc-opencv412/` 可作为本机构建目录示例；应使用与本机依赖匹配的目录。
 
 ```powershell
-cmake --build project/build-mingw
+cmake --build project/build-msvc-opencv412
 ```
 
 编译成功后，主程序位于：
 
 ```text
-project/build-mingw/bin/registration_app.exe
+project/build-msvc-opencv412/bin/registration_app.exe
 ```
 
-CMake 构建后会把 `configs/` 复制到可执行文件目录，便于在 build 目录中运行。
+CMake 构建后会把 `configs/` 复制到可执行文件目录，便于在 build 目录中运行。以下示例以 `project/build-msvc-opencv412/bin/registration_app.exe` 为例；若使用 MinGW 构建，请替换为实际生成的可执行文件路径。
 
 ## 5. 使用方法
 
@@ -176,13 +178,13 @@ CMake 构建后会把 `configs/` 复制到可执行文件目录，便于在 buil
 单次实验：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe <pipeline.yaml> [image1] [image2] [output_dir]
+project/build-msvc-opencv412/bin/registration_app.exe <pipeline.yaml> [image1] [image2] [output_dir]
 ```
 
 批量实验：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe <batch.yaml>
+project/build-msvc-opencv412/bin/registration_app.exe <batch.yaml>
 ```
 
 其中，`image1`、`image2` 和 `output_dir` 是可选覆盖参数。如果不传，程序使用 pipeline YAML 中 `io` 字段指定的输入输出路径。
@@ -192,37 +194,37 @@ project/build-mingw/bin/registration_app.exe <batch.yaml>
 点特征法：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/keypoint/sift_pipeline.yaml
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/keypoint/orb_pipeline.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/keypoint/sift_pipeline.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/keypoint/orb_pipeline.yaml
 ```
 
 结构特征法：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/structure/line_pipeline.yaml
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/structure/contour_pipeline.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/structure/line_pipeline.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/structure/contour_pipeline.yaml
 ```
 
 直接法：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/direct/global_direct_pipeline.yaml
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/direct/frequency_direct_pipeline.yaml
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/direct/dense_direct_pipeline.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/direct/global_direct_pipeline.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/direct/frequency_direct_pipeline.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/direct/dense_direct_pipeline.yaml
 ```
 
 深度学习匹配法：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/learning/loftr_learning_pipeline.yaml
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/learning/superpoint_lightglue_learning_pipeline.yaml
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/learning/superpoint_superglue_learning_pipeline.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/learning/loftr_learning_pipeline.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/learning/superpoint_lightglue_learning_pipeline.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/learning/superpoint_superglue_learning_pipeline.yaml
 ```
 
 指定临时输入图像和输出目录：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/keypoint/sift_pipeline.yaml data/source.png data/target.png project/outputs/demo
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/keypoint/sift_pipeline.yaml project/datasets/test01/source.png project/datasets/test01/target.png project/outputs/demo
 ```
 
 ### 5.3 批量实验示例
@@ -236,10 +238,10 @@ project/configs/pipeline/batch/
 常用命令：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/batch_keypoint.yaml
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/batch_structure.yaml
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/batch_direct.yaml
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/batch_learning.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/batch/batch_keypoint.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/batch/batch_structure.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/batch/batch_direct.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/batch/batch_learning.yaml
 ```
 
 批处理会扫描 `dataset.root` 指定的数据集目录，按配置中的文件名关键词寻找源图和目标图：
@@ -261,15 +263,15 @@ dataset:
 直接法对比：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/compare_direct.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/batch/compare_direct.yaml
 ```
 
-该配置会依次测试 ECC、ESM Rigid、Phase Correlation、Fourier-Mellin、KLT Sparse、DIS、Farneback 和 TV-L1。
+该配置会依次测试 ECC、ESM Rigid、Fourier-Mellin、KLT Sparse、DIS 和 Farneback。
 
 直线结构方法对比：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/compare_line.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/batch/compare_line.yaml
 ```
 
 该配置会遍历 LSD、FLD、HoughLinesP 等检测器与 LBD、MSLD、LINE_SIFT 等线描述子组合。
@@ -532,35 +534,35 @@ visualization:
 编译：
 
 ```powershell
-cmake --build project/build-mingw
+cmake --build project/build-msvc-opencv412
 ```
 
 运行 SIFT 单次实验：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/keypoint/sift_pipeline.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/keypoint/sift_pipeline.yaml
 ```
 
 运行直线结构单次实验：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/structure/line_pipeline.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/structure/line_pipeline.yaml
 ```
 
 运行直接法对比：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/compare_direct.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/batch/compare_direct.yaml
 ```
 
 运行批量点特征实验：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/batch_keypoint.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/batch/batch_keypoint.yaml
 ```
 
 运行批量深度学习实验：
 
 ```powershell
-project/build-mingw/bin/registration_app.exe project/configs/pipeline/batch/batch_learning.yaml
+project/build-msvc-opencv412/bin/registration_app.exe project/configs/pipeline/batch/batch_learning.yaml
 ```

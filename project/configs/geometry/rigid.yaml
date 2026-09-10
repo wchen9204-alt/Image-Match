@@ -99,7 +99,7 @@ params:
     ransac_iterations: 1000
     max_clusters: 10
     # 评分差不超过该值时，才允许以内点数和内点率比较候选。
-    score_tie_margin: 0.05
+    score_tie_margin: 0.03
 
   # 候选 mask 评分使用的前景二值化阈值。
   candidateMaskForegroundThreshold: 10
