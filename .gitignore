@@ -44,7 +44,7 @@ build/
 Build/
 build-*/
 outputs/
-
+third_party/
 # Local third-party dependency sources and build/install artifacts
 /deps/
 
